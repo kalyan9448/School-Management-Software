@@ -146,26 +146,27 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         </button>
       </div>
 
-      {/* Secondary Stats Row */}
+      {/* Secondary Stats Row - Refined with light colored backgrounds */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Pending Admissions */}
         <button
           onClick={() => onNavigate?.('admission')}
-          className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-6 text-white shadow-lg hover:shadow-2xl transition-all hover:-translate-y-1 text-left cursor-pointer"
+          className="relative overflow-hidden bg-orange-50 rounded-3xl p-6 shadow-md border-2 border-orange-200 hover:shadow-xl transition-all hover:-translate-y-1 text-left cursor-pointer group"
         >
-          <div className="flex items-start justify-between mb-4">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-orange-200 rounded-bl-full opacity-30 group-hover:scale-110 transition-transform"></div>
+          <div className="relative flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                  <Clock className="w-5 h-5" />
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <Clock className="w-5 h-5 text-orange-600" />
                 </div>
-                <p className="text-orange-100">Pending</p>
+                <p className="text-orange-700 font-semibold text-sm">Pending</p>
               </div>
-              <h2 className="text-white mb-1">{stats.pendingAdmissions}</h2>
-              <p className="text-orange-100">Admissions</p>
+              <h2 className="text-gray-900 mb-1 font-bold">{stats.pendingAdmissions}</h2>
+              <p className="text-gray-600 font-medium">Admissions</p>
             </div>
-            <div className="px-3 py-1 bg-white/20 rounded-full backdrop-blur-sm">
-              <span className="text-white">Action needed</span>
+            <div className="px-3 py-1 bg-white/60 backdrop-blur-sm border border-orange-200 rounded-full">
+              <span className="text-orange-700 text-xs font-bold uppercase tracking-wider">Action needed</span>
             </div>
           </div>
         </button>
@@ -173,21 +174,22 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         {/* Outstanding Dues */}
         <button
           onClick={() => onNavigate?.('fees')}
-          className="bg-gradient-to-br from-red-500 to-red-600 rounded-3xl p-6 text-white shadow-lg hover:shadow-2xl transition-all hover:-translate-y-1 text-left cursor-pointer"
+          className="relative overflow-hidden bg-red-50 rounded-3xl p-6 shadow-md border-2 border-red-200 hover:shadow-xl transition-all hover:-translate-y-1 text-left cursor-pointer group"
         >
-          <div className="flex items-start justify-between mb-4">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-red-200 rounded-bl-full opacity-30 group-hover:scale-110 transition-transform"></div>
+          <div className="relative flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                  <DollarSign className="w-5 h-5" />
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <DollarSign className="w-5 h-5 text-red-600" />
                 </div>
-                <p className="text-red-100">Outstanding</p>
+                <p className="text-red-700 font-semibold text-sm">Outstanding</p>
               </div>
-              <h2 className="text-white mb-1">₹{(stats.feeDues / 1000).toFixed(0)}K</h2>
-              <p className="text-red-100">15 students pending</p>
+              <h2 className="text-gray-900 mb-1 font-bold">₹{(stats.feeDues / 1000).toFixed(0)}K</h2>
+              <p className="text-gray-600 font-medium">15 students pending</p>
             </div>
-            <div className="px-3 py-1 bg-white/20 rounded-full backdrop-blur-sm">
-              <span className="text-white">Collect</span>
+            <div className="px-3 py-1 bg-white/60 backdrop-blur-sm border border-red-200 rounded-full">
+              <span className="text-red-700 text-xs font-bold uppercase tracking-wider">Collect</span>
             </div>
           </div>
         </button>
@@ -195,21 +197,22 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         {/* Today's Highlights */}
         <button
           onClick={() => onNavigate?.('monitoring')}
-          className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-3xl p-6 text-white shadow-lg hover:shadow-2xl transition-all hover:-translate-y-1 text-left cursor-pointer"
+          className="relative overflow-hidden bg-teal-50 rounded-3xl p-6 shadow-md border-2 border-teal-200 hover:shadow-xl transition-all hover:-translate-y-1 text-left cursor-pointer group"
         >
-          <div className="flex items-start justify-between mb-4">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-teal-200 rounded-bl-full opacity-30 group-hover:scale-110 transition-transform"></div>
+          <div className="relative flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                  <Award className="w-5 h-5" />
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <Award className="w-5 h-5 text-teal-600" />
                 </div>
-                <p className="text-teal-100">Achievement</p>
+                <p className="text-teal-700 font-semibold text-sm">Achievement</p>
               </div>
-              <h2 className="text-white mb-1">95.5%</h2>
-              <p className="text-teal-100">Avg Attendance</p>
+              <h2 className="text-gray-900 mb-1 font-bold">95.5%</h2>
+              <p className="text-gray-600 font-medium">Avg Attendance</p>
             </div>
-            <div className="px-3 py-1 bg-white/20 rounded-full backdrop-blur-sm">
-              <span className="text-white">Excellent</span>
+            <div className="px-3 py-1 bg-white/60 backdrop-blur-sm border border-teal-200 rounded-full">
+              <span className="text-teal-700 text-xs font-bold uppercase tracking-wider">Excellent</span>
             </div>
           </div>
         </button>

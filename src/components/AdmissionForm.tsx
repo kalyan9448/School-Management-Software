@@ -18,7 +18,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     name: student?.name || '',
     dob: student?.dob || '',
     gender: student?.gender || 'Male',
-    bloodGroup: student?.bloodGroup || 'O+',
+    bloodGroup: student?.bloodGroup || '',
     parentName: student?.parentName || '',
     phone: student?.phone || '',
     email: student?.email || '',
@@ -49,14 +49,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check if all required documents are uploaded
-    const requiredDocs = ['birthCertificate', 'aadharCard', 'parentAadhar', 'vaccinationCard', 'passportPhoto'];
-    const missingDocs = requiredDocs.filter(doc => !documents[doc as keyof typeof documents].file);
-
-    if (missingDocs.length > 0 && !student) {
-      alert('Please upload all required documents: ' + missingDocs.map(d => documents[d as keyof typeof documents].name).join(', '));
-      return;
-    }
+    // Documents are now optional as per user request
 
     onSave({
       ...formData,
@@ -230,6 +223,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
+                <option value="">Select Blood Group</option>
                 <option value="A+">A+</option>
                 <option value="A-">A-</option>
                 <option value="B+">B+</option>
@@ -359,14 +353,14 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
         <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
           <h3 className="text-gray-900 mb-4">Document Upload</h3>
           <p className="text-gray-600 mb-4">
-            Please upload all required documents. Fields marked with * are mandatory.
+            Please upload relevant documents. All document uploads are optional.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Birth Certificate */}
             <div>
               <label className="block text-gray-700 mb-2">
-                Birth Certificate <span className="text-red-600">*</span>
+                Birth Certificate <span className="text-gray-500">(Optional)</span>
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
                 {documents.birthCertificate.file ? (
@@ -401,7 +395,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
             {/* Aadhar Card */}
             <div>
               <label className="block text-gray-700 mb-2">
-                Student Aadhar Card <span className="text-red-600">*</span>
+                Student Aadhar Card <span className="text-gray-500">(Optional)</span>
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
                 {documents.aadharCard.file ? (
@@ -436,7 +430,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
             {/* Parent Aadhar */}
             <div>
               <label className="block text-gray-700 mb-2">
-                Parent Aadhar Card <span className="text-red-600">*</span>
+                Parent Aadhar Card <span className="text-gray-500">(Optional)</span>
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
                 {documents.parentAadhar.file ? (
@@ -471,7 +465,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
             {/* Vaccination Card */}
             <div>
               <label className="block text-gray-700 mb-2">
-                Vaccination Card <span className="text-red-600">*</span>
+                Vaccination Card <span className="text-gray-500">(Optional)</span>
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
                 {documents.vaccinationCard.file ? (
@@ -506,7 +500,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
             {/* Passport Photo */}
             <div>
               <label className="block text-gray-700 mb-2">
-                Passport Size Photo <span className="text-red-600">*</span>
+                Passport Size Photo <span className="text-gray-500">(Optional)</span>
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
                 {documents.passportPhoto.file ? (

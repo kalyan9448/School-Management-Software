@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit, Eye, CheckCircle, Clock, XCircle, UserPlus, Calendar, Phone, Mail, Grid3x3, List } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Eye, CheckCircle, Clock, XCircle, UserPlus, Calendar, Phone, Mail, Grid3x3, List, Users } from 'lucide-react';
 import { AdmissionForm } from './AdmissionForm';
 import { admissionAPI } from '../utils/api';
 
@@ -29,6 +29,7 @@ export function AdmissionModule() {
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
   const [usingLocalData, setUsingLocalData] = useState(false);
+  const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
 
   // Load admissions from backend
   useEffect(() => {
@@ -42,83 +43,88 @@ export function AdmissionModule() {
       setLoading(true);
       setServerError(null);
       setUsingLocalData(false);
-      
-      const response = await admissionAPI.getAll();
+
+      const response = await admissionAPI.getAll() as any;
       console.log('Admissions loaded:', response);
       setStudents(response.admissions || []);
     } catch (error: any) {
       console.error('Failed to load admissions:', error);
-      
+
       // Always use demo data when backend is not available
       setServerError('⚠️ Backend server is not responding. Using local demo mode.');
       setUsingLocalData(true);
-      
+
       // Load demo data
-      const demoAdmissions: Student[] = [
-        {
-          id: '1',
-          admissionNo: 'ADM2024001',
-          name: 'Aarav Sharma',
-          dob: '2019-05-15',
-          gender: 'Male',
-          bloodGroup: 'A+',
-          parentName: 'Mr. Rajesh Sharma',
-          phone: '+91 98765 43210',
-          email: 'rajesh.sharma@email.com',
-          classApplied: 'Nursery',
-          classAllotted: 'Nursery',
-          status: 'admitted',
-          appliedDate: '2024-01-10',
-        },
-        {
-          id: '2',
-          admissionNo: 'ADM2024002',
-          name: 'Diya Patel',
-          dob: '2018-08-22',
-          gender: 'Female',
-          bloodGroup: 'B+',
-          parentName: 'Mrs. Priya Patel',
-          phone: '+91 98765 43211',
-          email: 'priya.patel@email.com',
-          classApplied: 'LKG',
-          classAllotted: 'LKG',
-          status: 'admitted',
-          appliedDate: '2024-01-12',
-        },
-        {
-          id: '3',
-          admissionNo: 'ADM2024003',
-          name: 'Arjun Kumar',
-          dob: '2020-03-10',
-          gender: 'Male',
-          bloodGroup: 'O+',
-          parentName: 'Mr. Suresh Kumar',
-          phone: '+91 98765 43212',
-          email: 'suresh.kumar@email.com',
-          classApplied: 'Nursery',
-          classAllotted: '',
-          status: 'confirmed',
-          appliedDate: '2024-02-01',
-        },
-        {
-          id: '4',
-          admissionNo: '',
-          name: 'Ananya Singh',
-          dob: '2019-11-05',
-          gender: 'Female',
-          bloodGroup: 'AB+',
-          parentName: 'Mrs. Kavita Singh',
-          phone: '+91 98765 43213',
-          email: 'kavita.singh@email.com',
-          classApplied: 'Nursery',
-          classAllotted: '',
-          status: 'in-process',
-          appliedDate: '2024-02-10',
-        },
-      ];
-      
-      setStudents(demoAdmissions);
-      localStorage.setItem('admissions_demo_data', JSON.stringify(demoAdmissions));
+      const localData = localStorage.getItem('admissions_demo_data');
+      if (localData) {
+        setStudents(JSON.parse(localData));
+      } else {
+        const demoAdmissions: Student[] = [
+          {
+            id: '1',
+            admissionNo: 'ADM2024001',
+            name: 'Aarav Sharma',
+            dob: '2019-05-15',
+            gender: 'Male',
+            bloodGroup: 'A+',
+            parentName: 'Mr. Rajesh Sharma',
+            phone: '+91 98765 43210',
+            email: 'rajesh.sharma@email.com',
+            classApplied: 'Nursery',
+            classAllotted: 'Nursery',
+            status: 'admitted',
+            appliedDate: '2024-01-10',
+          },
+          {
+            id: '2',
+            admissionNo: 'ADM2024002',
+            name: 'Diya Patel',
+            dob: '2018-08-22',
+            gender: 'Female',
+            bloodGroup: 'B+',
+            parentName: 'Mrs. Priya Patel',
+            phone: '+91 98765 43211',
+            email: 'priya.patel@email.com',
+            classApplied: 'LKG',
+            classAllotted: 'LKG',
+            status: 'admitted',
+            appliedDate: '2024-01-12',
+          },
+          {
+            id: '3',
+            admissionNo: 'ADM2024003',
+            name: 'Arjun Kumar',
+            dob: '2020-03-10',
+            gender: 'Male',
+            bloodGroup: 'O+',
+            parentName: 'Mr. Suresh Kumar',
+            phone: '+91 98765 43212',
+            email: 'suresh.kumar@email.com',
+            classApplied: 'Nursery',
+            classAllotted: '',
+            status: 'confirmed',
+            appliedDate: '2024-02-01',
+          },
+          {
+            id: '4',
+            admissionNo: '',
+            name: 'Ananya Singh',
+            dob: '2019-11-05',
+            gender: 'Female',
+            bloodGroup: 'AB+',
+            parentName: 'Mrs. Kavita Singh',
+            phone: '+91 98765 43213',
+            email: 'kavita.singh@email.com',
+            classApplied: 'Nursery',
+            classAllotted: '',
+            status: 'in-process',
+            appliedDate: '2024-02-10',
+          },
+        ];
+
+        setStudents(demoAdmissions);
+        localStorage.setItem('admissions_demo_data', JSON.stringify(demoAdmissions));
+      }
     } finally {
       setLoading(false);
     }
@@ -149,8 +155,8 @@ export function AdmissionModule() {
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.parentName.toLowerCase().includes(searchTerm.toLowerCase());
+      student.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.parentName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || student.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -178,7 +184,7 @@ export function AdmissionModule() {
               const year = new Date().getFullYear();
               const count = students.length + 1;
               const admissionNo = `ADM${year}${count.toString().padStart(4, '0')}`;
-              
+
               const newAdmission = {
                 id,
                 admissionNo,
@@ -186,16 +192,16 @@ export function AdmissionModule() {
                 appliedDate: new Date().toISOString().split('T')[0],
                 status: studentData.status || 'enquiry'
               };
-              
+
               const updatedStudents = selectedStudent
                 ? students.map(s => s.id === selectedStudent.id ? { ...s, ...studentData } : s)
                 : [...students, newAdmission as Student];
-              
+
               setStudents(updatedStudents);
               localStorage.setItem('admissions_demo_data', JSON.stringify(updatedStudents));
-              
+
               alert(`Admission ${selectedStudent ? 'updated' : 'created'} successfully!\n\n${!selectedStudent ? `Admission Number: ${admissionNo}\n` : ''}Student Name: ${studentData.name}\n\n⚠️ Note: Using local demo mode. Data is saved in browser storage only.`);
-              
+
               setView('list');
               setSelectedStudent(null);
             } else {
@@ -209,7 +215,7 @@ export function AdmissionModule() {
                   appliedDate: new Date().toISOString().split('T')[0],
                   status: studentData.status || 'enquiry'
                 };
-                const response = await admissionAPI.create(dataToSend);
+                const response = await admissionAPI.create(dataToSend) as any;
                 alert(`Admission created successfully!\n\nAdmission Number: ${response.admission.admissionNo}\nStudent Name: ${studentData.name}\n\nPlease note down the admission number for future reference.`);
               }
               await loadAdmissions();
@@ -225,6 +231,141 @@ export function AdmissionModule() {
     );
   }
 
+  const renderViewDetailsModal = () => {
+    if (!viewingStudent) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+          <div className="sticky top-0 bg-white border-b border-gray-100 p-6 flex justify-between items-center z-10">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border-2 ${getStatusBadge(viewingStudent.status)}`}>
+                {getStatusIcon(viewingStudent.status)}
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">{viewingStudent.name}</h3>
+                <p className="text-gray-500 font-medium">{viewingStudent.admissionNo || 'Pending ID'}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setViewingStudent(null)}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"
+            >
+              <Plus className="w-6 h-6 rotate-45" />
+            </button>
+          </div>
+
+          <div className="p-8 space-y-8">
+            {/* Status Section */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                <p className="text-purple-600 text-xs font-bold uppercase tracking-wider mb-1">Status</p>
+                <p className="text-purple-900 font-bold capitalize">{viewingStudent.status.replace('-', ' ')}</p>
+              </div>
+              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                <p className="text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">Applied For</p>
+                <p className="text-blue-900 font-bold">Class {viewingStudent.classApplied}</p>
+              </div>
+              <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
+                <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Allotted</p>
+                <p className="text-green-900 font-bold">{viewingStudent.classAllotted || 'Not Yet'}</p>
+              </div>
+              <div className="p-4 bg-yellow-50 rounded-2xl border border-yellow-100">
+                <p className="text-yellow-600 text-xs font-bold uppercase tracking-wider mb-1">Applied On</p>
+                <p className="text-yellow-900 font-bold">{viewingStudent.appliedDate}</p>
+              </div>
+            </div>
+
+            {/* Student Details */}
+            <div>
+              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-purple-600" />
+                Personal Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-6 rounded-2xl">
+                <div>
+                  <p className="text-gray-500 text-xs font-bold uppercase mb-1">Date of Birth</p>
+                  <p className="text-gray-900 font-medium">{viewingStudent.dob}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs font-bold uppercase mb-1">Gender</p>
+                  <p className="text-gray-900 font-medium">{viewingStudent.gender}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs font-bold uppercase mb-1">Blood Group</p>
+                  <p className="text-gray-900 font-medium">{viewingStudent.bloodGroup}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Parent Contact */}
+            <div>
+              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Phone className="w-5 h-5 text-blue-600" />
+                Guardian Information
+              </h4>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-white border-2 border-gray-100 rounded-2xl">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <Users className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-gray-900 font-bold">{viewingStudent.parentName}</p>
+                      <p className="text-gray-500 text-sm">Primary Guardian</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-4 p-4 bg-white border-2 border-gray-100 rounded-2xl">
+                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                      <Phone className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs font-bold uppercase">Phone Number</p>
+                      <p className="text-gray-900 font-medium">{viewingStudent.phone}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 p-4 bg-white border-2 border-gray-100 rounded-2xl">
+                    <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-pink-600" />
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs font-bold uppercase">Email Address</p>
+                      <p className="text-gray-900 font-medium break-all">{viewingStudent.email}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex gap-4 pt-4">
+              <button
+                onClick={() => {
+                  setSelectedStudent(viewingStudent);
+                  setViewingStudent(null);
+                  setView('form');
+                }}
+                className="flex-1 px-6 py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
+              >
+                <Edit className="w-5 h-5" />
+                Modify Details
+              </button>
+              <button
+                onClick={() => setViewingStudent(null)}
+                className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const stats = {
     total: students.length,
     enquiry: students.filter(s => s.status === 'enquiry').length,
@@ -237,11 +378,10 @@ export function AdmissionModule() {
     <div className="p-8 bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 min-h-screen">
       {/* Server Error Banner */}
       {serverError && (
-        <div className={`mb-6 p-4 rounded-2xl border-2 ${
-          usingLocalData 
-            ? 'bg-yellow-50 border-yellow-300 text-yellow-800' 
-            : 'bg-red-50 border-red-300 text-red-800'
-        }`}>
+        <div className={`mb-6 p-4 rounded-2xl border-2 ${usingLocalData
+          ? 'bg-yellow-50 border-yellow-300 text-yellow-800'
+          : 'bg-red-50 border-red-300 text-red-800'
+          }`}>
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -296,11 +436,10 @@ export function AdmissionModule() {
         <div className="flex items-center gap-3">
           {/* Connection Status */}
           {!loading && (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${
-              usingLocalData 
-                ? 'bg-yellow-50 border-yellow-300 text-yellow-700' 
-                : 'bg-green-50 border-green-300 text-green-700'
-            }`}>
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${usingLocalData
+              ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
+              : 'bg-green-50 border-green-300 text-green-700'
+              }`}>
               <div className={`w-2 h-2 rounded-full ${usingLocalData ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse`}></div>
               <span className="text-sm">{usingLocalData ? 'Local Mode' : 'Connected'}</span>
             </div>
@@ -322,22 +461,20 @@ export function AdmissionModule() {
           <div className="flex items-center bg-white rounded-xl border-2 border-gray-200 p-1">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`p-2 rounded-lg transition-all ${viewMode === 'grid'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
               title="Grid View"
             >
               <Grid3x3 className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === 'list'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`p-2 rounded-lg transition-all ${viewMode === 'list'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
               title="List View"
             >
               <List className="w-5 h-5" />
@@ -507,6 +644,7 @@ export function AdmissionModule() {
                     Edit
                   </button>
                   <button
+                    onClick={() => setViewingStudent(student)}
                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 border-2 border-purple-300 text-purple-700 rounded-xl hover:bg-purple-50 transition-colors"
                   >
                     <Eye className="w-4 h-4" />
@@ -577,6 +715,7 @@ export function AdmissionModule() {
                     <Edit className="w-4 h-4" />
                   </button>
                   <button
+                    onClick={() => setViewingStudent(student)}
                     className="p-2 border-2 border-purple-300 text-purple-700 rounded-xl hover:bg-purple-50 transition-colors"
                     title="View Details"
                   >
@@ -595,7 +734,7 @@ export function AdmissionModule() {
             <UserPlus className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-gray-900 mb-2">No Admissions Found</h3>
             <p className="text-gray-500 mb-6">
-              {searchTerm || filterStatus !== 'all' 
+              {searchTerm || filterStatus !== 'all'
                 ? 'No admissions match your search criteria. Try adjusting your filters.'
                 : 'Get started by creating your first admission using the "New Admission" button above.'}
             </p>
@@ -610,6 +749,8 @@ export function AdmissionModule() {
           </div>
         </div>
       )}
+
+      {renderViewDetailsModal()}
     </div>
   );
 }

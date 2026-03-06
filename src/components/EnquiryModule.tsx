@@ -31,52 +31,58 @@ export function EnquiryModule() {
   const loadEnquiries = async () => {
     try {
       setLoading(true);
-      const response = await enquiryAPI.getAll();
+      const response = await enquiryAPI.getAll() as any;
       setEnquiries(response.enquiries || []);
     } catch (error) {
       console.error('Failed to load enquiries:', error);
 
-      // Load demo data when backend is not available
-      const demoEnquiries: Enquiry[] = [
-        {
-          id: '1',
-          parentName: 'Mrs. Meera Kapoor',
-          phone: '+91 98765 11111',
-          email: 'meera.kapoor@email.com',
-          childName: 'Riya Kapoor',
-          classInterest: 'Nursery',
-          enquiryDate: '2024-02-10',
-          followUpDate: '2024-02-20',
-          status: 'pending',
-          notes: 'Interested in full-day program',
-        },
-        {
-          id: '2',
-          parentName: 'Mr. Anil Verma',
-          phone: '+91 98765 22222',
-          email: 'anil.verma@email.com',
-          childName: 'Arnav Verma',
-          classInterest: 'LKG',
-          enquiryDate: '2024-02-12',
-          followUpDate: '2024-02-18',
-          status: 'follow-up',
-          notes: 'Looking for transport facility',
-        },
-        {
-          id: '3',
-          parentName: 'Mrs. Sneha Reddy',
-          phone: '+91 98765 33333',
-          email: 'sneha.reddy@email.com',
-          childName: 'Anika Reddy',
-          classInterest: 'UKG',
-          enquiryDate: '2024-02-15',
-          followUpDate: '2024-02-19',
-          status: 'converted',
-          notes: 'Admission confirmed',
-        },
-      ];
+      // Load from localStorage first, then fallback to demo data
+      const localData = localStorage.getItem('enquiries_demo_data');
+      if (localData) {
+        setEnquiries(JSON.parse(localData));
+      } else {
+        const demoEnquiries: Enquiry[] = [
+          {
+            id: '1',
+            parentName: 'Mrs. Meera Kapoor',
+            phone: '+91 98765 11111',
+            email: 'meera.kapoor@email.com',
+            childName: 'Riya Kapoor',
+            classInterest: 'Nursery',
+            enquiryDate: '2024-02-10',
+            followUpDate: '2024-02-20',
+            status: 'pending',
+            notes: 'Interested in full-day program',
+          },
+          {
+            id: '2',
+            parentName: 'Mr. Anil Verma',
+            phone: '+91 98765 22222',
+            email: 'anil.verma@email.com',
+            childName: 'Arnav Verma',
+            classInterest: 'LKG',
+            enquiryDate: '2024-02-12',
+            followUpDate: '2024-02-18',
+            status: 'followed-up',
+            notes: 'Looking for transport facility',
+          },
+          {
+            id: '3',
+            parentName: 'Mrs. Sneha Reddy',
+            phone: '+91 98765 33333',
+            email: 'sneha.reddy@email.com',
+            childName: 'Anika Reddy',
+            classInterest: 'UKG',
+            enquiryDate: '2024-02-15',
+            followUpDate: '2024-02-19',
+            status: 'converted',
+            notes: 'Admission confirmed',
+          },
+        ];
 
-      setEnquiries(demoEnquiries);
+        setEnquiries(demoEnquiries);
+        localStorage.setItem('enquiries_demo_data', JSON.stringify(demoEnquiries));
+      }
     } finally {
       setLoading(false);
     }
@@ -121,8 +127,23 @@ export function EnquiryModule() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await enquiryAPI.create(formData);
-      await loadEnquiries(); // Reload data
+      const isDemoMode = !await checkBackendStatus();
+
+      if (isDemoMode) {
+        const newEnquiry: Enquiry = {
+          id: `${Date.now()}`,
+          ...formData,
+          enquiryDate: new Date().toISOString().split('T')[0],
+          status: 'pending' as const,
+        };
+        const updatedEnquiries = [...enquiries, newEnquiry];
+        setEnquiries(updatedEnquiries);
+        localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
+      } else {
+        await enquiryAPI.create(formData);
+        await loadEnquiries(); // Reload data from backend
+      }
+
       setFormData({
         parentName: '',
         phone: '',
@@ -138,6 +159,23 @@ export function EnquiryModule() {
       console.error('Create enquiry error:', error);
       alert('Failed to create enquiry. Please try again.');
     }
+  };
+
+  const checkBackendStatus = async () => {
+    try {
+      await enquiryAPI.getAll();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleStatusChange = (id: string, newStatus: Enquiry['status']) => {
+    const updatedEnquiries = enquiries.map(e =>
+      e.id === id ? { ...e, status: newStatus } : e
+    );
+    setEnquiries(updatedEnquiries);
+    localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
   };
 
   const getStatusBadge = (status: string) => {
@@ -210,8 +248,8 @@ export function EnquiryModule() {
             <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded-lg transition-all ${viewMode === 'grid'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
                 }`}
               title="Grid View"
             >
@@ -220,8 +258,8 @@ export function EnquiryModule() {
             <button
               onClick={() => setViewMode('list')}
               className={`p-2 rounded-lg transition-all ${viewMode === 'list'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
                 }`}
               title="List View"
             >
@@ -340,9 +378,7 @@ export function EnquiryModule() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <button
                                 onClick={() => {
-                                  setEnquiries(enquiries.map(e =>
-                                    e.id === reminder.id ? { ...e, status: 'followed-up' } : e
-                                  ));
+                                  handleStatusChange(reminder.id, 'followed-up');
                                   // Close popup if no more reminders
                                   if (followUpReminders.length === 1) {
                                     setShowReminders(false);
@@ -658,17 +694,13 @@ export function EnquiryModule() {
 
                 <div className="flex items-center gap-2 pt-2">
                   <button
-                    onClick={() => setEnquiries(enquiries.map(e =>
-                      e.id === enquiry.id ? { ...e, status: 'followed-up' } : e
-                    ))}
+                    onClick={() => handleStatusChange(enquiry.id, 'followed-up')}
                     className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
                   >
                     Follow Up
                   </button>
                   <button
-                    onClick={() => setEnquiries(enquiries.map(e =>
-                      e.id === enquiry.id ? { ...e, status: 'converted' } : e
-                    ))}
+                    onClick={() => handleStatusChange(enquiry.id, 'converted')}
                     className="flex-1 px-3 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
                   >
                     Convert
@@ -718,18 +750,14 @@ export function EnquiryModule() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setEnquiries(enquiries.map(e =>
-                      e.id === enquiry.id ? { ...e, status: 'followed-up' } : e
-                    ))}
+                    onClick={() => handleStatusChange(enquiry.id, 'followed-up')}
                     className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
                     title="Mark as Followed Up"
                   >
                     <CheckCircle className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setEnquiries(enquiries.map(e =>
-                      e.id === enquiry.id ? { ...e, status: 'converted' } : e
-                    ))}
+                    onClick={() => handleStatusChange(enquiry.id, 'converted')}
                     className="p-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
                     title="Convert to Admission"
                   >

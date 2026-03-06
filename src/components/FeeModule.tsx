@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Printer, Send } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import { notificationService } from '../utils/centralDataService';
 
 type Tab = 'structure' | 'collection' | 'accounting';
 
@@ -48,6 +50,8 @@ interface StudentLedger {
   paidAmount: number;
   dueAmount: number;
   lastPaymentDate: string;
+  parentPhone: string;
+  parentId?: string;
 }
 
 export function FeeModule() {
@@ -152,8 +156,11 @@ export function FeeModule() {
     notes: '',
   });
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClass, setSelectedClass] = useState('all');
+
   // Student Ledgers
-  const [studentLedgers] = useState<StudentLedger[]>([
+  const [studentLedgers, setStudentLedgers] = useState<StudentLedger[]>([
     {
       studentName: 'Rahul Kumar',
       admissionNo: 'ADM2024001',
@@ -162,6 +169,8 @@ export function FeeModule() {
       paidAmount: 16000,
       dueAmount: 44000,
       lastPaymentDate: '2024-01-15',
+      parentPhone: '+91 9876543210',
+      parentId: '5',
     },
     {
       studentName: 'Priya Sharma',
@@ -171,6 +180,7 @@ export function FeeModule() {
       paidAmount: 12500,
       dueAmount: 37500,
       lastPaymentDate: '2024-01-20',
+      parentPhone: '+91 9876543211',
     },
     {
       studentName: 'Arjun Singh',
@@ -180,10 +190,32 @@ export function FeeModule() {
       paidAmount: 0,
       dueAmount: 65000,
       lastPaymentDate: '-',
+      parentPhone: '+91 9876543212',
     },
   ]);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const savedStructures = localStorage.getItem('fee_structures_demo');
+    if (savedStructures) {
+      setFeeStructures(JSON.parse(savedStructures));
+    }
+
+    const savedPayments = localStorage.getItem('fee_payments_demo');
+    if (savedPayments) {
+      setPayments(JSON.parse(savedPayments));
+    }
+
+    const savedLedgers = localStorage.getItem('student_ledgers_demo');
+    if (savedLedgers) {
+      setStudentLedgers(JSON.parse(savedLedgers));
+    }
+  }, []);
+
+  // Helper to persist data
+  const persistData = (key: string, data: any) => {
+    localStorage.setItem(key, JSON.stringify(data));
+  };
 
   // Generate Receipt Number
   const generateReceiptNo = () => {
@@ -199,10 +231,114 @@ export function FeeModule() {
     return amount - discount + lateFee;
   };
 
+  // Generate Professional PDF Receipt
+  const downloadReceiptPDF = (payment: Payment) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Helper for centering text
+    const centerText = (text: string, y: number) => {
+      const textWidth = doc.getTextWidth(text);
+      doc.text(text, (pageWidth - textWidth) / 2, y);
+    };
+
+    // Header
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    centerText('FEE PAYMENT RECEIPT', 20);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    centerText('---------------------------------------------------------', 28);
+
+    // Basic Info
+    doc.setFontSize(11);
+    doc.text(`Receipt No : ${payment.receiptNo}`, 20, 35);
+    doc.text(`Date       : ${new Date(payment.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 20, 42);
+    doc.text(`Payment Mode: ${payment.paymentMode.toUpperCase()}`, 20, 49);
+
+    centerText('---------------------------------------------------------', 56);
+
+    // Student Details Section
+    doc.setFont('helvetica', 'bold');
+    doc.text('Student Details', 20, 63);
+    doc.setFont('helvetica', 'normal');
+    centerText('---------------------------------------------------------', 68);
+
+    doc.text(`Student Name   : ${payment.studentName}`, 20, 75);
+    doc.text(`Admission No   : ${payment.admissionNo}`, 20, 82);
+    doc.text(`Class          : ${payment.class}`, 20, 89);
+
+    centerText('---------------------------------------------------------', 96);
+
+    // Fee Details Section
+    doc.setFont('helvetica', 'bold');
+    doc.text('Fee Details', 20, 103);
+    doc.setFont('helvetica', 'normal');
+    centerText('---------------------------------------------------------', 108);
+
+    // Table Header
+    doc.setFont('helvetica', 'bold');
+    doc.text('| Fee Type', 20, 115);
+    doc.text('| Amount', 140, 115);
+    doc.text('|', 180, 115);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('|-----------------|--------|', 20, 120);
+
+    // Table Row
+    doc.text(`| ${payment.feeType}`, 20, 128);
+    doc.text(`| Rs. ${payment.totalAmount.toLocaleString()}`, 140, 128);
+    doc.text('|', 180, 128);
+
+    centerText('---------------------------------------------------------', 136);
+
+    // Total
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total Amount Paid : Rs. ${payment.totalAmount.toLocaleString()}`, 20, 145);
+    centerText('---------------------------------------------------------', 151);
+
+    // Footer
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text('Thank you for your payment.', 20, 165);
+
+    doc.text('Authorized Signature', 140, 180);
+    doc.text('School Admin', 140, 187);
+
+    centerText('---------------------------------------------------------', 200);
+    centerText('Generated from School Management System', 207);
+    centerText('---------------------------------------------------------', 214);
+
+    // Download file
+    doc.save(`Receipt_${payment.receiptNo}.pdf`);
+  };
+
+  // Handle Communication Actions
+  const handleCall = (phone: string) => {
+    window.location.href = `tel:${phone}`;
+  };
+
+  const handleSendNotification = (student: StudentLedger) => {
+    if (student.parentId) {
+      notificationService.create({
+        userId: student.parentId,
+        type: 'fee',
+        title: 'Fee Payment Reminder',
+        message: `Dear Parent, this is a reminder regarding the outstanding fee of RS. ${student.dueAmount.toLocaleString()} for ${student.studentName}. Please ignore if already paid.`,
+        date: new Date().toISOString(),
+      });
+      alert(`Notification sent successfully to ${student.studentName}'s parent!`);
+    } else {
+      // For demo students without real parent IDs, just show the alert
+      alert(`Demo Alert: Notification message sent to ${student.studentName}'s parent.`);
+    }
+  };
+
   // Handle Fee Structure Submit
   const handleStructureSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (isEditMode && editingStructure) {
       // Update existing structure
       const updatedStructure: FeeStructure = {
@@ -216,11 +352,13 @@ export function FeeModule() {
         daycareFee: parseFloat(structureForm.daycareFee) || 0,
         activityFee: parseFloat(structureForm.activityFee) || 0,
       };
-      
-      setFeeStructures(feeStructures.map(s => 
+
+      const updatedStructures = feeStructures.map(s =>
         s.id === editingStructure.id ? updatedStructure : s
-      ));
-      
+      );
+      setFeeStructures(updatedStructures);
+      persistData('fee_structures_demo', updatedStructures);
+
       alert(`Fee structure for Class ${structureForm.class} has been updated successfully!`);
       setIsEditMode(false);
       setEditingStructure(null);
@@ -238,10 +376,12 @@ export function FeeModule() {
         activityFee: parseFloat(structureForm.activityFee) || 0,
         customCategories: [],
       };
-      setFeeStructures([...feeStructures, newStructure]);
+      const updatedStructures = [...feeStructures, newStructure];
+      setFeeStructures(updatedStructures);
+      persistData('fee_structures_demo', updatedStructures);
       alert(`Fee structure for Class ${structureForm.class} has been added successfully!`);
     }
-    
+
     setStructureForm({
       class: '',
       admissionFee: '',
@@ -275,7 +415,9 @@ export function FeeModule() {
   // Handle Delete Fee Structure
   const handleDeleteStructure = (structure: FeeStructure) => {
     if (confirm(`Are you sure you want to delete fee structure for Class ${structure.class}?`)) {
-      setFeeStructures(feeStructures.filter(s => s.id !== structure.id));
+      const updatedStructures = feeStructures.filter(s => s.id !== structure.id);
+      setFeeStructures(updatedStructures);
+      persistData('fee_structures_demo', updatedStructures);
       alert(`Fee structure for Class ${structure.class} has been deleted successfully!`);
     }
   };
@@ -285,7 +427,7 @@ export function FeeModule() {
     e.preventDefault();
     const receiptNo = generateReceiptNo();
     const totalAmount = calculateTotalAmount();
-    
+
     const newPayment: Payment = {
       id: Date.now().toString(),
       studentName: collectionForm.studentName,
@@ -301,12 +443,34 @@ export function FeeModule() {
       totalAmount: totalAmount,
       status: 'paid',
     };
-    
-    setPayments([newPayment, ...payments]);
-    
+
+    const newPayments = [newPayment, ...payments];
+    setPayments(newPayments);
+    persistData('fee_payments_demo', newPayments);
+
+    // Update Student Ledger dynamically
+    const updatedLedgers = studentLedgers.map(s => {
+      // Compare by admission number to find the student
+      if (s.admissionNo.toLowerCase() === collectionForm.admissionNo.toLowerCase()) {
+        const newPaid = s.paidAmount + totalAmount;
+        return {
+          ...s,
+          paidAmount: newPaid,
+          dueAmount: Math.max(0, s.totalFee - newPaid),
+          lastPaymentDate: newPayment.paymentDate
+        };
+      }
+      return s;
+    });
+
+    // If student doesn't exist in ledger, we could add them, but for now we'll just update existing ones
+    // in a real app, ledgers would be created upon admission
+    setStudentLedgers(updatedLedgers);
+    persistData('student_ledgers_demo', updatedLedgers);
+
     // Generate PDF and show success
     alert(`Payment Successful!\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${totalAmount.toLocaleString()}\n\nReceipt PDF generated automatically.`);
-    
+
     setCollectionForm({
       studentName: '',
       admissionNo: '',
@@ -372,11 +536,10 @@ export function FeeModule() {
       <div className="flex gap-2 mb-8 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('structure')}
-          className={`px-6 py-3 border-b-2 transition-colors ${
-            activeTab === 'structure'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-6 py-3 border-b-2 transition-colors ${activeTab === 'structure'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
@@ -385,11 +548,10 @@ export function FeeModule() {
         </button>
         <button
           onClick={() => setActiveTab('collection')}
-          className={`px-6 py-3 border-b-2 transition-colors ${
-            activeTab === 'collection'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-6 py-3 border-b-2 transition-colors ${activeTab === 'collection'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5" />
@@ -398,11 +560,10 @@ export function FeeModule() {
         </button>
         <button
           onClick={() => setActiveTab('accounting')}
-          className={`px-6 py-3 border-b-2 transition-colors ${
-            activeTab === 'accounting'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-6 py-3 border-b-2 transition-colors ${activeTab === 'accounting'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
@@ -794,11 +955,10 @@ export function FeeModule() {
                       <p className="text-gray-600">{payment.admissionNo} | Class {payment.class}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1">
-                        <Printer className="w-4 h-4" />
-                        Print Receipt
-                      </button>
-                      <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1">
+                      <button
+                        onClick={() => downloadReceiptPDF(payment)}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                      >
                         <Download className="w-4 h-4" />
                         Download PDF
                       </button>
@@ -889,17 +1049,29 @@ export function FeeModule() {
 
           {/* Student Ledgers */}
           <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <h3 className="text-gray-900">Student Ledgers & Outstanding Fees</h3>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search student..."
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+              <div className="flex flex-col md:flex-row gap-3">
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white min-w-[150px]"
+                >
+                  <option value="all">All Classes</option>
+                  {[...new Set(studentLedgers.map(s => s.class))].sort().map(className => (
+                    <option key={className} value={className}>Class {className}</option>
+                  ))}
+                </select>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search student..."
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
             </div>
 
@@ -919,10 +1091,12 @@ export function FeeModule() {
                 </thead>
                 <tbody>
                   {studentLedgers
-                    .filter(s => 
-                      s.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase())
-                    )
+                    .filter(s => {
+                      const matchesSearch = s.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase());
+                      const matchesClass = selectedClass === 'all' || s.class === selectedClass;
+                      return matchesSearch && matchesClass;
+                    })
                     .map((student, index) => (
                       <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-900">{student.studentName}</td>
@@ -938,16 +1112,20 @@ export function FeeModule() {
                         <td className="px-4 py-3 text-gray-700">{student.lastPaymentDate}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-2">
-                            <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                              <Receipt className="w-4 h-4" />
+                            <button
+                              onClick={() => handleCall(student.parentPhone)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Call Parent"
+                            >
+                              <Phone className="w-4 h-4" />
                             </button>
                             {student.dueAmount > 0 && (
                               <button
-                                onClick={() => sendDueAlert(student)}
-                                className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                title="Send WhatsApp/SMS Alert"
+                                onClick={() => handleSendNotification(student)}
+                                className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                title="Send Notification"
                               >
-                                <Send className="w-4 h-4" />
+                                <Bell className="w-4 h-4" />
                               </button>
                             )}
                           </div>
