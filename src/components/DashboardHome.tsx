@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../contexts/TenantContext';
-import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock } from 'lucide-react';
+import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
 
 interface DashboardHomeProps {
   onNavigate?: (view: string) => void;
@@ -9,76 +9,158 @@ interface DashboardHomeProps {
 export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   const { schoolName } = useTenant();
   const [stats, setStats] = useState({
-    totalStudents: 248,
-    totalRevenue: 1245000,
-    presentToday: 235,
-    pendingAdmissions: 12,
-    feeDues: 45000,
-    enquiries: 8,
+    totalStudents: 0,
+    totalRevenue: 0,
+    presentToday: 0,
+    pendingAdmissions: 0,
+    feeDues: 0,
+    enquiries: 0,
   });
 
-  const [recentActivities, setRecentActivities] = useState([
-    { id: 1, type: 'admission', message: 'New admission: Rahul Kumar - Class 6', time: '10 mins ago' },
-    { id: 2, type: 'fee', message: 'Fee payment received: ₹15,000 from Priya Sharma', time: '25 mins ago' },
-    { id: 3, type: 'enquiry', message: 'New enquiry for Class 3 admission', time: '1 hour ago' },
-    { id: 4, type: 'attendance', message: 'Attendance marked for Class 8-A', time: '2 hours ago' },
-  ]);
-
-  const [upcomingEvents, setUpcomingEvents] = useState([
-    { id: 1, title: 'Parent-Teacher Meeting', date: 'Feb 15, 2024', time: '10:00 AM', color: 'from-pink-400 to-pink-500' },
-    { id: 2, title: 'Annual Sports Day', date: 'Mar 5, 2024', time: '9:00 AM', color: 'from-orange-400 to-orange-500' },
-    { id: 3, title: 'Science Exhibition', date: 'Feb 20, 2024', time: '11:00 AM', color: 'from-teal-400 to-teal-500' },
-  ]);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [classPerformance, setClassPerformance] = useState<any[]>([]);
 
   useEffect(() => {
-    // 1. Fetch live announcements
-    const savedAnnouncements = localStorage.getItem('school_announcements');
-    if (savedAnnouncements) {
-      const announcements = JSON.parse(savedAnnouncements);
+    // 1. Fetch Students & Calculate Attendance
+    const storedStudents = localStorage.getItem('school_students');
+    const allStudents = storedStudents ? JSON.parse(storedStudents) : [];
 
-      // Map to Upcoming Events (Events, Holidays, Reminders)
-      const events = announcements
-        .filter((a: any) => ['event', 'holiday', 'reminder'].includes(a.type))
-        .slice(0, 3)
-        .map((a: any, idx: number) => ({
-          id: a.id,
-          title: a.title,
-          date: a.date,
-          time: 'All Day',
-          color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
-        }));
-      if (events.length > 0) setUpcomingEvents(events);
+    // 2. Fetch Admissions
+    const storedAdmissions = localStorage.getItem('admissions_demo_data');
+    const allAdmissions = storedAdmissions ? JSON.parse(storedAdmissions) : [];
+    const admittedAdmissions = allAdmissions.filter((a: any) => a.status === 'admitted' || a.status === 'confirmed');
+    const pendingAdmissionsCount = allAdmissions.filter((a: any) => a.status === 'pending' || a.status === 'enquiry').length;
 
-      // Map to Recent Activities
-      const commActivities = announcements.slice(0, 2).map((a: any) => ({
-        id: `comm-${a.id}`,
+    const totalStudentsCount = allStudents.length + admittedAdmissions.length;
+    const avgAttendance = allStudents.reduce((acc: number, s: any) => acc + (s.attendance || 0), 0) / (allStudents.length || 1);
+    const presentTodayCount = Math.round((totalStudentsCount * avgAttendance) / 100);
+
+    // 3. Fetch Fees & Revenue
+    const storedPayments = localStorage.getItem('fee_payments_demo');
+    const allPayments = storedPayments ? JSON.parse(storedPayments) : [];
+    const totalRev = allPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || 0), 0);
+
+    const storedLedgers = localStorage.getItem('student_ledgers_demo');
+    const allLedgers = storedLedgers ? JSON.parse(storedLedgers) : [];
+    const totalDues = allLedgers.reduce((sum: number, l: any) => sum + (l.dueAmount || 0), 0);
+
+    // 4. Fetch Enquiries
+    const storedEnquiries = localStorage.getItem('enquiries_demo_data');
+    const allEnquiries = storedEnquiries ? JSON.parse(storedEnquiries) : [];
+
+    // 5. Fetch Announcements
+    const storedAnnouncements = localStorage.getItem('school_announcements');
+    const allAnnouncements = storedAnnouncements ? JSON.parse(storedAnnouncements) : [];
+
+    // Update Stats
+    setStats({
+      totalStudents: totalStudentsCount,
+      totalRevenue: totalRev,
+      presentToday: presentTodayCount,
+      pendingAdmissions: pendingAdmissionsCount,
+      feeDues: totalDues,
+      enquiries: allEnquiries.length,
+    });
+
+    // 6. Map Upcoming Events
+    const events = allAnnouncements
+      .filter((a: any) => ['event', 'holiday', 'reminder'].includes(a.type))
+      .slice(0, 3)
+      .map((a: any, idx: number) => ({
+        id: a.id,
+        title: a.title,
+        date: a.date,
+        time: 'All Day',
+        color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
+      }));
+    setUpcomingEvents(events);
+
+    // 7. Aggregate Recent Activities
+    const activities: any[] = [];
+
+    // Add Announcements
+    allAnnouncements.slice(0, 2).forEach((a: any) => {
+      activities.push({
+        id: `ann-${a.id}`,
         type: 'communication',
         message: `${a.type.toUpperCase()}: ${a.title}`,
-        time: 'Recently'
-      }));
-      setRecentActivities(prev => [...commActivities, ...prev].slice(0, 5));
+        time: 'Recently',
+        timestamp: a.id
+      });
+    });
+
+    // Add Admissions
+    allAdmissions.slice(-2).forEach((adm: any) => {
+      activities.push({
+        id: `adm-${adm.id}`,
+        type: 'admission',
+        message: `Admission ${adm.status}: ${adm.name}`,
+        time: 'Today',
+        timestamp: adm.id
+      });
+    });
+
+    // Add Payments
+    allPayments.slice(-2).forEach((p: any) => {
+      activities.push({
+        id: `fee-${p.id}`,
+        type: 'fee',
+        message: `Payment received: ₹${p.totalAmount.toLocaleString()} from ${p.studentName}`,
+        time: p.paymentDate,
+        timestamp: p.id
+      });
+    });
+
+    // Add Enquiries
+    allEnquiries.slice(-2).forEach((e: any) => {
+      activities.push({
+        id: `enq-${e.id}`,
+        type: 'enquiry',
+        message: `New enquiry for ${e.childName} (Class ${e.classInterest})`,
+        time: e.enquiryDate,
+        timestamp: e.id
+      });
+    });
+
+    // Sort and limit activities
+    setRecentActivities(activities.sort((a, b) => {
+      const tsA = isNaN(Number(a.timestamp)) ? 0 : Number(a.timestamp);
+      const tsB = isNaN(Number(b.timestamp)) ? 0 : Number(b.timestamp);
+      return tsB - tsA;
+    }).slice(0, 5));
+
+    // 8. Calculate Class Performance
+    const classGroups: { [key: string]: { total: number, count: number } } = {};
+    allStudents.forEach((s: any) => {
+      const cls = `Class ${s.class}`;
+      if (!classGroups[cls]) classGroups[cls] = { total: 0, count: 0 };
+      classGroups[cls].total += (s.attendance || 0);
+      classGroups[cls].count += 1;
+    });
+
+    const performance = Object.entries(classGroups)
+      .map(([cls, data]) => ({
+        class: cls,
+        attendance: Math.round(data.total / data.count),
+        color: cls.includes('6') ? 'bg-purple-500' : cls.includes('5') ? 'bg-pink-500' : cls.includes('4') ? 'bg-indigo-500' : 'bg-blue-500'
+      }))
+      .sort((a, b) => b.attendance - a.attendance)
+      .slice(0, 4);
+
+    if (performance.length > 0) {
+      setClassPerformance(performance);
+    } else {
+      setClassPerformance([
+        { class: 'Class 6-A', attendance: 96, color: 'bg-purple-500' },
+        { class: 'Class 5-B', attendance: 94, color: 'bg-pink-500' },
+        { class: 'Class 4-A', attendance: 92, color: 'bg-indigo-500' },
+        { class: 'Class 7-C', attendance: 88, color: 'bg-blue-500' },
+      ]);
     }
 
-    // 2. Fetch recent admissions for activities
-    const savedAdmissions = localStorage.getItem('admissions_demo_data');
-    if (savedAdmissions) {
-      const admissions = JSON.parse(savedAdmissions);
-      const admissionActivities = admissions.slice(-2).map((s: any) => ({
-        id: `adm-${s.id}`,
-        type: 'admission',
-        message: `New admission: ${s.name} - Class ${s.classApplied}`,
-        time: 'Today'
-      }));
-      setRecentActivities(prev => [...admissionActivities, ...prev].slice(0, 5));
-    }
   }, []);
 
-  const classPerformance = [
-    { class: 'Class 6-A', attendance: 96, color: 'bg-purple-500' },
-    { class: 'Class 5-B', attendance: 94, color: 'bg-pink-500' },
-    { class: 'Class 4-A', attendance: 92, color: 'bg-indigo-500' },
-    { class: 'Class 7-C', attendance: 88, color: 'bg-blue-500' },
-  ];
 
   return (
     <div className="p-8 bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 min-h-screen">
@@ -274,12 +356,14 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-md ${activity.type === 'admission' ? 'bg-gradient-to-br from-purple-400 to-purple-500' :
                     activity.type === 'fee' ? 'bg-gradient-to-br from-yellow-400 to-yellow-500' :
                       activity.type === 'enquiry' ? 'bg-gradient-to-br from-orange-400 to-orange-500' :
-                        'bg-gradient-to-br from-pink-400 to-pink-500'
+                        activity.type === 'communication' ? 'bg-gradient-to-br from-blue-400 to-blue-500' :
+                          'bg-gradient-to-br from-pink-400 to-pink-500'
                     }`}>
                     {activity.type === 'admission' && <Users className="w-5 h-5 text-white" />}
                     {activity.type === 'fee' && <DollarSign className="w-5 h-5 text-white" />}
                     {activity.type === 'enquiry' && <Bell className="w-5 h-5 text-white" />}
                     {activity.type === 'attendance' && <Calendar className="w-5 h-5 text-white" />}
+                    {activity.type === 'communication' && <MessageSquare className="w-5 h-5 text-white" />}
                   </div>
                   <div className="flex-1">
                     <p className="text-gray-900 mb-1">{activity.message}</p>

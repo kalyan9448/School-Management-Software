@@ -1,49 +1,65 @@
+import { useState, useEffect } from 'react';
 import { CheckCircle } from 'lucide-react';
 
-export function AdmissionActivationView() {
-  const pendingActivations = [
-    {
-      id: '1',
-      name: 'Aarav Patel',
-      class: 'Nursery A',
-      admissionDate: '2024-02-15',
-      parentPhone: '+91 98765 43210',
-    },
-    {
-      id: '2',
-      name: 'Diya Sharma',
-      class: 'LKG A',
-      admissionDate: '2024-02-16',
-      parentPhone: '+91 98765 43211',
-    },
-    {
-      id: '3',
-      name: 'Arjun Singh',
-      class: 'UKG A',
-      admissionDate: '2024-02-17',
-      parentPhone: '+91 98765 43212',
-    },
-    {
-      id: '4',
-      name: 'Sanya Gupta',
-      class: 'Nursery B',
-      admissionDate: '2024-02-18',
-      parentPhone: '+91 98765 43213',
-    },
-    {
-      id: '5',
-      name: 'Rohan Kumar',
-      class: 'LKG B',
-      admissionDate: '2024-02-19',
-      parentPhone: '+91 98765 43214',
-    },
-  ];
+interface Student {
+  id: string;
+  admissionNo: string;
+  name: string;
+  parentName: string;
+  phone: string;
+  classAllotted: string;
+  status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted';
+  admissionDate?: string;
+  activatedAt?: string;
+}
 
-  const recentlyActivated = [
-    { name: 'Sanya Gupta', class: 'Nursery B', parent: 'Mrs. Gupta', date: '2024-02-14' },
-    { name: 'Rohan Kumar', class: 'LKG A', parent: 'Mr. Kumar', date: '2024-02-13' },
-    { name: 'Priya Singh', class: 'UKG A', parent: 'Mrs. Singh', date: '2024-02-12' },
-  ];
+export function AdmissionActivationView() {
+  const [students, setStudents] = useState<Student[]>([]);
+
+  // Load students from localStorage
+  const loadStudents = () => {
+    const localData = localStorage.getItem('admissions_demo_data');
+    if (localData) {
+      setStudents(JSON.parse(localData));
+    }
+  };
+
+  useEffect(() => {
+    loadStudents();
+
+    // Listen for storage changes to sync across tabs/components
+    window.addEventListener('storage', loadStudents);
+    return () => window.removeEventListener('storage', loadStudents);
+  }, []);
+
+  const handleActivate = (id: string) => {
+    const student = students.find(s => s.id === id);
+    if (!student) return;
+
+    const activatedAt = new Date().toISOString().split('T')[0];
+    const updatedStudents = students.map(s =>
+      s.id === id ? { ...s, activatedAt } : s
+    );
+
+    setStudents(updatedStudents);
+    localStorage.setItem('admissions_demo_data', JSON.stringify(updatedStudents));
+
+    // Trigger storage event for other components in same tab
+    window.dispatchEvent(new Event('storage'));
+
+    alert(
+      `Activation link sent to ${student.phone} for ${student.name}!\n\nThe parent will receive:\n- Login credentials\n- App download link\n- Activation instructions`
+    );
+  };
+
+  const pendingActivations = students.filter(s =>
+    (s.status === 'admitted' || s.status === 'confirmed') && !s.activatedAt
+  );
+
+  const recentlyActivated = students
+    .filter(s => s.activatedAt)
+    .sort((a, b) => (b.activatedAt || '').localeCompare(a.activatedAt || ''))
+    .slice(0, 5);
 
   return (
     <div className="p-8 space-y-6">
@@ -60,47 +76,50 @@ export function AdmissionActivationView() {
             {pendingActivations.length} Pending
           </span>
         </div>
-        <div className="space-y-3">
-          {pendingActivations.map((student) => (
-            <div
-              key={student.id}
-              className="p-4 bg-gray-50 rounded-lg border border-gray-200"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-gray-900 mb-1">{student.name}</p>
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <span>Class: {student.class}</span>
-                    <span>Admission: {student.admissionDate}</span>
-                    <span>Parent: {student.parentPhone}</span>
+
+        {pendingActivations.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+            No pending activations found.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pendingActivations.map((student) => (
+              <div
+                key={student.id}
+                className="p-4 bg-gray-50 rounded-lg border border-gray-200"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-gray-900 mb-1 font-medium">{student.name}</p>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                      <span>Class: {student.classAllotted}</span>
+                      <span>Admission: {student.admissionDate || 'N/A'}</span>
+                      <span>Parent: {student.phone}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleActivate(student.id)}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      Activate
+                    </button>
+                    <button
+                      onClick={() => {
+                        alert(
+                          `Student Details:\n\nName: ${student.name}\nClass: ${student.classAllotted}\nAdmission Date: ${student.admissionDate || 'N/A'}\nParent Contact: ${student.phone}`
+                        );
+                      }}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                      View Details
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      alert(
-                        `Activation link sent to ${student.parentPhone} for ${student.name}!\n\nThe parent will receive:\n- Login credentials\n- App download link\n- Activation instructions`
-                      );
-                    }}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    Activate
-                  </button>
-                  <button
-                    onClick={() => {
-                      alert(
-                        `Student Details:\n\nName: ${student.name}\nClass: ${student.class}\nAdmission Date: ${student.admissionDate}\nParent Contact: ${student.parentPhone}`
-                      );
-                    }}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-                  >
-                    View Details
-                  </button>
-                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Activation Flow */}
@@ -147,28 +166,36 @@ export function AdmissionActivationView() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-gray-600">Student Name</th>
-                <th className="px-6 py-3 text-left text-gray-600">Class</th>
-                <th className="px-6 py-3 text-left text-gray-600">Parent</th>
-                <th className="px-6 py-3 text-left text-gray-600">Activated On</th>
-                <th className="px-6 py-3 text-left text-gray-600">Status</th>
+                <th className="px-6 py-3 text-left text-gray-600 font-semibold">Student Name</th>
+                <th className="px-6 py-3 text-left text-gray-600 font-semibold">Class</th>
+                <th className="px-6 py-3 text-left text-gray-600 font-semibold">Parent</th>
+                <th className="px-6 py-3 text-left text-gray-600 font-semibold">Activated On</th>
+                <th className="px-6 py-3 text-left text-gray-600 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {recentlyActivated.map((item, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-gray-900">{item.name}</td>
-                  <td className="px-6 py-4 text-gray-700">{item.class}</td>
-                  <td className="px-6 py-4 text-gray-700">{item.parent}</td>
-                  <td className="px-6 py-4 text-gray-700">{item.date}</td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                      <CheckCircle className="w-3 h-3" />
-                      Active
-                    </span>
+              {recentlyActivated.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500 italic">
+                    No recently activated accounts.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                recentlyActivated.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 text-gray-900 font-medium">{item.name}</td>
+                    <td className="px-6 py-4 text-gray-700">{item.classAllotted}</td>
+                    <td className="px-6 py-4 text-gray-700">{item.parentName}</td>
+                    <td className="px-6 py-4 text-gray-700">{item.activatedAt}</td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                        <CheckCircle className="w-3 h-3" />
+                        Active
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
