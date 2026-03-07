@@ -37,11 +37,9 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
     { id: 'students', icon: Users, label: 'Students', roles: ['admin'] },
     { id: 'teachers', icon: GraduationCap, label: 'Teachers', roles: ['admin'] },
     { id: 'academic-structure', icon: BookOpen, label: 'Academic Structure', roles: ['admin'] },
-    { id: 'subject-mapping', icon: BookOpen, label: 'Subject Mapping', roles: ['admin'] },
     { id: 'user-management', icon: Settings, label: 'User Management', roles: ['admin'] },
     { id: 'monitoring', icon: BarChart3, label: 'Monitoring', roles: ['admin'] },
     { id: 'communication', icon: MessageSquare, label: 'Communication', roles: ['admin'] },
-    { id: 'reports', icon: FileText, label: 'Reports', roles: ['admin', 'accountant'] },
     { id: 'reports-approval', icon: FileCheck, label: 'Reports & Announcements', roles: ['admin'] },
   ];
 

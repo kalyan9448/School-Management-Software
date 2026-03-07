@@ -24,10 +24,8 @@ export type ViewType =
   | 'students'
   | 'teachers'
   | 'communication'
-  | 'reports'
   | 'academic-structure'
   | 'user-management'
-  | 'subject-mapping'
   | 'monitoring'
   | 'admission-activation'
   | 'reports-approval';
@@ -60,10 +58,8 @@ export function AdminDashboard() {
         {activeView === 'students' && <StudentInformation onNavigate={handleNavigate} />}
         {activeView === 'teachers' && <TeachersModule />}
         {activeView === 'communication' && <CommunicationModule />}
-        {activeView === 'reports' && <ReportsModule />}
         {activeView === 'academic-structure' && <AcademicStructureView />}
         {activeView === 'user-management' && <UserManagementView />}
-        {activeView === 'subject-mapping' && <SubjectMappingView />}
         {activeView === 'monitoring' && <MonitoringView />}
         {activeView === 'admission-activation' && <AdmissionActivationView />}
         {activeView === 'reports-approval' && <ReportsApprovalView />}

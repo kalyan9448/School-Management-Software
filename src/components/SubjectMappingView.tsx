@@ -2,7 +2,7 @@ import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { SubjectMappingForm, ClassData, SubjectMapping } from './SubjectMappingForm';
 
-export default function SubjectMappingView() {
+export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editData, setEditData] = useState<any>(null);
 
@@ -171,20 +171,34 @@ export default function SubjectMappingView() {
   }
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h1 className="text-gray-900 mb-2">Subject Mapping</h1>
-          <p className="text-gray-600">Manage subject and teacher allocations for all classes</p>
+    <div className={`${isEmbedded ? 'py-4' : 'p-8'} space-y-6`}>
+      {!isEmbedded && (
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-gray-900 mb-2">Subject Mapping</h1>
+            <p className="text-gray-600">Manage subject and teacher allocations for all classes</p>
+          </div>
+          <button
+            onClick={handleAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 transition-all shadow-md"
+          >
+            <Plus className="w-5 h-5" />
+            Add Subject Mapping
+          </button>
         </div>
-        <button
-          onClick={handleAdd}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 transition-all shadow-md"
-        >
-          <Plus className="w-5 h-5" />
-          Add Subject Mapping
-        </button>
-      </div>
+      )}
+
+      {isEmbedded && (
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={handleAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 transition-all shadow-md font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            Add Subject Mapping
+          </button>
+        </div>
+      )}
 
       {/* Subject Mapping by Class */}
       <div className="bg-white rounded-xl shadow-md p-6">

@@ -1,6 +1,7 @@
 import { ArrowLeft, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Teacher } from './TeachersData';
+import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 
 export interface SubjectMapping {
     name: string;
@@ -45,8 +46,8 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
         }
     }, []);
 
-    const classes = ['Nursery', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
-    const sections = ['A', 'B', 'C', 'D'];
+    const classes = getUniqueClasses();
+    const sections = getSectionsForClass(formData.class);
     const subjectsList = [
         'English',
         'Mathematics',

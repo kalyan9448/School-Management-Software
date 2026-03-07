@@ -1,32 +1,98 @@
-import { useState } from 'react';
-import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
 
 export function MonitoringView() {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
+  const [stats, setStats] = useState({
+    activeUsers: 0,
+    studentsPresent: 0,
+    totalStudentsCount: 0,
+    lessonsInProgress: 0,
+    pendingPayments: 0,
+  });
+  const [activities, setActivities] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
 
-  const realtimeStats = {
-    activeUsers: 142,
-    studentsPresent: 285,
-    lessonsInProgress: 8,
-    pendingPayments: 12,
-  };
+  useEffect(() => {
+    // 1. Fetch Unified Users for Active Count & Feed
+    const storedUsers = localStorage.getItem('school_unified_users');
+    const unifiedUsers = storedUsers ? JSON.parse(storedUsers) : [];
+    const activeU = unifiedUsers.filter((u: any) => u.status === 'Active').length;
 
-  const recentActivities = [
-    { id: '1', type: 'attendance', user: 'Ms. Sarah Johnson', action: 'marked attendance for Nursery A', time: '2 mins ago', icon: CheckCircle, color: 'green' },
-    { id: '2', type: 'lesson', user: 'Ms. Emily Davis', action: 'completed lesson "Introduction to Numbers"', time: '5 mins ago', icon: BookOpen, color: 'blue' },
-    { id: '3', type: 'payment', user: 'Mr. Rajesh Patel', action: 'paid monthly fees ₹5,000', time: '10 mins ago', icon: DollarSign, color: 'purple' },
-    { id: '4', type: 'admission', user: 'Admin', action: 'admitted new student Aarav Kumar', time: '15 mins ago', icon: Users, color: 'yellow' },
-    { id: '5', type: 'alert', user: 'System', action: 'Low attendance alert for UKG B', time: '20 mins ago', icon: AlertCircle, color: 'red' },
-  ];
+    // 2. Fetch Students for Attendance & Payments
+    const storedStudents = localStorage.getItem('school_students');
+    const allStudents = storedStudents ? JSON.parse(storedStudents) : [];
 
-  const classActivity = [
-    { class: 'Nursery A', teacher: 'Ms. Sarah Johnson', status: 'In Progress', attendance: '25/28', lesson: 'Story Time' },
-    { class: 'Nursery B', teacher: 'Ms. Anjali Verma', status: 'In Progress', attendance: '22/25', lesson: 'Art & Craft' },
-    { class: 'LKG A', teacher: 'Ms. Emily Davis', status: 'Break', attendance: '28/30', lesson: 'Completed' },
-    { class: 'LKG B', teacher: 'Ms. Sarah Johnson', status: 'In Progress', attendance: '26/28', lesson: 'Mathematics' },
-    { class: 'UKG A', teacher: 'Ms. Emily Davis', status: 'In Progress', attendance: '30/30', lesson: 'Science' },
-    { class: 'UKG B', teacher: 'Ms. Priya Sharma', status: 'Break', attendance: '27/29', lesson: 'Completed' },
-  ];
+    // Calculate pending payments (feeStatus is pending or partial)
+    const pendingP = allStudents.filter((s: any) => s.feeStatus !== 'paid').length;
+
+    // Average attendance simulation for students present
+    const totalS = allStudents.length;
+    const avgAttendance = allStudents.reduce((acc: number, s: any) => acc + (s.attendance || 0), 0) / (totalS || 1);
+    const presentToday = Math.round((totalS * avgAttendance) / 100);
+
+    // 3. Fetch Academic Structure for Classes
+    const storedYears = localStorage.getItem('school_academic_years');
+    const academicYears = storedYears ? JSON.parse(storedYears) : [];
+    const activeYearId = academicYears.find((y: any) => y.status === 'active')?.id || '2024-2025';
+
+    const storedClasses = localStorage.getItem(`school_class_sections_${activeYearId}`);
+    const activeClasses = storedClasses ? JSON.parse(storedClasses) : [];
+
+    // Lessons in progress simulation (based on current hour/day)
+    const now = new Date();
+    const isSchoolHours = now.getHours() >= 8 && now.getHours() <= 16;
+    const currentLessons = isSchoolHours ? Math.ceil(activeClasses.length * 0.7) : 0;
+
+    // Update Stats
+    setStats({
+      activeUsers: activeU,
+      studentsPresent: presentToday,
+      totalStudentsCount: totalS,
+      lessonsInProgress: currentLessons,
+      pendingPayments: pendingP,
+    });
+
+    // 4. Generate Dynamic Activity Feed
+    const feed = [
+      ...unifiedUsers.slice(-2).map((u: any) => ({
+        id: `u-${u.id}`,
+        type: 'user',
+        user: u.name,
+        action: `assigned as ${u.role}`,
+        time: u.lastActive || 'Recently',
+        icon: Users,
+        color: 'purple'
+      })),
+      ...allStudents.slice(-3).map((s: any) => ({
+        id: `s-${s.id}`,
+        type: 'admission',
+        user: 'Admin',
+        action: `admitted new student ${s.name} to Class ${s.class}`,
+        time: 'Today',
+        icon: GraduationCap,
+        color: 'yellow'
+      }))
+    ];
+    setActivities(feed.length > 0 ? feed : [
+      { id: 'default', type: 'alert', user: 'System', action: 'Monitoring system initialized', time: 'Just now', icon: Activity, color: 'blue' }
+    ]);
+
+    // 5. Generate Class Activity
+    const classData = activeClasses.map((cls: any) => {
+      // Find teacher in unified users
+      const teacher = unifiedUsers.find((u: any) => u.name === cls.classTeacher && u.role === 'Teacher');
+      return {
+        class: `${cls.className} ${cls.section}`,
+        teacher: cls.classTeacher || 'Not Assigned',
+        status: isSchoolHours ? (Math.random() > 0.3 ? 'In Progress' : 'Break') : 'School Closed',
+        attendance: `${Math.round(cls.students * (avgAttendance / 100))}/${cls.students}`,
+        lesson: isSchoolHours ? ['Mathematics', 'Science', 'English', 'Story Time'][Math.floor(Math.random() * 4)] : 'N/A'
+      };
+    });
+    setClasses(classData);
+
+  }, []);
 
   return (
     <div className="p-8 space-y-6">
@@ -38,31 +104,28 @@ export function MonitoringView() {
         <div className="flex gap-2">
           <button
             onClick={() => setTimeRange('today')}
-            className={`px-4 py-2 rounded-lg ${
-              timeRange === 'today'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            className={`px-4 py-2 rounded-lg ${timeRange === 'today'
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
           >
             Today
           </button>
           <button
             onClick={() => setTimeRange('week')}
-            className={`px-4 py-2 rounded-lg ${
-              timeRange === 'week'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            className={`px-4 py-2 rounded-lg ${timeRange === 'week'
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
           >
             This Week
           </button>
           <button
             onClick={() => setTimeRange('month')}
-            className={`px-4 py-2 rounded-lg ${
-              timeRange === 'month'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            className={`px-4 py-2 rounded-lg ${timeRange === 'month'
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
           >
             This Month
           </button>
@@ -75,10 +138,10 @@ export function MonitoringView() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Active Users</p>
-              <h3 className="text-gray-900">{realtimeStats.activeUsers}</h3>
+              <h3 className="text-gray-900">{stats.activeUsers}</h3>
               <div className="flex items-center gap-1 mt-2">
                 <TrendingUp className="w-4 h-4 text-green-600" />
-                <span className="text-green-600 text-sm">+12%</span>
+                <span className="text-green-600 text-sm">Live</span>
               </div>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -91,8 +154,8 @@ export function MonitoringView() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Students Present</p>
-              <h3 className="text-gray-900">{realtimeStats.studentsPresent}</h3>
-              <p className="text-gray-500 text-sm mt-2">Out of 300 total</p>
+              <h3 className="text-gray-900">{stats.studentsPresent}</h3>
+              <p className="text-gray-500 text-sm mt-2">Out of {stats.totalStudentsCount} total</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <Users className="w-6 h-6 text-green-600" />
@@ -104,8 +167,8 @@ export function MonitoringView() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Lessons in Progress</p>
-              <h3 className="text-gray-900">{realtimeStats.lessonsInProgress}</h3>
-              <p className="text-gray-500 text-sm mt-2">Across 6 classes</p>
+              <h3 className="text-gray-900">{stats.lessonsInProgress}</h3>
+              <p className="text-gray-500 text-sm mt-2">Across current classes</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-blue-600" />
@@ -117,7 +180,7 @@ export function MonitoringView() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Pending Payments</p>
-              <h3 className="text-gray-900">{realtimeStats.pendingPayments}</h3>
+              <h3 className="text-gray-900">{stats.pendingPayments}</h3>
               <p className="text-gray-500 text-sm mt-2">Requires attention</p>
             </div>
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -135,15 +198,15 @@ export function MonitoringView() {
             <p className="text-gray-600 text-sm">Live feed of school activities</p>
           </div>
           <div className="divide-y divide-gray-200">
-            {recentActivities.map((activity) => {
+            {activities.map((activity) => {
               const Icon = activity.icon;
-              const colorClasses = {
+              const colorClasses = ({
                 green: 'bg-green-100 text-green-600',
                 blue: 'bg-blue-100 text-blue-600',
                 purple: 'bg-purple-100 text-purple-600',
                 yellow: 'bg-yellow-100 text-yellow-600',
                 red: 'bg-red-100 text-red-600',
-              }[activity.color];
+              } as any)[activity.color];
 
               return (
                 <div key={activity.id} className="p-4 hover:bg-gray-50">
@@ -174,33 +237,38 @@ export function MonitoringView() {
             <p className="text-gray-600 text-sm">Live status of all classes</p>
           </div>
           <div className="divide-y divide-gray-200">
-            {classActivity.map((item, index) => (
-              <div key={index} className="p-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <h4 className="text-gray-900">{item.class}</h4>
-                    <p className="text-gray-600 text-sm">{item.teacher}</p>
-                  </div>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      item.status === 'In Progress'
+            {classes.length > 0 ? (
+              classes.map((item, index) => (
+                <div key={index} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h4 className="text-gray-900">{item.class}</h4>
+                      <p className="text-gray-600 text-sm">{item.teacher}</p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${item.status === 'In Progress'
                         ? 'bg-green-100 text-green-700'
                         : 'bg-gray-100 text-gray-700'
-                    }`}
-                  >
-                    {item.status}
-                  </span>
+                        }`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">
+                      Attendance: <span className="text-gray-900 font-medium">{item.attendance}</span>
+                    </span>
+                    <span className="text-gray-600">
+                      Lesson: <span className="text-gray-900">{item.lesson}</span>
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">
-                    Attendance: <span className="text-gray-900 font-medium">{item.attendance}</span>
-                  </span>
-                  <span className="text-gray-600">
-                    Lesson: <span className="text-gray-900">{item.lesson}</span>
-                  </span>
-                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                No active classes found for this year.
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

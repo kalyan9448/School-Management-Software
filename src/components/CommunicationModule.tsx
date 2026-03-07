@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Send, MessageSquare, Bell, Calendar as CalendarIcon, Plus } from 'lucide-react';
 
 interface Announcement {
@@ -12,33 +12,52 @@ interface Announcement {
 
 export function CommunicationModule() {
   const [showForm, setShowForm] = useState(false);
-  
-  const [announcements, setAnnouncements] = useState<Announcement[]>([
-    {
-      id: '1',
-      title: 'Parent-Teacher Meeting',
-      message: 'Parent-teacher meeting scheduled for all classes on February 15th. Please ensure attendance.',
-      date: '2024-01-25',
-      targetRole: 'all',
-      type: 'event',
-    },
-    {
-      id: '2',
-      title: 'Fee Payment Reminder',
-      message: 'Quarterly fee payment is due by January 31st. Please clear dues to avoid late fee.',
-      date: '2024-01-24',
-      targetRole: 'parents',
-      type: 'reminder',
-    },
-    {
-      id: '3',
-      title: 'Republic Day Holiday',
-      message: 'School will remain closed on January 26th for Republic Day. Will reopen on January 27th.',
-      date: '2024-01-23',
-      targetRole: 'all',
-      type: 'holiday',
-    },
-  ]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
+  // Load announcements on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('school_announcements');
+    if (saved) {
+      setAnnouncements(JSON.parse(saved));
+    } else {
+      // Initialize with defaults if empty
+      const defaultAnnouncements: Announcement[] = [
+        {
+          id: '1',
+          title: 'Parent-Teacher Meeting',
+          message: 'Parent-teacher meeting scheduled for all classes on February 15th. Please ensure attendance.',
+          date: '2024-01-25',
+          targetRole: 'all',
+          type: 'event',
+        },
+        {
+          id: '2',
+          title: 'Fee Payment Reminder',
+          message: 'Quarterly fee payment is due by January 31st. Please clear dues to avoid late fee.',
+          date: '2024-01-24',
+          targetRole: 'parents',
+          type: 'reminder',
+        },
+        {
+          id: '3',
+          title: 'Republic Day Holiday',
+          message: 'School will remain closed on January 26th for Republic Day. Will reopen on January 27th.',
+          date: '2024-01-23',
+          targetRole: 'all',
+          type: 'holiday',
+        },
+      ];
+      setAnnouncements(defaultAnnouncements);
+      localStorage.setItem('school_announcements', JSON.stringify(defaultAnnouncements));
+    }
+  }, []);
+
+  // Save announcements when they change
+  useEffect(() => {
+    if (announcements.length > 0) {
+      localStorage.setItem('school_announcements', JSON.stringify(announcements));
+    }
+  }, [announcements]);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -220,7 +239,7 @@ export function CommunicationModule() {
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${getTypeStyle(announcement.type)}`}>
                 {getTypeIcon(announcement.type)}
               </div>
-              
+
               <div className="flex-1">
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="text-gray-900">{announcement.title}</h3>
@@ -228,9 +247,9 @@ export function CommunicationModule() {
                     {announcement.type.toUpperCase()}
                   </span>
                 </div>
-                
+
                 <p className="text-gray-600 mb-3">{announcement.message}</p>
-                
+
                 <div className="flex items-center gap-4 text-gray-500">
                   <span>📅 {announcement.date}</span>
                   <span>👥 Sent to: {announcement.targetRole === 'all' ? 'All Users' : announcement.targetRole}</span>

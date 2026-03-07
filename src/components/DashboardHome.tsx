@@ -17,18 +17,61 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     enquiries: 8,
   });
 
-  const recentActivities = [
+  const [recentActivities, setRecentActivities] = useState([
     { id: 1, type: 'admission', message: 'New admission: Rahul Kumar - Class 6', time: '10 mins ago' },
     { id: 2, type: 'fee', message: 'Fee payment received: ₹15,000 from Priya Sharma', time: '25 mins ago' },
     { id: 3, type: 'enquiry', message: 'New enquiry for Class 3 admission', time: '1 hour ago' },
     { id: 4, type: 'attendance', message: 'Attendance marked for Class 8-A', time: '2 hours ago' },
-  ];
+  ]);
 
-  const upcomingEvents = [
+  const [upcomingEvents, setUpcomingEvents] = useState([
     { id: 1, title: 'Parent-Teacher Meeting', date: 'Feb 15, 2024', time: '10:00 AM', color: 'from-pink-400 to-pink-500' },
     { id: 2, title: 'Annual Sports Day', date: 'Mar 5, 2024', time: '9:00 AM', color: 'from-orange-400 to-orange-500' },
     { id: 3, title: 'Science Exhibition', date: 'Feb 20, 2024', time: '11:00 AM', color: 'from-teal-400 to-teal-500' },
-  ];
+  ]);
+
+  useEffect(() => {
+    // 1. Fetch live announcements
+    const savedAnnouncements = localStorage.getItem('school_announcements');
+    if (savedAnnouncements) {
+      const announcements = JSON.parse(savedAnnouncements);
+
+      // Map to Upcoming Events (Events, Holidays, Reminders)
+      const events = announcements
+        .filter((a: any) => ['event', 'holiday', 'reminder'].includes(a.type))
+        .slice(0, 3)
+        .map((a: any, idx: number) => ({
+          id: a.id,
+          title: a.title,
+          date: a.date,
+          time: 'All Day',
+          color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
+        }));
+      if (events.length > 0) setUpcomingEvents(events);
+
+      // Map to Recent Activities
+      const commActivities = announcements.slice(0, 2).map((a: any) => ({
+        id: `comm-${a.id}`,
+        type: 'communication',
+        message: `${a.type.toUpperCase()}: ${a.title}`,
+        time: 'Recently'
+      }));
+      setRecentActivities(prev => [...commActivities, ...prev].slice(0, 5));
+    }
+
+    // 2. Fetch recent admissions for activities
+    const savedAdmissions = localStorage.getItem('admissions_demo_data');
+    if (savedAdmissions) {
+      const admissions = JSON.parse(savedAdmissions);
+      const admissionActivities = admissions.slice(-2).map((s: any) => ({
+        id: `adm-${s.id}`,
+        type: 'admission',
+        message: `New admission: ${s.name} - Class ${s.classApplied}`,
+        time: 'Today'
+      }));
+      setRecentActivities(prev => [...admissionActivities, ...prev].slice(0, 5));
+    }
+  }, []);
 
   const classPerformance = [
     { class: 'Class 6-A', attendance: 96, color: 'bg-purple-500' },
@@ -223,12 +266,6 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-900">Recent Activities</h3>
-            <button
-              onClick={() => onNavigate?.('reports')}
-              className="text-purple-600 hover:text-purple-700 transition-colors"
-            >
-              View All
-            </button>
           </div>
           <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6">
             <div className="space-y-4">

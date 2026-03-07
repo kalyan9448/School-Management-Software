@@ -1,95 +1,127 @@
-import { useState } from 'react';
-import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp, Plus, X } from 'lucide-react';
 
 export function ReportsApprovalView() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [scheduledReports, setScheduledReports] = useState<any[]>([]);
+  const [recentReports, setRecentReports] = useState<any[]>([]);
 
-  const scheduledReports = [
-    {
-      id: '1',
-      name: 'Weekly Attendance Summary',
-      type: 'Attendance',
-      frequency: 'Weekly - Every Monday',
-      recipients: 'Admin, Academic Head',
-      nextRun: '2024-02-26',
-      status: 'active',
-    },
-    {
-      id: '2',
-      name: 'Monthly Fee Collection',
-      type: 'Fee Collection',
-      frequency: 'Monthly - 1st of month',
-      recipients: 'Admin, Accountant',
-      nextRun: '2024-03-01',
-      status: 'active',
-    },
-    {
-      id: '3',
-      name: 'Term Performance Report',
-      type: 'Performance Analytics',
-      frequency: 'Quarterly',
-      recipients: 'All Teachers',
-      nextRun: '2024-03-31',
-      status: 'paused',
-    },
-  ];
+  const [newAnnouncement, setNewAnnouncement] = useState({
+    title: '',
+    message: '',
+    priority: 'medium',
+    recipients: 'All Parents',
+  });
 
-  const announcements = [
-    {
-      id: '1',
-      title: 'Annual Sports Day - March 15, 2024',
-      message: 'All students are required to participate in the annual sports day. Parent attendance is encouraged.',
-      priority: 'high',
-      recipients: 'All Parents, All Students',
-      scheduledFor: '2024-02-20 09:00 AM',
-      status: 'scheduled',
-    },
-    {
-      id: '2',
-      title: 'Parent-Teacher Meeting',
-      message: "PTM scheduled for Feb 25. Please check your ward's progress report beforehand.",
-      priority: 'medium',
-      recipients: 'All Parents',
-      scheduledFor: '2024-02-22 10:00 AM',
-      status: 'scheduled',
-    },
-    {
-      id: '3',
-      title: 'Fee Payment Reminder',
-      message: 'Last date for Q4 fee payment is Feb 28. Late fee will be applicable after this date.',
-      priority: 'high',
-      recipients: 'Parents with Pending Fees',
+  // Load everything on mount
+  useEffect(() => {
+    // 1. Announcements (Shared with CommunicationModule)
+    const savedAnnouncements = localStorage.getItem('school_announcements');
+    if (savedAnnouncements) {
+      setAnnouncements(JSON.parse(savedAnnouncements));
+    } else {
+      const defaultAnnouncements = [
+        {
+          id: '1',
+          title: 'Annual Sports Day - March 15, 2024',
+          message: 'All students are required to participate in the annual sports day. Parent attendance is encouraged.',
+          priority: 'high',
+          recipients: 'All Parents, All Students',
+          scheduledFor: '2024-02-20 09:00 AM',
+          status: 'scheduled',
+          type: 'event'
+        },
+        {
+          id: '2',
+          title: 'Parent-Teacher Meeting',
+          message: "PTM scheduled for Feb 25. Please check your ward's progress report beforehand.",
+          priority: 'medium',
+          recipients: 'All Parents',
+          scheduledFor: '2024-02-22 10:00 AM',
+          status: 'scheduled',
+          type: 'event'
+        }
+      ];
+      setAnnouncements(defaultAnnouncements);
+      localStorage.setItem('school_announcements', JSON.stringify(defaultAnnouncements));
+    }
+
+    // 2. Scheduled Reports
+    const savedScheduled = localStorage.getItem('school_reports_scheduled');
+    if (savedScheduled) {
+      setScheduledReports(JSON.parse(savedScheduled));
+    } else {
+      const defaultScheduled = [
+        {
+          id: '1',
+          name: 'Weekly Attendance Summary',
+          type: 'Attendance',
+          frequency: 'Weekly - Every Monday',
+          recipients: 'Admin, Academic Head',
+          nextRun: '2024-02-26',
+          status: 'active',
+        },
+        {
+          id: '2',
+          name: 'Monthly Fee Collection',
+          type: 'Fee Collection',
+          frequency: 'Monthly - 1st of month',
+          recipients: 'Admin, Accountant',
+          nextRun: '2024-03-01',
+          status: 'active',
+        }
+      ];
+      setScheduledReports(defaultScheduled);
+      localStorage.setItem('school_reports_scheduled', JSON.stringify(defaultScheduled));
+    }
+
+    // 3. Recent Reports
+    const savedRecent = localStorage.getItem('school_reports_recent');
+    if (savedRecent) {
+      setRecentReports(JSON.parse(savedRecent));
+    } else {
+      const defaultRecent = [
+        {
+          id: '1',
+          name: 'January Attendance Summary',
+          type: 'Attendance',
+          generatedOn: '2024-02-01',
+          format: 'PDF',
+          size: '2.3 MB',
+        }
+      ];
+      setRecentReports(defaultRecent);
+      localStorage.setItem('school_reports_recent', JSON.stringify(defaultRecent));
+    }
+  }, []);
+
+  const handleCreateAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    const announcement = {
+      id: Date.now().toString(),
+      ...newAnnouncement,
       scheduledFor: 'Immediate',
       status: 'sent',
-    },
-  ];
+      date: new Date().toISOString().split('T')[0],
+      type: 'announcement'
+    };
 
-  const recentReports = [
-    {
-      id: '1',
-      name: 'January Attendance Summary',
-      type: 'Attendance',
-      generatedOn: '2024-02-01',
-      format: 'PDF',
-      size: '2.3 MB',
-    },
-    {
-      id: '2',
-      name: 'Q3 Performance Analytics',
-      type: 'Performance',
-      generatedOn: '2024-01-31',
-      format: 'Excel',
-      size: '4.1 MB',
-    },
-    {
-      id: '3',
-      name: 'Class 10 Report Cards',
-      type: 'Report Cards',
-      generatedOn: '2024-01-28',
-      format: 'PDF',
-      size: '15.7 MB',
-    },
-  ];
+    const updated = [announcement, ...announcements];
+    setAnnouncements(updated);
+    localStorage.setItem('school_announcements', JSON.stringify(updated));
+    setShowAnnouncementForm(false);
+    setNewAnnouncement({ title: '', message: '', priority: 'medium', recipients: 'All Parents' });
+  };
+
+  const toggleReportStatus = (id: string) => {
+    const updated = scheduledReports.map(r =>
+      r.id === id ? { ...r, status: r.status === 'active' ? 'paused' : 'active' } : r
+    );
+    setScheduledReports(updated);
+    localStorage.setItem('school_reports_scheduled', JSON.stringify(updated));
+  };
 
   const handleGenerateReport = () => {
     setIsGenerating(true);
@@ -124,7 +156,10 @@ export function ReportsApprovalView() {
             <FileText className="w-4 h-4" />
             Generate Report
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <button
+            onClick={() => setShowAnnouncementForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
             <Bell className="w-4 h-4" />
             New Announcement
           </button>
@@ -144,15 +179,15 @@ export function ReportsApprovalView() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h4 className="text-gray-900">{report.name}</h4>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs ${
-                        report.status === 'active'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
+                    <button
+                      onClick={() => toggleReportStatus(report.id)}
+                      className={`px-2 py-1 rounded-full text-xs font-medium transition-colors ${report.status === 'active'
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                     >
-                      {report.status}
-                    </span>
+                      {report.status.toUpperCase()}
+                    </button>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -172,9 +207,6 @@ export function ReportsApprovalView() {
                 <div className="text-right">
                   <p className="text-gray-600 text-sm mb-2">Next Run</p>
                   <p className="text-gray-900 font-medium">{report.nextRun}</p>
-                  <button className="mt-3 px-3 py-1 text-purple-600 hover:bg-purple-50 rounded-lg text-sm">
-                    Edit Schedule
-                  </button>
                 </div>
               </div>
             </div>
@@ -243,11 +275,10 @@ export function ReportsApprovalView() {
                     <span>{announcement.scheduledFor}</span>
                   </div>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      announcement.status === 'sent'
+                    className={`px-2 py-1 rounded-full text-xs ${announcement.status === 'sent'
                         ? 'bg-green-100 text-green-700'
                         : 'bg-blue-100 text-blue-700'
-                    }`}
+                      }`}
                   >
                     {announcement.status}
                   </span>
@@ -257,6 +288,94 @@ export function ReportsApprovalView() {
           </div>
         </div>
       </div>
+
+      {/* New Announcement Modal */}
+      {showAnnouncementForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">New Announcement</h3>
+              <button
+                onClick={() => setShowAnnouncementForm(false)}
+                className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={newAnnouncement.title}
+                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                  placeholder="Sports Day Announcement..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={newAnnouncement.message}
+                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, message: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none resize-none"
+                  placeholder="Enter message details here..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    value={newAnnouncement.priority}
+                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                  >
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Recipients</label>
+                  <select
+                    value={newAnnouncement.recipients}
+                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, recipients: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                  >
+                    <option value="All Parents">All Parents</option>
+                    <option value="All Students">All Students</option>
+                    <option value="Teachers Only">Teachers Only</option>
+                    <option value="Staff Only">Staff Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <Send className="w-5 h-5" />
+                  Send Announcement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAnnouncementForm(false)}
+                  className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Upload, X, Image as ImageIcon, FileText, Camera } from 'lucide-react';
+import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 
 interface AdmissionFormProps {
   student: any;
@@ -444,8 +445,8 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Select Class</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                  <option key={num} value={num}>Class {num}</option>
+                {getUniqueClasses().map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
             </div>
@@ -459,8 +460,8 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Not Allotted Yet</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                  <option key={num} value={num}>Class {num}</option>
+                {getUniqueClasses().map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
             </div>
@@ -474,10 +475,10 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
+                <option value="">Select Section</option>
+                {getSectionsForClass(formData.classAllotted || formData.classApplied).map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
               </select>
             </div>
 
@@ -824,7 +825,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
             Cancel
           </button>
         </div>
-      </form>
-    </div>
+      </form >
+    </div >
   );
 }

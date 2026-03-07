@@ -36,6 +36,7 @@ import {
 } from '../utils/dataStore';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
+import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 
 type ViewType =
   | 'dashboard'
@@ -556,6 +557,8 @@ export function TeacherDashboardNew() {
       objectives: [],
       studentsNeedingAttention: [],
       notes: '',
+      teachingDepth: 'Moderate',
+      aiSuggestions: [],
     });
 
     setCurrentView('quiz-creation');

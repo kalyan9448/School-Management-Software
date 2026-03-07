@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { notificationService } from '../utils/centralDataService';
+import { getUniqueClasses } from '../utils/classUtils';
 
 type Tab = 'structure' | 'collection' | 'accounting';
 
@@ -601,8 +602,8 @@ export function FeeModule() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Select Class</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                        <option key={num} value={num}>Class {num}</option>
+                      {getUniqueClasses().map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
                   </div>
@@ -815,8 +816,8 @@ export function FeeModule() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Select Class</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                        <option key={num} value={num}>Class {num}</option>
+                      {getUniqueClasses().map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
                   </div>

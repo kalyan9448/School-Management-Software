@@ -49,6 +49,12 @@ export interface Student {
     emergencyContact: string;
     emergencyPhone: string;
   };
+  academicHistory?: {
+    academicYear: string;
+    class: string;
+    section: string;
+    status: 'promoted' | 'repeated' | 'transferred' | 'removed';
+  }[];
 }
 
 export const demoStudents: Student[] = [
@@ -1025,3 +1031,24 @@ export const demoStudents: Student[] = [
     },
   },
 ];
+
+export const getStudents = (): Student[] => {
+  const storedStudents = localStorage.getItem('school_students');
+  if (storedStudents) {
+    return JSON.parse(storedStudents);
+  }
+
+  // Set default academic year for demo students if not present
+  const initializedDemoStudents = demoStudents.map(student => ({
+    ...student,
+    academicYear: '2024-2025',
+    academicHistory: []
+  }));
+
+  localStorage.setItem('school_students', JSON.stringify(initializedDemoStudents));
+  return initializedDemoStudents;
+};
+
+export const saveStudents = (students: Student[]) => {
+  localStorage.setItem('school_students', JSON.stringify(students));
+};

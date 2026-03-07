@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { demoStudents, Student } from './StudentInformationData';
+import { demoStudents, Student, getStudents, saveStudents } from './StudentInformationData';
+import { AcademicYear, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 import { AdmissionForm } from './AdmissionForm';
 
 interface AttendanceRecord {
@@ -34,6 +35,10 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [profileClassFilter, setProfileClassFilter] = useState<string>('all'); // Class filter for profiles
 
+  // Academic Year selection
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('');
+
   // Add/Edit/Delete state
   const [students, setStudents] = useState<Student[]>([]);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null); // Student being edited
@@ -41,11 +46,21 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [view, setView] = useState<'list' | 'edit'>('list'); // 'list' for student list/attendance, 'edit' for AdmissionForm
 
+  useEffect(() => {
+    const storedYears = localStorage.getItem('school_academic_years');
+    if (storedYears) {
+      const years = JSON.parse(storedYears);
+      setAcademicYears(years);
+      const active = years.find((y: any) => y.status === 'active')?.id || years[0]?.id || '';
+      if (!selectedAcademicYear) setSelectedAcademicYear(active);
+    }
+  }, [selectedAcademicYear]);
+
   // Robust student loading function
   const loadDynamicStudents = useCallback(() => {
     try {
+      const baseStudents = getStudents(); // Get from persistent central store
       const localAdmissions = localStorage.getItem('admissions_demo_data');
-      let currentStudents = [...demoStudents]; // Start with demo students as base
 
       if (localAdmissions) {
         const admissions = JSON.parse(localAdmissions);
@@ -54,7 +69,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
           a.status === 'admitted' || a.status === 'confirmed'
         );
 
-        // Map admissions to Student interface with all necessary fields
+        // Map admissions to Student interface
         const mappedStudents: Student[] = admittedStudents.map((adm: any) => ({
           id: adm.id,
           admissionNo: adm.admissionNo || `ADM${new Date().getFullYear()}${String(Math.floor(Math.random() * 9000) + 1000)}`,
@@ -77,7 +92,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
           email: adm.email || '',
           address: adm.address || '',
           admissionDate: adm.admissionDate || '',
-          academicYear: adm.academicYear || '',
+          academicYear: adm.academicYear || '', // From admission form
           feeStatus: adm.feeStatus || 'pending',
           totalFee: adm.totalFee || 50000,
           paidFee: adm.paidFee || 0,
@@ -90,6 +105,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
           transportRoute: adm.transportRoute || '',
           busNumber: adm.busNumber || '',
           documents: adm.documents || {},
+          academicHistory: adm.academicHistory || [],
           medicalInfo: adm.medicalInfo || {
             allergies: [],
             conditions: [],
@@ -98,33 +114,33 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
           },
         }));
 
-        // Merging Strategy:
-        // 1. Start with demoStudents
-        // 2. Override demoStudents with matching ID from mappedStudents
-        // 3. Append survivors from mappedStudents (new admissions)
-
-        const mergedStudents = [...demoStudents];
+        // Merging Strategy
+        const mergedStudents = [...baseStudents];
 
         mappedStudents.forEach(dynamicStudent => {
           const index = mergedStudents.findIndex(s => s.id === dynamicStudent.id);
           if (index !== -1) {
-            // Update existing demo student
-            mergedStudents[index] = dynamicStudent;
+            // Let StudentPromotionTool have precedence over Admissions if history exists
+            if (mergedStudents[index].academicHistory && mergedStudents[index].academicHistory.length > 0) {
+              // Do not overwrite academicYear and class from admission if it was promoted
+              mergedStudents[index] = { ...dynamicStudent, academicYear: mergedStudents[index].academicYear, class: mergedStudents[index].class, section: mergedStudents[index].section, academicHistory: mergedStudents[index].academicHistory };
+            } else {
+              mergedStudents[index] = dynamicStudent;
+            }
           } else {
-            // Add new dynamic student (admission)
             mergedStudents.push(dynamicStudent);
           }
         });
 
         setStudents(mergedStudents);
-        return; // Exit early if we successfully merged
+        saveStudents(mergedStudents); // Update central persistent store too!
+        return;
       }
 
-      // If no local data, just use demo
-      setStudents(demoStudents);
+      setStudents(baseStudents);
     } catch (error) {
       console.error("Failed to load admissions data", error);
-      setStudents(demoStudents);
+      setStudents(getStudents());
     }
   }, []);
 
@@ -183,8 +199,9 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
       student.class.includes(searchTerm);
 
     const matchesClass = profileClassFilter === 'all' || student.class === profileClassFilter;
+    const matchesYear = selectedAcademicYear === 'all' || student.academicYear === selectedAcademicYear;
 
-    return matchesSearch && matchesClass;
+    return matchesSearch && matchesClass && matchesYear;
   });
 
   const toggleStatus = (studentId: string) => {
@@ -272,7 +289,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
     // Build CSV content
     const csvContent = [
       headers.join(','), // Header row
-      ...data.map(row => 
+      ...data.map(row =>
         headers.map(fieldName => {
           let cellData = row[fieldName] === null || row[fieldName] === undefined ? '' : String(row[fieldName]);
           // Escape quotes and commas
@@ -335,15 +352,15 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
     }
 
     const doc = new jsPDF();
-    
+
     // Title
     doc.setFontSize(18);
     doc.text('Monthly Attendance Report', 14, 22);
-    
+
     // Subtitle / Filters
     doc.setFontSize(12);
     doc.text(`Class: ${selectedClass} | Section: ${selectedSection} | Month: ${selectedMonth}`, 14, 30);
-    
+
     // Summary
     doc.setFontSize(10);
     doc.text(`Average Attendance: ${(monthlyAttendance.reduce((sum, s) => sum + s.percentage, 0) / monthlyAttendance.length).toFixed(1)}%`, 14, 38);
@@ -351,11 +368,11 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
 
     // Table Data setup. We can use autoTable if available, but doing it manually for simplicity if not.
     // Assuming simple text layout or simple primitive table since we don't have jspdf-autotable in package.json
-    
+
     let yPos = 55;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    
+
     // Headers
     doc.text('Roll', 14, yPos);
     doc.text('Name', 30, yPos);
@@ -363,30 +380,30 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
     doc.text('Absent', 115, yPos);
     doc.text('Total', 140, yPos);
     doc.text('Percentage', 165, yPos);
-    
+
     doc.line(14, yPos + 2, 195, yPos + 2); // Header underline
     yPos += 8;
-    
+
     doc.setFont('helvetica', 'normal');
-    
+
     monthlyAttendance.forEach(record => {
       // Pagination check
       if (yPos > 280) {
         doc.addPage();
         yPos = 20;
       }
-      
+
       doc.text(String(record.rollNo), 14, yPos);
-      
+
       // Truncate name if too long
       const name = record.studentName.length > 25 ? record.studentName.substring(0, 22) + '...' : record.studentName;
       doc.text(name, 30, yPos);
-      
+
       doc.text(String(record.presentDays), 90, yPos);
       doc.text(String(record.absentDays), 115, yPos);
       doc.text(String(record.totalDays), 140, yPos);
       doc.text(`${record.percentage.toFixed(1)}%`, 165, yPos);
-      
+
       yPos += 8;
     });
 
@@ -542,16 +559,29 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
         <>
           {/* Search and Class Filter */}
           <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, admission number, or class..."
+                  placeholder="Search by name, admission no, or class..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
+              </div>
+
+              <div>
+                <select
+                  value={selectedAcademicYear}
+                  onChange={(e) => setSelectedAcademicYear(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">All Academic Years</option>
+                  {academicYears.map(year => (
+                    <option key={year.id} value={year.id}>{year.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -561,8 +591,8 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 >
                   <option value="all">All Classes</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                    <option key={num} value={num}>Class {num}</option>
+                  {getUniqueClasses(selectedAcademicYear === 'all' ? undefined : selectedAcademicYear).map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
                   ))}
                 </select>
               </div>
@@ -772,8 +802,8 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Classes</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                        <option key={num} value={num}>Class {num}</option>
+                      {getUniqueClasses().map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
                   </div>
@@ -786,7 +816,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Sections</option>
-                      {['A', 'B', 'C', 'D'].map(section => (
+                      {getSectionsForClass(selectedClass).map(section => (
                         <option key={section} value={section}>Section {section}</option>
                       ))}
                     </select>
@@ -945,7 +975,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                   </button>
                 )}
 
-                <button 
+                <button
                   onClick={exportDailyAttendance}
                   className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
                 >
@@ -970,8 +1000,8 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Classes</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                        <option key={num} value={num}>Class {num}</option>
+                      {getUniqueClasses().map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
                   </div>
@@ -984,7 +1014,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Sections</option>
-                      {['A', 'B', 'C', 'D'].map(section => (
+                      {getSectionsForClass(selectedClass).map(section => (
                         <option key={section} value={section}>Section {section}</option>
                       ))}
                     </select>
@@ -1081,7 +1111,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
 
               {/* Action Buttons */}
               <div className="flex items-center gap-4">
-                <button 
+                <button
                   onClick={exportMonthlyAttendance}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                 >
@@ -1089,7 +1119,7 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
                   Download Monthly Report
                 </button>
 
-                <button 
+                <button
                   onClick={exportMonthlyPDF}
                   className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
                 >

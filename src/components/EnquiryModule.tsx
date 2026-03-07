@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List } from 'lucide-react';
 import { enquiryAPI } from '../utils/api';
+import { getUniqueClasses } from '../utils/classUtils';
 
 interface Enquiry {
   id: string;
@@ -567,8 +568,8 @@ export function EnquiryModule() {
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="">Select Class</option>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                            <option key={num} value={num}>Class {num}</option>
+                          {getUniqueClasses().map(num => (
+                            <option key={num} value={num}>{num}</option>
                           ))}
                         </select>
                       </div>
