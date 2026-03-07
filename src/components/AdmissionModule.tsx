@@ -10,17 +10,38 @@ interface Student {
   dob: string;
   gender: string;
   bloodGroup: string;
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  fatherOccupation?: string;
+  motherOccupation?: string;
+  guardianOccupation?: string;
   parentName: string;
   phone: string;
+  emergencyContactNumber?: string;
   email: string;
   classApplied: string;
   classAllotted: string;
   status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted';
   appliedDate: string;
+  admissionDate?: string;
+  academicYear?: string;
+  documents?: {
+    birthCertificate?: string;
+    transferCertificate?: string;
+    previousMarkSheets?: string;
+    idProof?: string;
+    medicalCertificate?: string;
+    [key: string]: any;
+  };
 }
 
-export function AdmissionModule() {
-  const [view, setView] = useState<'list' | 'form'>('list');
+interface AdmissionModuleProps {
+  initialView?: 'list' | 'form';
+}
+
+export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps = {}) {
+  const [view, setView] = useState<'list' | 'form'>(initialView);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');

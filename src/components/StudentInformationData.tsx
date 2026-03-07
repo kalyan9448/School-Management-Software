@@ -11,10 +11,19 @@ export interface Student {
   dob: string;
   gender: string;
   bloodGroup: string;
-  parentName: string;
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  fatherOccupation?: string;
+  motherOccupation?: string;
+  guardianOccupation?: string;
+  parentName: string; // Maintain for backward compatibility / primary display
   phone: string;
+  emergencyContactNumber?: string;
   email: string;
   address: string;
+  admissionDate?: string;
+  academicYear?: string;
   feeStatus: 'paid' | 'partial' | 'pending';
   totalFee: number;
   paidFee: number;
@@ -26,6 +35,14 @@ export interface Student {
   classTeacherContact: string;
   transportRoute?: string;
   busNumber?: string;
+  documents?: {
+    birthCertificate?: string;
+    transferCertificate?: string;
+    previousMarkSheets?: string;
+    idProof?: string;
+    medicalCertificate?: string;
+    [key: string]: any;
+  };
   medicalInfo: {
     allergies: string[];
     conditions: string[];

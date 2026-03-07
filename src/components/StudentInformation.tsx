@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
+import jsPDF from 'jspdf';
 import { demoStudents, Student } from './StudentInformationData';
+import { AdmissionForm } from './AdmissionForm';
 
 interface AttendanceRecord {
   studentId: string;
@@ -20,7 +22,11 @@ interface MonthlyAttendance {
   percentage: number;
 }
 
-export function StudentInformation() {
+interface StudentInformationProps {
+  onNavigate?: (view: string) => void;
+}
+
+export function StudentInformation({ onNavigate }: StudentInformationProps = {}) {
   const [activeMainTab, setActiveMainTab] = useState<'profiles' | 'attendance'>('attendance');
   const [attendanceTab, setAttendanceTab] = useState<'daily' | 'monthly'>('daily');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -29,107 +35,155 @@ export function StudentInformation() {
   const [profileClassFilter, setProfileClassFilter] = useState<string>('all'); // Class filter for profiles
 
   // Add/Edit/Delete state
-  const [students, setStudents] = useState<Student[]>(demoStudents);
-  const [showAddEditModal, setShowAddEditModal] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null); // Student being edited
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [view, setView] = useState<'list' | 'edit'>('list'); // 'list' for student list/attendance, 'edit' for AdmissionForm
 
-  // Form state for Add/Edit
-  const [formData, setFormData] = useState<Partial<Student>>({
-    name: '',
-    class: '1',
-    section: 'A',
-    rollNo: '',
-    dob: '',
-    gender: 'Male',
-    bloodGroup: 'O+',
-    parentName: '',
-    phone: '',
-    email: '',
-    address: '',
-    feeStatus: 'pending',
-    totalFee: 0,
-    paidFee: 0,
-    dueFee: 0,
-    attendance: 0,
-    presentDays: 0,
-    totalDays: 60,
-    classTeacher: '',
-    classTeacherContact: '',
-    transportRoute: '',
-    busNumber: '',
-    medicalInfo: {
-      allergies: [],
-      conditions: [],
-      emergencyContact: '',
-      emergencyPhone: '',
-    },
-  });
+  // Robust student loading function
+  const loadDynamicStudents = useCallback(() => {
+    try {
+      const localAdmissions = localStorage.getItem('admissions_demo_data');
+      let currentStudents = [...demoStudents]; // Start with demo students as base
 
-  // Attendance state
-  const [selectedClass, setSelectedClass] = useState('6');
-  const [selectedSection, setSelectedSection] = useState('A');
+      if (localAdmissions) {
+        const admissions = JSON.parse(localAdmissions);
+        // Filter for only admitted or confirmed students
+        const admittedStudents = admissions.filter((a: any) =>
+          a.status === 'admitted' || a.status === 'confirmed'
+        );
+
+        // Map admissions to Student interface with all necessary fields
+        const mappedStudents: Student[] = admittedStudents.map((adm: any) => ({
+          id: adm.id,
+          admissionNo: adm.admissionNo || `ADM${new Date().getFullYear()}${String(Math.floor(Math.random() * 9000) + 1000)}`,
+          name: adm.name,
+          class: adm.classAllotted || adm.classApplied || adm.class || '1',
+          section: adm.section || 'A',
+          rollNo: adm.rollNo || '0',
+          dob: adm.dob || '',
+          gender: adm.gender || 'Male',
+          bloodGroup: adm.bloodGroup || 'O+',
+          fatherName: adm.fatherName || '',
+          motherName: adm.motherName || '',
+          guardianName: adm.guardianName || '',
+          fatherOccupation: adm.fatherOccupation || '',
+          motherOccupation: adm.motherOccupation || '',
+          guardianOccupation: adm.guardianOccupation || '',
+          parentName: adm.parentName || adm.fatherName || adm.guardianName || '',
+          phone: adm.phone || '',
+          emergencyContactNumber: adm.emergencyContactNumber || '',
+          email: adm.email || '',
+          address: adm.address || '',
+          admissionDate: adm.admissionDate || '',
+          academicYear: adm.academicYear || '',
+          feeStatus: adm.feeStatus || 'pending',
+          totalFee: adm.totalFee || 50000,
+          paidFee: adm.paidFee || 0,
+          dueFee: adm.dueFee || 50000,
+          attendance: adm.attendance || 0,
+          presentDays: adm.presentDays || 0,
+          totalDays: adm.totalDays || 60,
+          classTeacher: adm.classTeacher || '',
+          classTeacherContact: adm.classTeacherContact || '',
+          transportRoute: adm.transportRoute || '',
+          busNumber: adm.busNumber || '',
+          documents: adm.documents || {},
+          medicalInfo: adm.medicalInfo || {
+            allergies: [],
+            conditions: [],
+            emergencyContact: adm.parentName || adm.fatherName || '',
+            emergencyPhone: adm.emergencyContactNumber || adm.phone || '',
+          },
+        }));
+
+        // Merging Strategy:
+        // 1. Start with demoStudents
+        // 2. Override demoStudents with matching ID from mappedStudents
+        // 3. Append survivors from mappedStudents (new admissions)
+
+        const mergedStudents = [...demoStudents];
+
+        mappedStudents.forEach(dynamicStudent => {
+          const index = mergedStudents.findIndex(s => s.id === dynamicStudent.id);
+          if (index !== -1) {
+            // Update existing demo student
+            mergedStudents[index] = dynamicStudent;
+          } else {
+            // Add new dynamic student (admission)
+            mergedStudents.push(dynamicStudent);
+          }
+        });
+
+        setStudents(mergedStudents);
+        return; // Exit early if we successfully merged
+      }
+
+      // If no local data, just use demo
+      setStudents(demoStudents);
+    } catch (error) {
+      console.error("Failed to load admissions data", error);
+      setStudents(demoStudents);
+    }
+  }, []);
+
+  // Sync data on mount
+  useEffect(() => {
+    loadDynamicStudents();
+  }, [loadDynamicStudents]);
+
+  // Attendance and Search state
+  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedSection, setSelectedSection] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
-  
+
   // Pagination state for attendance table
   const [currentPage, setCurrentPage] = useState(0);
   const studentsPerPage = 6;
 
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>([
-    { studentId: '1', studentName: 'Aarav Sharma', rollNo: '1', parentPhone: '+91 98765 43200', status: 'present' },
-    { studentId: '2', studentName: 'Diya Patel', rollNo: '2', parentPhone: '+91 98765 43201', status: 'present' },
-    { studentId: '3', studentName: 'Arjun Kumar', rollNo: '3', parentPhone: '+91 98765 43202', status: 'present' },
-    { studentId: '4', studentName: 'Ananya Reddy', rollNo: '4', parentPhone: '+91 98765 43203', status: 'present' },
-    { studentId: '5', studentName: 'Vihaan Singh', rollNo: '5', parentPhone: '+91 98765 43204', status: 'late' },
-    { studentId: '6', studentName: 'Isha Gupta', rollNo: '6', parentPhone: '+91 98765 43205', status: 'present' },
-    { studentId: '7', studentName: 'Reyansh Verma', rollNo: '7', parentPhone: '+91 98765 43206', status: 'present' },
-    { studentId: '8', studentName: 'Saanvi Joshi', rollNo: '8', parentPhone: '+91 98765 43207', status: 'absent' },
-    { studentId: '9', studentName: 'Aditya Mehta', rollNo: '9', parentPhone: '+91 98765 43208', status: 'present' },
-    { studentId: '10', studentName: 'Kiara Desai', rollNo: '10', parentPhone: '+91 98765 43209', status: 'present' },
-    { studentId: '11', studentName: 'Kabir Iyer', rollNo: '11', parentPhone: '+91 98765 43210', status: 'present' },
-    { studentId: '12', studentName: 'Navya Nair', rollNo: '12', parentPhone: '+91 98765 43211', status: 'present' },
-    { studentId: '13', studentName: 'Dhruv Pillai', rollNo: '13', parentPhone: '+91 98765 43212', status: 'late' },
-    { studentId: '14', studentName: 'Mira Bose', rollNo: '14', parentPhone: '+91 98765 43213', status: 'present' },
-    { studentId: '15', studentName: 'Rahul Kumar', rollNo: '15', parentPhone: '+91 98765 43214', status: 'present' },
-    { studentId: '16', studentName: 'Sneha Patel', rollNo: '16', parentPhone: '+91 98765 43215', status: 'present' },
-    { studentId: '17', studentName: 'Amit Singh', rollNo: '17', parentPhone: '+91 98765 43216', status: 'absent' },
-    { studentId: '18', studentName: 'Priya Sharma', rollNo: '18', parentPhone: '+91 98765 43217', status: 'present' },
-    { studentId: '19', studentName: 'Rohan Verma', rollNo: '19', parentPhone: '+91 98765 43218', status: 'late' },
-    { studentId: '20', studentName: 'Anjali Gupta', rollNo: '20', parentPhone: '+91 98765 43219', status: 'present' },
-  ]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
-  const monthlyAttendance: MonthlyAttendance[] = [
-    { studentName: 'Aarav Sharma', rollNo: '1', presentDays: 24, absentDays: 0, lateDays: 0, totalDays: 24, percentage: 100 },
-    { studentName: 'Diya Patel', rollNo: '2', presentDays: 23, absentDays: 1, lateDays: 0, totalDays: 24, percentage: 95.8 },
-    { studentName: 'Arjun Kumar', rollNo: '3', presentDays: 22, absentDays: 1, lateDays: 1, totalDays: 24, percentage: 91.7 },
-    { studentName: 'Ananya Reddy', rollNo: '4', presentDays: 24, absentDays: 0, lateDays: 0, totalDays: 24, percentage: 100 },
-    { studentName: 'Vihaan Singh', rollNo: '5', presentDays: 21, absentDays: 2, lateDays: 1, totalDays: 24, percentage: 87.5 },
-    { studentName: 'Isha Gupta', rollNo: '6', presentDays: 23, absentDays: 0, lateDays: 1, totalDays: 24, percentage: 95.8 },
-    { studentName: 'Reyansh Verma', rollNo: '7', presentDays: 22, absentDays: 1, lateDays: 1, totalDays: 24, percentage: 91.7 },
-    { studentName: 'Saanvi Joshi', rollNo: '8', presentDays: 20, absentDays: 3, lateDays: 1, totalDays: 24, percentage: 83.3 },
-    { studentName: 'Aditya Mehta', rollNo: '9', presentDays: 24, absentDays: 0, lateDays: 0, totalDays: 24, percentage: 100 },
-    { studentName: 'Kiara Desai', rollNo: '10', presentDays: 22, absentDays: 1, lateDays: 1, totalDays: 24, percentage: 91.7 },
-    { studentName: 'Kabir Iyer', rollNo: '11', presentDays: 23, absentDays: 1, lateDays: 0, totalDays: 24, percentage: 95.8 },
-    { studentName: 'Navya Nair', rollNo: '12', presentDays: 24, absentDays: 0, lateDays: 0, totalDays: 24, percentage: 100 },
-    { studentName: 'Dhruv Pillai', rollNo: '13', presentDays: 21, absentDays: 2, lateDays: 1, totalDays: 24, percentage: 87.5 },
-    { studentName: 'Mira Bose', rollNo: '14', presentDays: 23, absentDays: 0, lateDays: 1, totalDays: 24, percentage: 95.8 },
-    { studentName: 'Rahul Kumar', rollNo: '15', presentDays: 22, absentDays: 1, lateDays: 1, totalDays: 24, percentage: 91.7 },
-    { studentName: 'Sneha Patel', rollNo: '16', presentDays: 24, absentDays: 0, lateDays: 0, totalDays: 24, percentage: 100 },
-    { studentName: 'Amit Singh', rollNo: '17', presentDays: 20, absentDays: 3, lateDays: 1, totalDays: 24, percentage: 83.3 },
-    { studentName: 'Priya Sharma', rollNo: '18', presentDays: 21, absentDays: 2, lateDays: 1, totalDays: 24, percentage: 87.5 },
-    { studentName: 'Rohan Verma', rollNo: '19', presentDays: 23, absentDays: 1, lateDays: 0, totalDays: 24, percentage: 95.8 },
-    { studentName: 'Anjali Gupta', rollNo: '20', presentDays: 22, absentDays: 1, lateDays: 1, totalDays: 24, percentage: 91.7 },
-  ];
+  // Update attendance list when class/section or students change
+  useEffect(() => {
+    const classFiltered = students.filter(s =>
+      (selectedClass === 'all' || s.class.toString() === selectedClass.toString()) &&
+      (selectedSection === 'all' || (s.section || 'A') === selectedSection)
+    );
+
+    const records: AttendanceRecord[] = classFiltered.map(s => ({
+      studentId: s.id,
+      studentName: s.name,
+      rollNo: s.rollNo || '0',
+      parentPhone: s.phone || '',
+      status: 'present' // Default to present for new daily sheet
+    }));
+
+    setAttendance(records);
+    setCurrentPage(0); // Reset pagination on filter change
+  }, [selectedClass, selectedSection, students]);
+
+  const monthlyAttendance: MonthlyAttendance[] = attendance.map(record => {
+    const student = students.find(s => s.id === record.studentId);
+    return {
+      studentName: record.studentName,
+      rollNo: record.rollNo,
+      presentDays: student?.presentDays || 0,
+      absentDays: (student?.totalDays || 60) - (student?.presentDays || 0),
+      lateDays: 0,
+      totalDays: student?.totalDays || 60,
+      percentage: student?.attendance || 0
+    };
+  });
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.class.includes(searchTerm);
-    
+
     const matchesClass = profileClassFilter === 'all' || student.class === profileClassFilter;
-    
+
     return matchesSearch && matchesClass;
   });
 
@@ -155,13 +209,13 @@ export function StudentInformation() {
 
   const sendAbsentAlerts = () => {
     const absentStudents = attendance.filter(r => r.status === 'absent');
-    
+
     if (absentStudents.length === 0) {
       alert('No absent students to notify!');
       return;
     }
 
-    const alertMessage = absentStudents.map(s => 
+    const alertMessage = absentStudents.map(s =>
       `SMS/WhatsApp sent to ${s.parentPhone}:\n"Dear Parent, ${s.studentName} (Roll No: ${s.rollNo}) is marked absent today (${selectedDate}). Please contact the school if this is incorrect."`
     ).join('\n\n');
 
@@ -205,47 +259,186 @@ export function StudentInformation() {
 
   const attendancePercentage = ((stats.present + stats.late) / stats.total * 100).toFixed(1);
 
+  // Helper function to download CSV
+  const downloadCSV = (data: any[], filename: string) => {
+    if (data.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+
+    // Extract headers from the first object
+    const headers = Object.keys(data[0]);
+
+    // Build CSV content
+    const csvContent = [
+      headers.join(','), // Header row
+      ...data.map(row => 
+        headers.map(fieldName => {
+          let cellData = row[fieldName] === null || row[fieldName] === undefined ? '' : String(row[fieldName]);
+          // Escape quotes and commas
+          cellData = cellData.replace(/"/g, '""');
+          if (cellData.search(/("|,|\n)/g) >= 0) {
+            cellData = `"${cellData}"`;
+          }
+          return cellData;
+        }).join(',')
+      )
+    ].join('\n');
+
+    // Create Blob and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const exportDailyAttendance = () => {
+    const exportData = attendance.map(record => ({
+      'Roll No': record.rollNo,
+      'Student Name': record.studentName,
+      'Parent Phone': record.parentPhone,
+      'Status': record.status,
+      'Date': selectedDate,
+      'Class': selectedClass,
+      'Section': selectedSection
+    }));
+    downloadCSV(exportData, `daily_attendance_${selectedClass}_${selectedSection}_${selectedDate}.csv`);
+  };
+
+  const exportMonthlyAttendance = () => {
+    const exportData = monthlyAttendance.map(record => ({
+      'Roll No': record.rollNo,
+      'Student Name': record.studentName,
+      'Present Days': record.presentDays,
+      'Absent Days': record.absentDays,
+      'Late Days': record.lateDays,
+      'Total Days': record.totalDays,
+      'Percentage': `${record.percentage.toFixed(1)}%`,
+      'Month': selectedMonth,
+      'Class': selectedClass,
+      'Section': selectedSection
+    }));
+    downloadCSV(exportData, `monthly_attendance_${selectedClass}_${selectedSection}_${selectedMonth}.csv`);
+  };
+
+  const exportMonthlyPDF = () => {
+    if (monthlyAttendance.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text('Monthly Attendance Report', 14, 22);
+    
+    // Subtitle / Filters
+    doc.setFontSize(12);
+    doc.text(`Class: ${selectedClass} | Section: ${selectedSection} | Month: ${selectedMonth}`, 14, 30);
+    
+    // Summary
+    doc.setFontSize(10);
+    doc.text(`Average Attendance: ${(monthlyAttendance.reduce((sum, s) => sum + s.percentage, 0) / monthlyAttendance.length).toFixed(1)}%`, 14, 38);
+    doc.text(`Below 75%: ${monthlyAttendance.filter(s => s.percentage < 75).length} students`, 14, 44);
+
+    // Table Data setup. We can use autoTable if available, but doing it manually for simplicity if not.
+    // Assuming simple text layout or simple primitive table since we don't have jspdf-autotable in package.json
+    
+    let yPos = 55;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    
+    // Headers
+    doc.text('Roll', 14, yPos);
+    doc.text('Name', 30, yPos);
+    doc.text('Present', 90, yPos);
+    doc.text('Absent', 115, yPos);
+    doc.text('Total', 140, yPos);
+    doc.text('Percentage', 165, yPos);
+    
+    doc.line(14, yPos + 2, 195, yPos + 2); // Header underline
+    yPos += 8;
+    
+    doc.setFont('helvetica', 'normal');
+    
+    monthlyAttendance.forEach(record => {
+      // Pagination check
+      if (yPos > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.text(String(record.rollNo), 14, yPos);
+      
+      // Truncate name if too long
+      const name = record.studentName.length > 25 ? record.studentName.substring(0, 22) + '...' : record.studentName;
+      doc.text(name, 30, yPos);
+      
+      doc.text(String(record.presentDays), 90, yPos);
+      doc.text(String(record.absentDays), 115, yPos);
+      doc.text(String(record.totalDays), 140, yPos);
+      doc.text(`${record.percentage.toFixed(1)}%`, 165, yPos);
+      
+      yPos += 8;
+    });
+
+    doc.save(`monthly_attendance_report_${selectedClass}_${selectedSection}_${selectedMonth}.pdf`);
+  };
+
   // Add Student Handler
   const handleAddStudent = () => {
-    setFormData({
-      name: '',
-      class: '1',
-      section: 'A',
-      rollNo: '',
-      dob: '',
-      gender: 'Male',
-      bloodGroup: 'O+',
-      parentName: '',
-      phone: '',
-      email: '',
-      address: '',
-      feeStatus: 'pending',
-      totalFee: 0,
-      paidFee: 0,
-      dueFee: 0,
-      attendance: 0,
-      presentDays: 0,
-      totalDays: 60,
-      classTeacher: '',
-      classTeacherContact: '',
-      transportRoute: '',
-      busNumber: '',
-      medicalInfo: {
-        allergies: [],
-        conditions: [],
-        emergencyContact: '',
-        emergencyPhone: '',
-      },
-    });
-    setEditingStudent(null);
-    setShowAddEditModal(true);
+    if (onNavigate) {
+      onNavigate('admission-new');
+      return;
+    }
   };
 
   // Edit Student Handler
   const handleEditStudent = (student: Student) => {
-    setFormData(student);
     setEditingStudent(student);
-    setShowAddEditModal(true);
+    setView('edit');
+  };
+
+  const handleSaveEdit = async (updatedData: any) => {
+    try {
+      const localAdmissions = localStorage.getItem('admissions_demo_data');
+      let admissions = localAdmissions ? JSON.parse(localAdmissions) : [];
+
+      const existingIndex = admissions.findIndex((adm: any) => adm.id === editingStudent?.id);
+
+      if (existingIndex !== -1) {
+        // Update existing dynamic record
+        admissions[existingIndex] = { ...admissions[existingIndex], ...updatedData };
+      } else if (editingStudent) {
+        // This was a demo student or new record, add it as a dynamic admitted student
+        admissions.push({
+          ...editingStudent,
+          ...updatedData,
+          status: 'admitted',
+          id: editingStudent.id || `adm_${Date.now()}`
+        });
+      }
+
+      localStorage.setItem('admissions_demo_data', JSON.stringify(admissions));
+
+      // Re-load dynamic students from localStorage to sync UI
+      loadDynamicStudents();
+
+      alert('Student profile updated successfully!');
+      setView('list');
+      setEditingStudent(null);
+    } catch (error) {
+      console.error('Failed to save student edit', error);
+      alert('Failed to save changes.');
+    }
   };
 
   // Delete Student Handler
@@ -263,56 +456,22 @@ export function StudentInformation() {
     }
   };
 
-  // Save Student Handler
-  const handleSaveStudent = () => {
-    if (!formData.name || !formData.rollNo) {
-      alert('Please fill in all required fields (Name and Roll No)');
-      return;
-    }
-
-    if (editingStudent) {
-      // Update existing student
-      setStudents(students.map(s => 
-        s.id === editingStudent.id 
-          ? { ...formData as Student, id: editingStudent.id } 
-          : s
-      ));
-      alert(`Student "${formData.name}" has been updated successfully!`);
-    } else {
-      // Add new student
-      const newStudent: Student = {
-        ...formData as Student,
-        id: (students.length + 1).toString(),
-        admissionNo: `ADM2024${String(students.length + 1).padStart(3, '0')}`,
-        dueFee: (formData.totalFee || 0) - (formData.paidFee || 0),
-        attendance: formData.totalDays ? Math.round((formData.presentDays || 0) / formData.totalDays * 100) : 0,
-      };
-      setStudents([...students, newStudent]);
-      alert(`Student "${formData.name}" has been added successfully!\nAdmission No: ${newStudent.admissionNo}`);
-    }
-
-    setShowAddEditModal(false);
-    setEditingStudent(null);
-  };
-
-  // Update form field handler
-  const updateFormField = (field: string, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  // Update medical info handler
-  const updateMedicalInfo = (field: string, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      medicalInfo: {
-        ...prev.medicalInfo!,
-        [field]: value,
-      },
-    }));
-  };
+  if (view === 'edit' && editingStudent) {
+    return (
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          <AdmissionForm
+            student={editingStudent}
+            onBack={() => {
+              setView('list');
+              setEditingStudent(null);
+            }}
+            onSave={handleSaveEdit}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8">
@@ -322,28 +481,26 @@ export function StudentInformation() {
           <h1 className="text-gray-900 mb-2">Student Management</h1>
           <p className="text-gray-600">Manage student profiles and attendance</p>
         </div>
-        
+
         {/* View Mode Toggle - Only show for profiles */}
         {activeMainTab === 'profiles' && (
           <div className="flex items-center bg-white rounded-xl border-2 border-gray-200 p-1">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`p-2 rounded-lg transition-all ${viewMode === 'grid'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
               title="Grid View"
             >
               <Grid3x3 className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === 'list'
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`p-2 rounded-lg transition-all ${viewMode === 'list'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
               title="List View"
             >
               <List className="w-5 h-5" />
@@ -356,11 +513,10 @@ export function StudentInformation() {
       <div className="flex gap-2 mb-8 border-b border-gray-200">
         <button
           onClick={() => setActiveMainTab('attendance')}
-          className={`px-6 py-3 border-b-2 transition-colors ${
-            activeMainTab === 'attendance'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-6 py-3 border-b-2 transition-colors ${activeMainTab === 'attendance'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <div className="flex items-center gap-2">
             <Calendar className="w-5 h-5" />
@@ -369,11 +525,10 @@ export function StudentInformation() {
         </button>
         <button
           onClick={() => setActiveMainTab('profiles')}
-          className={`px-6 py-3 border-b-2 transition-colors ${
-            activeMainTab === 'profiles'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-6 py-3 border-b-2 transition-colors ${activeMainTab === 'profiles'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5" />
@@ -398,7 +553,7 @@ export function StudentInformation() {
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
-              
+
               <div>
                 <select
                   value={profileClassFilter}
@@ -462,11 +617,10 @@ export function StudentInformation() {
                   </thead>
                   <tbody>
                     {filteredStudents.map((student, index) => (
-                      <tr 
-                        key={student.id} 
-                        className={`border-b border-gray-100 hover:bg-purple-50 transition-colors ${
-                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                        }`}
+                      <tr
+                        key={student.id}
+                        className={`border-b border-gray-100 hover:bg-purple-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                          }`}
                       >
                         <td className="px-6 py-4">
                           <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white shadow-md">
@@ -586,21 +740,19 @@ export function StudentInformation() {
           <div className="flex gap-2 mb-6 border-b border-gray-200">
             <button
               onClick={() => setAttendanceTab('daily')}
-              className={`px-6 py-3 border-b-2 transition-colors ${
-                attendanceTab === 'daily'
-                  ? 'border-purple-600 text-purple-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
+              className={`px-6 py-3 border-b-2 transition-colors ${attendanceTab === 'daily'
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
             >
               Daily Attendance
             </button>
             <button
               onClick={() => setAttendanceTab('monthly')}
-              className={`px-6 py-3 border-b-2 transition-colors ${
-                attendanceTab === 'monthly'
-                  ? 'border-purple-600 text-purple-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
+              className={`px-6 py-3 border-b-2 transition-colors ${attendanceTab === 'monthly'
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
             >
               Monthly Report
             </button>
@@ -619,6 +771,7 @@ export function StudentInformation() {
                       onChange={(e) => setSelectedClass(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
+                      <option value="all">All Classes</option>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
                         <option key={num} value={num}>Class {num}</option>
                       ))}
@@ -632,6 +785,7 @@ export function StudentInformation() {
                       onChange={(e) => setSelectedSection(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
+                      <option value="all">All Sections</option>
                       {['A', 'B', 'C', 'D'].map(section => (
                         <option key={section} value={section}>Section {section}</option>
                       ))}
@@ -707,11 +861,10 @@ export function StudentInformation() {
                     <button
                       onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
                       disabled={currentPage === 0}
-                      className={`p-2 rounded-lg border transition-colors ${
-                        currentPage === 0
-                          ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                          : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                      }`}
+                      className={`p-2 rounded-lg border transition-colors ${currentPage === 0
+                        ? 'border-gray-200 text-gray-300 cursor-not-allowed'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                        }`}
                       title="Previous"
                     >
                       <ChevronLeft className="w-5 h-5" />
@@ -722,18 +875,17 @@ export function StudentInformation() {
                     <button
                       onClick={() => setCurrentPage(Math.min(Math.ceil(attendance.length / studentsPerPage) - 1, currentPage + 1))}
                       disabled={currentPage >= Math.ceil(attendance.length / studentsPerPage) - 1}
-                      className={`p-2 rounded-lg border transition-colors ${
-                        currentPage >= Math.ceil(attendance.length / studentsPerPage) - 1
-                          ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                          : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                      }`}
+                      className={`p-2 rounded-lg border transition-colors ${currentPage >= Math.ceil(attendance.length / studentsPerPage) - 1
+                        ? 'border-gray-200 text-gray-300 cursor-not-allowed'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                        }`}
                       title="Next"
                     >
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -749,25 +901,25 @@ export function StudentInformation() {
                       {attendance
                         .slice(currentPage * studentsPerPage, (currentPage + 1) * studentsPerPage)
                         .map((record) => (
-                        <tr key={record.studentId} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-6 py-4 text-gray-700">{record.rollNo}</td>
-                          <td className="px-6 py-4 text-gray-900">{record.studentName}</td>
-                          <td className="px-6 py-4 text-gray-700">{record.parentPhone}</td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`inline-block px-4 py-2 rounded-lg border ${getStatusStyle(record.status)} capitalize`}>
-                              {record.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <button
-                              onClick={() => toggleStatus(record.studentId)}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                              Change
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                          <tr key={record.studentId} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="px-6 py-4 text-gray-700">{record.rollNo}</td>
+                            <td className="px-6 py-4 text-gray-900">{record.studentName}</td>
+                            <td className="px-6 py-4 text-gray-700">{record.parentPhone}</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`inline-block px-4 py-2 rounded-lg border ${getStatusStyle(record.status)} capitalize`}>
+                                {record.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                onClick={() => toggleStatus(record.studentId)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                              >
+                                Change
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
@@ -793,7 +945,10 @@ export function StudentInformation() {
                   </button>
                 )}
 
-                <button className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
+                <button 
+                  onClick={exportDailyAttendance}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                >
                   <Download className="w-5 h-5" />
                   Export Report
                 </button>
@@ -814,6 +969,7 @@ export function StudentInformation() {
                       onChange={(e) => setSelectedClass(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
+                      <option value="all">All Classes</option>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
                         <option key={num} value={num}>Class {num}</option>
                       ))}
@@ -827,6 +983,7 @@ export function StudentInformation() {
                       onChange={(e) => setSelectedSection(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
+                      <option value="all">All Sections</option>
                       {['A', 'B', 'C', 'D'].map(section => (
                         <option key={section} value={section}>Section {section}</option>
                       ))}
@@ -924,12 +1081,18 @@ export function StudentInformation() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-4">
-                <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                <button 
+                  onClick={exportMonthlyAttendance}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
                   <Download className="w-5 h-5" />
                   Download Monthly Report
                 </button>
 
-                <button className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2">
+                <button 
+                  onClick={exportMonthlyPDF}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                >
                   <Download className="w-5 h-5" />
                   Download PDF
                 </button>
@@ -1180,433 +1343,107 @@ export function StudentInformation() {
                   Parent/Guardian Information
                 </h3>
                 <div className="bg-gray-50 rounded-lg p-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <User className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Name</p>
-                        <p className="text-gray-900">{selectedStudent.parentName}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Phone className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Phone</p>
-                        <p className="text-gray-900">{selectedStudent.phone}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Mail className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Email ID</p>
-                        <p className="text-gray-900">{selectedStudent.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <MapPin className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Address</p>
-                        <p className="text-gray-900">{selectedStudent.address}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add/Edit Student Modal */}
-      {showAddEditModal && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-          onClick={() => setShowAddEditModal(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-              <h2 className="text-gray-900">{editingStudent ? 'Edit Student' : 'Add New Student'}</h2>
-              <button
-                onClick={() => setShowAddEditModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-600" />
-              </button>
-            </div>
-
-            <div className="p-8">
-              {/* Basic Info Header */}
-              <div className="flex items-start gap-6 mb-8 pb-8 border-b border-gray-200">
-                <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white flex-shrink-0">
-                  <User className="w-12 h-12" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-gray-900 mb-2">{formData.name}</h2>
-                  <div className="grid grid-cols-2 gap-4 text-gray-600">
-                    <p>Admission No: <span className="text-gray-900">{formData.admissionNo}</span></p>
-                    <p>Class: <span className="text-gray-900">{formData.class}-{formData.section}</span></p>
-                    <p>Roll No: <span className="text-gray-900">{formData.rollNo}</span></p>
-                    <p>DOB: <span className="text-gray-900">{formData.dob}</span></p>
-                  </div>
-                </div>
-                <span className={`px-4 py-2 rounded-full ${getFeeStatusBadge(formData.feeStatus || 'pending')}`}>
-                  {formData.feeStatus?.toUpperCase() || 'PENDING'}
-                </span>
-              </div>
-
-              {/* Complete Bio-Data */}
-              <div className="mb-8">
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  Complete Bio-Data
-                </h3>
-                <div className="grid grid-cols-2 gap-4 bg-gray-50 rounded-lg p-6">
-                  <div>
-                    <p className="text-gray-500 mb-1">Full Name</p>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => updateFormField('name', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-gray-500 mb-1">Date of Birth</p>
-                    <input
-                      type="date"
-                      value={formData.dob}
-                      onChange={(e) => updateFormField('dob', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-gray-500 mb-1">Gender</p>
-                    <select
-                      value={formData.gender}
-                      onChange={(e) => updateFormField('gender', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 mb-1">Blood Group</p>
-                    <select
-                      value={formData.bloodGroup}
-                      onChange={(e) => updateFormField('bloodGroup', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="O+">O+</option>
-                      <option value="O-">O-</option>
-                      <option value="A+">A+</option>
-                      <option value="A-">A-</option>
-                      <option value="B+">B+</option>
-                      <option value="B-">B-</option>
-                      <option value="AB+">AB+</option>
-                      <option value="AB-">AB-</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-gray-500 mb-1">Address</p>
-                    <input
-                      type="text"
-                      value={formData.address}
-                      onChange={(e) => updateFormField('address', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Attendance */}
-              <div className="mb-8">
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-purple-600" />
-                  Attendance
-                </h3>
-                <div className="bg-purple-50 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <p className="text-purple-700 mb-1">Overall Attendance</p>
-                      <p className={`text-2xl ${getAttendanceColor(formData.attendance || 0)}`}>
-                        {formData.attendance || 0}%
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-purple-700 mb-1">Days Present / Total</p>
-                      <p className="text-purple-900">
-                        {formData.presentDays || 0} / {formData.totalDays || 0} days
-                      </p>
-                    </div>
-                  </div>
-                  <div className="w-full bg-purple-200 rounded-full h-3">
-                    <div
-                      className="bg-purple-600 h-3 rounded-full transition-all"
-                      style={{ width: `${formData.attendance || 0}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Fee Status */}
-              <div className="mb-8">
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-green-600" />
-                  Fee Status
-                </h3>
-                <div className="bg-green-50 rounded-lg p-6">
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div>
-                      <p className="text-green-700 mb-1">Total Fee</p>
-                      <input
-                        type="number"
-                        value={formData.totalFee}
-                        onChange={(e) => updateFormField('totalFee', parseFloat(e.target.value))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <p className="text-gray-500 mb-1">Father's Name</p>
+                      <p className="text-gray-900">{selectedStudent.fatherName || '-'}</p>
                     </div>
                     <div>
-                      <p className="text-green-700 mb-1">Paid Amount</p>
-                      <input
-                        type="number"
-                        value={formData.paidFee}
-                        onChange={(e) => updateFormField('paidFee', parseFloat(e.target.value))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <p className="text-gray-500 mb-1">Father's Occupation</p>
+                      <p className="text-gray-900">{selectedStudent.fatherOccupation || '-'}</p>
                     </div>
                     <div>
-                      <p className="text-red-700 mb-1">Due Amount</p>
-                      <input
-                        type="number"
-                        value={formData.dueFee}
-                        onChange={(e) => updateFormField('dueFee', parseFloat(e.target.value))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <p className="text-gray-500 mb-1">Mother's Name</p>
+                      <p className="text-gray-900">{selectedStudent.motherName || '-'}</p>
                     </div>
-                  </div>
-                  <div className="w-full bg-green-200 rounded-full h-3">
-                    <div
-                      className="bg-green-600 h-3 rounded-full transition-all"
-                      style={{ width: `${(formData.paidFee || 0) / (formData.totalFee || 1) * 100}%` }}
-                    />
+                    <div>
+                      <p className="text-gray-500 mb-1">Mother's Occupation</p>
+                      <p className="text-gray-900">{selectedStudent.motherOccupation || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Guardian's Name</p>
+                      <p className="text-gray-900">{selectedStudent.guardianName || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Guardian's Occupation</p>
+                      <p className="text-gray-900">{selectedStudent.guardianOccupation || '-'}</p>
+                    </div>
+                    <div className="col-span-1 md:col-span-2 border-t border-gray-200 mt-2 pt-4">
+                      <p className="text-gray-500 mb-2 font-medium">Contact Details</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3">
+                          <Phone className="w-5 h-5 text-gray-400" />
+                          <div>
+                            <p className="text-gray-500">Primary Phone</p>
+                            <p className="text-gray-900">{selectedStudent.phone || '-'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Phone className="w-5 h-5 text-red-400" />
+                          <div>
+                            <p className="text-gray-500">Emergency Contact</p>
+                            <p className="text-gray-900">{selectedStudent.emergencyContactNumber || selectedStudent.phone || '-'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Mail className="w-5 h-5 text-gray-400" />
+                          <div>
+                            <p className="text-gray-500">Email ID</p>
+                            <p className="text-gray-900">{selectedStudent.email || '-'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <MapPin className="w-5 h-5 text-gray-400" />
+                          <div>
+                            <p className="text-gray-500">Address</p>
+                            <p className="text-gray-900">{selectedStudent.address || '-'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Class Teacher Info */}
-              <div className="mb-8">
+              {/* Academic Details */}
+              <div className="mt-8">
                 <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-blue-600" />
-                  Class Teacher Information
+                  <FileText className="w-5 h-5 text-indigo-600" />
+                  Academic Details
                 </h3>
-                <div className="bg-blue-50 rounded-lg p-6">
+                <div className="bg-indigo-50 rounded-lg p-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-blue-700 mb-1">Teacher Name</p>
-                      <input
-                        type="text"
-                        value={formData.classTeacher}
-                        onChange={(e) => updateFormField('classTeacher', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <p className="text-indigo-700 mb-1">Academic Year</p>
+                      <p className="text-indigo-900">{selectedStudent.academicYear || '-'}</p>
                     </div>
                     <div>
-                      <p className="text-blue-700 mb-1">Contact Number</p>
-                      <input
-                        type="text"
-                        value={formData.classTeacherContact}
-                        onChange={(e) => updateFormField('classTeacherContact', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <p className="text-indigo-700 mb-1">Admission Date</p>
+                      <p className="text-indigo-900">{selectedStudent.admissionDate || '-'}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Transport Route */}
-              {formData.transportRoute && (
-                <div className="mb-8">
+              {/* Document Records */}
+              {selectedStudent.documents && Object.keys(selectedStudent.documents).length > 0 && (
+                <div className="mt-8">
                   <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                    <Bus className="w-5 h-5 text-orange-600" />
-                    Transport Information
+                    <FileText className="w-5 h-5 text-green-600" />
+                    Document Records
                   </h3>
-                  <div className="bg-orange-50 rounded-lg p-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-orange-700 mb-1">Route</p>
-                        <input
-                          type="text"
-                          value={formData.transportRoute}
-                          onChange={(e) => updateFormField('transportRoute', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-orange-700 mb-1">Bus Number</p>
-                        <input
-                          type="text"
-                          value={formData.busNumber}
-                          onChange={(e) => updateFormField('busNumber', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
+                  <div className="bg-green-50 rounded-lg p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(selectedStudent.documents).map(([key, doc]: [string, any]) => (
+                        <div key={key} className="flex items-center gap-3">
+                          {doc.file ? <Check className="w-5 h-5 text-green-600" /> : <X className="w-5 h-5 text-red-500" />}
+                          <span className="text-gray-800 capitalize truncate">{doc.name || key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Medical Information */}
-              <div className="mb-8">
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-red-600" />
-                  Medical Information
-                </h3>
-                <div className="bg-red-50 rounded-lg p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-red-700 mb-2 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" />
-                        Allergies
-                      </p>
-                      {formData.medicalInfo?.allergies.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {formData.medicalInfo?.allergies.map((allergy, index) => (
-                            <span key={index} className="px-3 py-1 bg-red-200 text-red-900 rounded-full">
-                              {allergy}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-red-900">No known allergies</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-red-700 mb-2 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" />
-                        Medical Conditions
-                      </p>
-                      {formData.medicalInfo?.conditions.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {formData.medicalInfo?.conditions.map((condition, index) => (
-                            <span key={index} className="px-3 py-1 bg-red-200 text-red-900 rounded-full">
-                              {condition}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-red-900">No medical conditions</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="border-t border-red-200 pt-4">
-                    <p className="text-red-700 mb-2">Emergency Contact</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-red-700 mb-1">Name</p>
-                        <input
-                          type="text"
-                          value={formData.medicalInfo?.emergencyContact}
-                          onChange={(e) => updateMedicalInfo('emergencyContact', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-red-700 mb-1">Phone</p>
-                        <input
-                          type="text"
-                          value={formData.medicalInfo?.emergencyPhone}
-                          onChange={(e) => updateMedicalInfo('emergencyPhone', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Parent Information */}
-              <div>
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <User className="w-5 h-5 text-gray-600" />
-                  Parent/Guardian Information
-                </h3>
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <User className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Name</p>
-                        <input
-                          type="text"
-                          value={formData.parentName}
-                          onChange={(e) => updateFormField('parentName', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Phone className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Phone</p>
-                        <input
-                          type="text"
-                          value={formData.phone}
-                          onChange={(e) => updateFormField('phone', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Mail className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Email ID</p>
-                        <input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => updateFormField('email', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <MapPin className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">Address</p>
-                        <input
-                          type="text"
-                          value={formData.address}
-                          onChange={(e) => updateFormField('address', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-4 mt-8">
-                <button
-                  onClick={handleSaveStudent}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                >
-                  <Check className="w-5 h-5" />
-                  {editingStudent ? 'Update Student' : 'Add Student'}
-                </button>
-
-                <button
-                  onClick={() => setShowAddEditModal(false)}
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-                >
-                  <X className="w-5 h-5" />
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1619,40 +1456,30 @@ export function StudentInformation() {
           onClick={() => setShowDeleteConfirm(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-auto"
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-              <h2 className="text-gray-900">Confirm Delete</h2>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-600" />
-              </button>
-            </div>
-
-            <div className="p-8">
-              <p className="text-gray-900 mb-4">
-                Are you sure you want to delete the student <strong>{studentToDelete?.name}</strong>?
+            <div className="p-6">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-xl font-bold text-center text-gray-900 mb-2">Confirm Delete</h2>
+              <p className="text-center text-gray-600 mb-8">
+                Are you sure you want to delete the student <strong>{studentToDelete?.name}</strong>? This action cannot be undone.
               </p>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-4 mt-8">
-                <button
-                  onClick={confirmDelete}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                >
-                  <Trash2 className="w-5 h-5" />
-                  Delete
-                </button>
-
+              <div className="flex gap-3">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                 >
-                  <X className="w-5 h-5" />
                   Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-lg shadow-red-500/20"
+                >
+                  Delete Student
                 </button>
               </div>
             </div>

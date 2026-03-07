@@ -16,16 +16,28 @@ interface DocumentUpload {
 export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
   const [formData, setFormData] = useState({
     name: student?.name || '',
+    admissionNo: student?.admissionNo || '',
     dob: student?.dob || '',
     gender: student?.gender || 'Male',
     bloodGroup: student?.bloodGroup || '',
-    parentName: student?.parentName || '',
+    fatherName: student?.fatherName || '',
+    motherName: student?.motherName || '',
+    guardianName: student?.guardianName || '',
+    fatherOccupation: student?.fatherOccupation || '',
+    motherOccupation: student?.motherOccupation || '',
+    guardianOccupation: student?.guardianOccupation || '',
+    parentName: student?.parentName || '', // Kept for backwards compatibility
     phone: student?.phone || '',
+    emergencyContactNumber: student?.emergencyContactNumber || '',
     email: student?.email || '',
     address: student?.address || '',
-    classApplied: student?.classApplied || '',
-    classAllotted: student?.classAllotted || '',
-    status: student?.status || 'enquiry',
+    classApplied: student?.classApplied || student?.class || '',
+    classAllotted: student?.classAllotted || student?.class || '',
+    section: student?.section || 'A',
+    rollNo: student?.rollNo || '',
+    status: student?.status || (student ? 'admitted' : 'enquiry'),
+    admissionDate: student?.admissionDate || new Date().toISOString().split('T')[0],
+    academicYear: student?.academicYear || '2024-2025',
   });
 
   const [studentPhoto, setStudentPhoto] = useState<string | null>(student?.photo || null);
@@ -37,6 +49,8 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     vaccinationCard: DocumentUpload;
     passportPhoto: DocumentUpload;
     transferCertificate: DocumentUpload;
+    previousMarkSheets: DocumentUpload;
+    medicalCertificate: DocumentUpload;
   }>({
     birthCertificate: { name: 'Birth Certificate', file: null },
     aadharCard: { name: 'Student Aadhar Card', file: null },
@@ -44,6 +58,8 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     vaccinationCard: { name: 'Vaccination Card', file: null },
     passportPhoto: { name: 'Passport Size Photo', file: null },
     transferCertificate: { name: 'Transfer Certificate', file: null },
+    previousMarkSheets: { name: 'Previous Mark Sheets', file: null },
+    medicalCertificate: { name: 'Medical Certificate', file: null },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -234,6 +250,19 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 <option value="AB-">AB-</option>
               </select>
             </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Admission Number {student && '(Read-only)'}</label>
+              <input
+                type="text"
+                name="admissionNo"
+                value={formData.admissionNo}
+                onChange={handleChange}
+                readOnly={!!student}
+                className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${student ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                placeholder="Auto-generated or enter manual"
+              />
+            </div>
           </div>
         </div>
 
@@ -243,7 +272,76 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-gray-700 mb-2">Parent Name *</label>
+              <label className="block text-gray-700 mb-2">Father Name</label>
+              <input
+                type="text"
+                name="fatherName"
+                value={formData.fatherName}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter father's name"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2">Father Occupation</label>
+              <input
+                type="text"
+                name="fatherOccupation"
+                value={formData.fatherOccupation}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter father's occupation"
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Mother Name</label>
+              <input
+                type="text"
+                name="motherName"
+                value={formData.motherName}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter mother's name"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2">Mother Occupation</label>
+              <input
+                type="text"
+                name="motherOccupation"
+                value={formData.motherOccupation}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter mother's occupation"
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Guardian Name (If applicable)</label>
+              <input
+                type="text"
+                name="guardianName"
+                value={formData.guardianName}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter guardian's name"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2">Guardian Occupation</label>
+              <input
+                type="text"
+                name="guardianOccupation"
+                value={formData.guardianOccupation}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter guardian's occupation"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-gray-700 mb-2">Primary Parent Name (For backwards compatibility/display) *</label>
               <input
                 type="text"
                 name="parentName"
@@ -251,18 +349,31 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 onChange={handleChange}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter parent/guardian name"
+                placeholder="Enter primary contact name"
               />
             </div>
 
             <div>
-              <label className="block text-gray-700 mb-2">Phone Number *</label>
+              <label className="block text-gray-700 mb-2">Primary Phone Number *</label>
               <input
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                 required
+                maxLength={10}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., 9876543210"
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Emergency Contact Number</label>
+              <input
+                type="tel"
+                name="emergencyContactNumber"
+                value={formData.emergencyContactNumber}
+                onChange={(e) => setFormData({ ...formData, emergencyContactNumber: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                 maxLength={10}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="e.g., 9876543210"
@@ -301,6 +412,29 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
+              <label className="block text-gray-700 mb-2">Academic Year *</label>
+              <input
+                type="text"
+                name="academicYear"
+                value={formData.academicYear}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., 2024-2025"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2">Admission Date</label>
+              <input
+                type="date"
+                name="admissionDate"
+                value={formData.admissionDate}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
               <label className="block text-gray-700 mb-2">Class Applied For *</label>
               <select
                 name="classApplied"
@@ -329,6 +463,35 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                   <option key={num} value={num}>Class {num}</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Section *</label>
+              <select
+                name="section"
+                value={formData.section}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Roll Number *</label>
+              <input
+                type="text"
+                name="rollNo"
+                value={formData.rollNo}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter roll number"
+              />
             </div>
 
             <div>
@@ -560,6 +723,76 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png"
                       onChange={(e) => handleDocumentUpload('transferCertificate', e)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Previous Mark Sheets */}
+            <div>
+              <label className="block text-gray-700 mb-2">
+                Previous Mark Sheets <span className="text-gray-500">(Optional)</span>
+              </label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
+                {documents.previousMarkSheets.file ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-green-600" />
+                      <span className="text-gray-700">{documents.previousMarkSheets.file.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDocument('previousMarkSheets')}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer flex flex-col items-center gap-2">
+                    <Upload className="w-8 h-8 text-gray-400" />
+                    <span className="text-gray-600">Click to upload</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleDocumentUpload('previousMarkSheets', e)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Medical Certificate */}
+            <div>
+              <label className="block text-gray-700 mb-2">
+                Medical Certificate <span className="text-gray-500">(Optional)</span>
+              </label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
+                {documents.medicalCertificate.file ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-green-600" />
+                      <span className="text-gray-700">{documents.medicalCertificate.file.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDocument('medicalCertificate')}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer flex flex-col items-center gap-2">
+                    <Upload className="w-8 h-8 text-gray-400" />
+                    <span className="text-gray-600">Click to upload</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleDocumentUpload('medicalCertificate', e)}
                       className="hidden"
                     />
                   </label>

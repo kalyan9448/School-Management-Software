@@ -34,17 +34,30 @@ export type ViewType =
 
 export function AdminDashboard() {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
+  const [admissionInitialView, setAdmissionInitialView] = useState<'list' | 'form'>('list');
+
+  const handleNavigate = (view: string) => {
+    if (view === 'admission-new') {
+      setAdmissionInitialView('form');
+      setActiveView('admission');
+    } else {
+      if (view === 'admission') {
+        setAdmissionInitialView('list');
+      }
+      setActiveView(view as ViewType);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar activeView={activeView} setActiveView={setActiveView} />
 
       <main className="flex-1 ml-64 overflow-auto">
-        {activeView === 'dashboard' && <DashboardHome onNavigate={(view) => setActiveView(view as ViewType)} />}
-        {activeView === 'admission' && <AdmissionModule />}
+        {activeView === 'dashboard' && <DashboardHome onNavigate={handleNavigate} />}
+        {activeView === 'admission' && <AdmissionModule initialView={admissionInitialView} />}
         {activeView === 'enquiry' && <EnquiryModule />}
         {activeView === 'fees' && <FeeModule />}
-        {activeView === 'students' && <StudentInformation />}
+        {activeView === 'students' && <StudentInformation onNavigate={handleNavigate} />}
         {activeView === 'teachers' && <TeachersModule />}
         {activeView === 'communication' && <CommunicationModule />}
         {activeView === 'reports' && <ReportsModule />}
