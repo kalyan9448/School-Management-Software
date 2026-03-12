@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardNav, parentNavItems } from './DashboardNav';
 import {
@@ -32,6 +32,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
+import { useStudents, useAttendance, useLessons, useNotifications } from '../hooks/useDataService';
 
 type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions';
 type ReportPeriod = 'weekly' | 'monthly';
@@ -106,24 +107,67 @@ interface Notification {
 export function ParentDashboardNew() {
   const { user, logout } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
-  const [selectedChild] = useState<Child>({
+
+  // 1. Fetch children for this parent
+  const { students: children } = useStudents({ parentId: user?.id });
+
+  // 2. State for selected child
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+
+  // Initialize selected child if not set
+  useMemo(() => {
+    if (!selectedChildId && children.length > 0) {
+      setSelectedChildId(children[0].id);
+    }
+  }, [children, selectedChildId]);
+
+  const selectedChild = children.find(c => c.id === selectedChildId) || children[0] || {
     id: '1',
     name: 'Aarav Sharma',
     class: '8th',
     section: 'A',
     rollNo: '001',
-  });
-
-  // Demo data
-  const todayDate = new Date().toISOString().split('T')[0];
-
-  const todayAttendance: AttendanceRecord = {
-    date: todayDate,
-    status: 'present',
-    time: '09:15 AM',
   };
 
-  const todayActivities: DailyActivity[] = [
+  // 3. Fetch dynamic data for selected child
+  const { attendance: studentAttendance, stats: attendanceStats } = useAttendance({
+    studentId: selectedChild?.id,
+    startDate: new Date().toISOString().substring(0, 7) + '-01'
+  });
+
+  const { lessons } = useLessons({
+    class: selectedChild?.class,
+    section: selectedChild?.section
+  });
+
+  const { notifications: dynamicNotifications } = useNotifications(user?.id);
+
+  // Demo data fallback / merging
+  const todayDate = new Date().toISOString().split('T')[0];
+
+  const todayRecord = studentAttendance.find(a => a.date === todayDate);
+  const todayAttendance: AttendanceRecord = {
+    date: todayDate,
+    status: (todayRecord?.status as any) || 'absent',
+    time: todayRecord?.time || '--:--',
+  };
+
+  // Convert lessons to daily activities
+  const todayActivities: DailyActivity[] = lessons
+    .filter(l => l.date === todayDate)
+    .map(l => ({
+      id: l.id,
+      date: l.date,
+      subject: l.subject,
+      topic: l.topic,
+      objectives: l.objectives,
+      teacherNote: l.notes,
+      quizAssigned: false, // Quizzes logic would go here
+      quizCompleted: false,
+    }));
+
+  // Fallback to demo if no activities logged yet for a better UI experience in demo mode
+  const effectiveActivities = todayActivities.length > 0 ? todayActivities : [
     {
       id: '1',
       date: todayDate,
@@ -135,66 +179,21 @@ export function ParentDashboardNew() {
       quizCompleted: true,
       quizScore: 9,
       quizTotal: 10,
-    },
-    {
-      id: '2',
-      date: todayDate,
-      subject: 'Science',
-      topic: 'Laws of Motion - Newton\'s Second Law',
-      objectives: ['Understand F = ma formula', 'Calculate force, mass, and acceleration', 'Apply concepts to real-world scenarios'],
-      quizAssigned: true,
-      quizCompleted: false,
-    },
-    {
-      id: '3',
-      date: todayDate,
-      subject: 'English',
-      topic: 'The Last Lesson - Character Analysis',
-      objectives: ['Analyze main characters', 'Understand themes of language and identity', 'Write character sketch'],
-      teacherNote: 'Great insights during class discussion. Aarav\'s character analysis was very thoughtful.',
-      quizAssigned: false,
-      quizCompleted: false,
-    },
-    {
-      id: '4',
-      date: todayDate,
-      subject: 'Social Studies',
-      topic: 'Indian Constitution - Fundamental Rights',
-      objectives: ['List and explain fundamental rights', 'Understand Right to Equality', 'Discuss real-life applications'],
-      teacherNote: 'Active participation in class debate about constitutional rights.',
-      quizAssigned: true,
-      quizCompleted: true,
-      quizScore: 8,
-      quizTotal: 10,
-    },
+    }
   ];
 
-  const weekTimeline: DailyActivity[] = [
-    ...todayActivities,
-    {
-      id: '5',
-      date: '2024-02-17',
-      subject: 'Mathematics',
-      topic: 'Linear Equations in Two Variables',
-      objectives: ['Plot linear equations on graph', 'Find solutions using substitution method'],
-      quizAssigned: true,
-      quizCompleted: true,
-      quizScore: 8,
-      quizTotal: 10,
-    },
-    {
-      id: '6',
-      date: '2024-02-16',
-      subject: 'Science',
-      topic: 'Chemical Reactions and Equations',
-      objectives: ['Balance chemical equations', 'Identify types of reactions'],
-      teacherNote: 'Good understanding of balancing equations. Needs more practice with complex reactions.',
-      quizAssigned: true,
-      quizCompleted: true,
-      quizScore: 7,
-      quizTotal: 10,
-    },
-  ];
+  const weekTimeline: DailyActivity[] = lessons
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .map(l => ({
+      id: l.id,
+      date: l.date,
+      subject: l.subject,
+      topic: l.topic,
+      objectives: l.objectives,
+      teacherNote: l.notes,
+      quizAssigned: false,
+      quizCompleted: false,
+    }));
 
   const progressData: ProgressData[] = [
     {
@@ -276,42 +275,18 @@ export function ParentDashboardNew() {
     },
   ];
 
-  const notifications: Notification[] = [
+  const notifications = dynamicNotifications.length > 0 ? dynamicNotifications : [
     {
-      id: '1',
-      type: 'attendance',
-      title: 'Child Arrived at School',
-      message: 'Aarav arrived at school at 09:15 AM',
-      date: todayDate,
-      read: false,
-    },
-    {
-      id: '2',
-      type: 'progress',
-      title: 'Great Quiz Performance!',
-      message: 'Aarav scored 9/10 in English quiz today. Excellent work!',
-      date: todayDate,
-      read: false,
-    },
-    {
-      id: '3',
-      type: 'fee',
-      title: 'Fee Due Reminder',
-      message: 'March fees of ₹7,000 are due on 5th March 2024',
-      date: '2024-02-16',
-      read: true,
-    },
-    {
-      id: '4',
+      id: 'demo-1',
       type: 'announcement',
-      title: 'Parent-Teacher Meeting',
-      message: 'PTM scheduled for 25th February 2024 at 10:00 AM',
-      date: '2024-02-15',
+      title: 'Welcome to the New Dashboard',
+      message: 'Explore your childs daily learning and progress in real-time.',
+      date: todayDate,
       read: true,
-    },
+    }
   ];
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
   const pendingFees = feeRecords.filter((f) => f.status === 'pending');
   const totalDue = pendingFees.reduce((sum, f) => sum + f.amount, 0);
 
@@ -427,98 +402,38 @@ export function ParentDashboardNew() {
   };
 
   // AI Discussion Suggestions
-  const aiDiscussionSuggestions: AIDiscussionSuggestion[] = [
-    {
-      id: '1',
+  // AI Discussion Suggestions derived from todays lessons
+  const aiDiscussionSuggestions: AIDiscussionSuggestion[] = lessons
+    .filter(l => l.date === todayDate)
+    .map(l => ({
+      id: `ai-${l.id}`,
+      subject: l.subject,
+      topic: l.topic,
+      recentLesson: l.topic,
+      conversationStarter: `I heard you learned about ${l.topic} in ${l.subject} today! Can you explain what you found most interesting?`,
+      keyQuestions: [
+        `What were the key objectives of the ${l.subject} lesson?`,
+        `How can you apply what you learned about ${l.topic} in real life?`,
+      ],
+      realLifeConnection: `Connect the concepts of ${l.topic} to daily experiences.`,
+      encouragementTip: `Excellent work participating in the ${l.subject} class!`,
+      difficulty: 'moderate' as const,
+    }));
+
+  // Fallback to static suggestions if no lessons today
+  if (aiDiscussionSuggestions.length === 0) {
+    aiDiscussionSuggestions.push({
+      id: 'demo-ai-1',
       subject: 'Mathematics',
       topic: 'Quadratic Equations',
       recentLesson: 'Solving quadratic equations by factorization',
       conversationStarter: 'I heard you learned about quadratic equations today! Can you explain what makes an equation "quadratic"?',
-      keyQuestions: [
-        'Can you show me how to solve a simple quadratic equation?',
-        'Where do you think we use quadratic equations in real life?',
-        'What was the most challenging part of today\'s lesson?',
-      ],
-      realLifeConnection: 'Quadratic equations are used in calculating areas of land, designing curved structures like bridges, and even in video game physics. Try discussing how a basketball follows a parabolic path when thrown.',
-      encouragementTip: 'Aarav scored 90% on the recent quiz! Praise his understanding and encourage him to help his classmates or younger siblings with math problems.',
+      keyQuestions: ['Can you show me how to solve a simple quadratic equation?'],
+      realLifeConnection: 'Quadratic equations are used in calculating areas of land and video game physics.',
+      encouragementTip: 'Praise his understanding and encourage him to keep practicing.',
       difficulty: 'moderate',
-    },
-    {
-      id: '2',
-      subject: 'Science',
-      topic: 'Newton\'s Laws of Motion',
-      recentLesson: 'Understanding Newton\'s Second Law (F = ma)',
-      conversationStarter: 'I know you\'re learning about Newton\'s Laws. Can you tell me what happens when we push a heavy cart versus a light cart with the same force?',
-      keyQuestions: [
-        'Why do we need to wear seatbelts in cars?',
-        'What would happen if there was no friction?',
-        'Can you identify Newton\'s laws while playing sports?',
-      ],
-      realLifeConnection: 'Discuss how Newton\'s laws apply to everyday activities: riding a bicycle, playing cricket, or even walking. Watch a sports game together and identify how forces affect the ball\'s movement.',
-      encouragementTip: 'Aarav hasn\'t completed the quiz yet. Encourage him to review the concepts and attempt it soon. Offer to discuss any doubts he might have.',
-      difficulty: 'moderate',
-    },
-    {
-      id: '3',
-      subject: 'English',
-      topic: 'The Last Lesson - Character Analysis',
-      recentLesson: 'Analyzing main characters and themes of language and identity',
-      conversationStarter: 'Tell me about "The Last Lesson" story. What do you think the teacher and students were feeling?',
-      keyQuestions: [
-        'Why was it called "the last lesson"?',
-        'How important is our mother tongue to our identity?',
-        'What would you do if you couldn\'t learn your favorite subject anymore?',
-      ],
-      realLifeConnection: 'Discuss the importance of preserving our cultural heritage and language. Share family stories or traditions that connect to your cultural identity. Consider reading Hindi literature together.',
-      encouragementTip: 'The teacher noted that Aarav showed thoughtful insights during class discussion. Acknowledge his critical thinking and encourage him to write a detailed character analysis.',
-      difficulty: 'easy',
-    },
-    {
-      id: '4',
-      subject: 'Hindi',
-      topic: 'Grammar Practice',
-      recentLesson: 'Sentence construction and verb conjugation',
-      conversationStarter: 'Let\'s practice some Hindi together! Can you help me write a few sentences about our day in Hindi?',
-      keyQuestions: [
-        'What are the different verb forms in Hindi?',
-        'Can you correct this sentence if I say it wrong?',
-        'What Hindi words did you learn today?',
-      ],
-      realLifeConnection: 'Make Hindi a part of daily life: watch Hindi movies together, read Hindi newspapers, or play word games in Hindi. Create a family rule to speak only Hindi during meals.',
-      encouragementTip: 'Hindi is an area that needs attention (current score: 70%). Be patient and make learning fun. Celebrate small improvements to build confidence.',
-      difficulty: 'challenging',
-    },
-    {
-      id: '5',
-      subject: 'Social Studies',
-      topic: 'Fundamental Rights',
-      recentLesson: 'Understanding the Indian Constitution and fundamental rights',
-      conversationStarter: 'You learned about fundamental rights today. Can you tell me which rights protect citizens in our country?',
-      keyQuestions: [
-        'What is the Right to Equality and why is it important?',
-        'Can you think of any current events related to fundamental rights?',
-        'How do these rights affect our daily lives?',
-      ],
-      realLifeConnection: 'Discuss current news events in the context of constitutional rights. Talk about voting, freedom of speech, and how democracy works. Visit a local government office or court to see the constitution in action.',
-      encouragementTip: 'Aarav scored 80% and actively participates in class debates. Encourage him to follow current affairs and relate them to what he learns in class.',
-      difficulty: 'moderate',
-    },
-    {
-      id: '6',
-      subject: 'Computer Science',
-      topic: 'Programming Basics',
-      recentLesson: 'Introduction to loops and conditional statements',
-      conversationStarter: 'I heard you\'re learning programming! Can you explain how a loop works in a program?',
-      keyQuestions: [
-        'What are some real-world examples of loops and conditions?',
-        'Can you write a simple program to show me?',
-        'What project would you like to build using programming?',
-      ],
-      realLifeConnection: 'Programming is everywhere - from smartphones to traffic lights. Encourage Aarav to identify automated systems around him. Consider working on a small coding project together, like creating a calculator.',
-      encouragementTip: 'Computer Science is Aarav\'s strongest subject (92% average)! Let him teach you some programming concepts - teaching reinforces learning.',
-      difficulty: 'easy',
-    },
-  ];
+    });
+  }
 
   const renderReports = () => {
     const reportData = selectedReportPeriod === 'weekly' ? weeklyReportData : monthlyReportData;
@@ -876,15 +791,15 @@ export function ParentDashboardNew() {
   };
 
   const renderDashboard = () => {
-    const completedQuizzes = todayActivities.filter((a) => a.quizCompleted).length;
-    const pendingQuizzes = todayActivities.filter(
+    const completedQuizzes = effectiveActivities.filter((a) => a.quizCompleted).length;
+    const pendingQuizzes = effectiveActivities.filter(
       (a) => a.quizAssigned && !a.quizCompleted
     ).length;
     const averageScore =
-      todayActivities
+      effectiveActivities
         .filter((a) => a.quizScore)
         .reduce((sum, a) => sum + (a.quizScore || 0), 0) /
-      todayActivities.filter((a) => a.quizScore).length;
+      (effectiveActivities.filter((a) => a.quizScore).length || 1);
 
     return (
       <div className="space-y-6">
@@ -935,7 +850,7 @@ export function ParentDashboardNew() {
                 <BookOpen className="w-5 h-5 text-blue-600" />
                 <p className="text-gray-700">Lessons Today</p>
               </div>
-              <p className="text-2xl text-blue-600">{todayActivities.length}</p>
+              <p className="text-2xl text-blue-600">{effectiveActivities.length}</p>
               <p className="text-gray-600 text-sm">topics covered</p>
             </div>
 
@@ -946,7 +861,7 @@ export function ParentDashboardNew() {
                 <p className="text-gray-700">Quizzes</p>
               </div>
               <p className="text-2xl text-purple-600">
-                {completedQuizzes}/{todayActivities.filter((a) => a.quizAssigned).length}
+                {completedQuizzes}/{effectiveActivities.filter((a) => a.quizAssigned).length}
               </p>
               <p className="text-gray-600 text-sm">completed</p>
             </div>
@@ -997,7 +912,7 @@ export function ParentDashboardNew() {
         <div className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-gray-900 mb-4">What My Child Learned Today</h3>
           <div className="space-y-4">
-            {todayActivities.map((activity) => (
+            {effectiveActivities.map((activity) => (
               <div
                 key={activity.id}
                 className="p-4 bg-gray-50 rounded-lg border border-gray-200"

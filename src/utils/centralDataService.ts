@@ -163,6 +163,23 @@ export interface ExamResult {
   remarks?: string;
 }
 
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export interface TimetableSlot {
+  id: string;
+  classId: string;
+  class: string;
+  section: string;
+  day: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  room?: string;
+}
+
 export interface FeeStructure {
   id: string;
   class: string;
@@ -366,6 +383,68 @@ const initializeData = () => {
     }
   });
 
+  // Initialize demo notifications for teacher
+  if (!localStorage.getItem('app_notifications') || JSON.parse(localStorage.getItem('app_notifications') || '[]').length === 0) {
+    const teacherEmail = 'teacher@school.com';
+    const demoNotifications: Notification[] = [
+      {
+        id: 'n1',
+        userId: teacherEmail,
+        type: 'attendance',
+        title: 'Attendance Alert',
+        message: 'Aarav Sharma (Class 8th-A) has been marked absent for 3 consecutive days.',
+        date: new Date().toISOString(),
+        read: false,
+      },
+      {
+        id: 'n2',
+        userId: teacherEmail,
+        type: 'announcement',
+        title: 'Staff Meeting',
+        message: 'There will be a mandatory staff meeting in the auditorium today at 4:30 PM.',
+        date: new Date(Date.now() - 3600000).toISOString(),
+        read: false,
+      },
+      {
+        id: 'n3',
+        userId: teacherEmail,
+        type: 'assignment',
+        title: 'Assignment Submission',
+        message: '15 students have submitted the "Algebra Basics" assignment.',
+        date: new Date(Date.now() - 7200000).toISOString(),
+        read: false,
+      },
+      {
+        id: 'n4',
+        userId: teacherEmail,
+        type: 'exam',
+        title: 'Mid-term Results',
+        message: 'Mid-term results for Class 8th-A are ready for review.',
+        date: new Date(Date.now() - 172800000).toISOString(),
+        read: false,
+      },
+      {
+        id: 'n5',
+        userId: teacherEmail,
+        type: 'fee',
+        title: 'Fee Payment Update',
+        message: 'Monthly fee collection for Class 8th-A has reached 85%.',
+        date: new Date(Date.now() - 259200000).toISOString(),
+        read: true,
+      },
+      {
+        id: 'n6',
+        userId: teacherEmail,
+        type: 'general',
+        title: 'New Student Joined',
+        message: 'Saanvi Reddy has been added to Class 8th-A.',
+        date: new Date(Date.now() - 86400000).toISOString(),
+        read: true,
+      },
+    ];
+    localStorage.setItem('app_notifications', JSON.stringify(demoNotifications));
+  }
+
   // Initialize demo users (overrides the hardcoded list in AuthContext eventually)
   if (!localStorage.getItem('app_users') || JSON.parse(localStorage.getItem('app_users') || '[]').length === 0) {
     const demoUsers: User[] = [
@@ -405,6 +484,73 @@ const initializeData = () => {
       { id: 'SUB005', name: 'Hindi', code: 'HIN', description: 'Hindi Language' },
     ];
     localStorage.setItem('app_subjects', JSON.stringify(demoSubjects));
+  }
+
+  // Initialize demo lesson logs
+  if (!localStorage.getItem('app_lessons') || JSON.parse(localStorage.getItem('app_lessons') || '[]').length === 0) {
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const twoDaysAgo = new Date(Date.now() - 172800000).toISOString().split('T')[0];
+
+    const demoLessons: LessonLog[] = [
+      {
+        id: 'L001',
+        date: today,
+        classId: 'CLS001',
+        class: '8th',
+        section: 'A',
+        subject: 'Mathematics',
+        topic: 'Introduction to Linear Equations',
+        objectives: ['Understand variables and constants', 'Solve basic one-step equations'],
+        studentsNeedingAttention: ['STU001'],
+        notes: 'Students were very engaged. Aarav needs more practice with subtraction-based equations.',
+        teacherId: 'teacher@school.com',
+        teacherName: 'John Teacher'
+      },
+      {
+        id: 'L002',
+        date: today,
+        classId: 'CLS001',
+        class: '8th',
+        section: 'A',
+        subject: 'Science',
+        topic: 'Cell Structure and Functions',
+        objectives: ['Identify cell organelles', 'Understand the difference between plant and animal cells'],
+        studentsNeedingAttention: [],
+        notes: 'Microscope lab session went well.',
+        teacherId: 'teacher@school.com',
+        teacherName: 'John Teacher'
+      },
+      {
+        id: 'L003',
+        date: yesterday,
+        classId: 'CLS001',
+        class: '8th',
+        section: 'A',
+        subject: 'Mathematics',
+        topic: 'Rational Numbers Review',
+        objectives: ['Convert decimals to fractions', 'Perform addition on rational numbers'],
+        studentsNeedingAttention: ['STU002'],
+        notes: 'Recap of last week\'s concepts.',
+        teacherId: 'teacher@school.com',
+        teacherName: 'John Teacher'
+      },
+      {
+        id: 'L004',
+        date: twoDaysAgo,
+        classId: 'CLS001',
+        class: '8th',
+        section: 'A',
+        subject: 'English',
+        topic: 'Poetry Analysis - The Road Not Taken',
+        objectives: ['Analyze metaphors in poetry', 'Understand rhyme schemes'],
+        studentsNeedingAttention: [],
+        notes: 'Introduced Robert Frost\'s work today.',
+        teacherId: 'teacher@school.com',
+        teacherName: 'John Teacher'
+      }
+    ];
+    localStorage.setItem('app_lessons', JSON.stringify(demoLessons));
   }
 };
 
@@ -591,6 +737,11 @@ export const teacherService = {
     teachers[index] = { ...teachers[index], ...updates };
     localStorage.setItem('app_teachers', JSON.stringify(teachers));
     return teachers[index];
+  },
+
+  getByEmail: (email: string): Teacher | null => {
+    const teachers = teacherService.getAll();
+    return teachers.find(t => t.email === email) || null;
   },
 };
 
@@ -1218,6 +1369,46 @@ export const notificationService = {
   },
 };
 
+export const timetableService = {
+  getAll: (): TimetableSlot[] => {
+    const data = localStorage.getItem('app_timetable');
+    return data ? JSON.parse(data) : [];
+  },
+
+  getByClass: (className: string, section: string): TimetableSlot[] => {
+    const slots = timetableService.getAll();
+    return slots.filter(s => s.class === className && s.section === section)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  },
+
+  getByTeacher: (teacherEmail: string): TimetableSlot[] => {
+    const slots = timetableService.getAll();
+    return slots.filter(s => s.teacherId === teacherEmail)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  },
+
+  save: (slots: TimetableSlot[]): void => {
+    localStorage.setItem('app_timetable', JSON.stringify(slots));
+  },
+
+  updateSlot: (updatedSlot: TimetableSlot): void => {
+    const slots = timetableService.getAll();
+    const index = slots.findIndex(s => s.id === updatedSlot.id);
+    if (index !== -1) {
+      slots[index] = updatedSlot;
+    } else {
+      slots.push(updatedSlot);
+    }
+    timetableService.save(slots);
+  },
+
+  deleteSlot: (id: string): void => {
+    const slots = timetableService.getAll();
+    const filtered = slots.filter(s => s.id !== id);
+    timetableService.save(filtered);
+  }
+};
+
 // ==================== STATISTICS & ANALYTICS ====================
 
 export const statisticsService = {
@@ -1299,5 +1490,6 @@ export default {
   enquiry: enquiryService,
   event: eventService,
   notification: notificationService,
+  timetable: timetableService,
   statistics: statisticsService,
 };

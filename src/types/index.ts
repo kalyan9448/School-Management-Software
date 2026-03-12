@@ -305,3 +305,22 @@ export interface Event {
     class?: string;
     section?: string;
 }
+// ----- Timetable -----
+
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export interface TimetableSlot {
+    id: string;
+    school_id: string;
+    classId: string;
+    class: string;
+    section: string;
+    day: DayOfWeek;
+    startTime: string;
+    endTime: string;
+    subjectId: string;
+    subject: string;
+    teacherId: string;
+    teacherName: string;
+    room?: string;
+}

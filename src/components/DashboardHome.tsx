@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
+import { studentService, attendanceService, classService, eventService, enquiryService } from '../utils/centralDataService';
 
 interface DashboardHomeProps {
   onNavigate?: (view: string) => void;
@@ -22,21 +23,23 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   const [classPerformance, setClassPerformance] = useState<any[]>([]);
 
   useEffect(() => {
-    // 1. Fetch Students & Calculate Attendance
-    const storedStudents = localStorage.getItem('school_students');
-    const allStudents = storedStudents ? JSON.parse(storedStudents) : [];
+    // 1. Fetch Students
+    const allStudents = studentService.getAll();
+    const totalStudentsCount = allStudents.length;
 
-    // 2. Fetch Admissions
+    // 2. Calculate Today's Attendance
+    const today = new Date().toISOString().split('T')[0];
+    const todaysAttendance = attendanceService.getByDate(today);
+    const presentTodayCount = todaysAttendance.filter((r: any) => r.status === 'present').length;
+
+    // 3. Fetch Enquiries & Admissions (still from localStorage for now as they are in separate modules)
     const storedAdmissions = localStorage.getItem('admissions_demo_data');
     const allAdmissions = storedAdmissions ? JSON.parse(storedAdmissions) : [];
-    const admittedAdmissions = allAdmissions.filter((a: any) => a.status === 'admitted' || a.status === 'confirmed');
     const pendingAdmissionsCount = allAdmissions.filter((a: any) => a.status === 'pending' || a.status === 'enquiry').length;
 
-    const totalStudentsCount = allStudents.length + admittedAdmissions.length;
-    const avgAttendance = allStudents.reduce((acc: number, s: any) => acc + (s.attendance || 0), 0) / (allStudents.length || 1);
-    const presentTodayCount = Math.round((totalStudentsCount * avgAttendance) / 100);
+    const allEnquiries = enquiryService.getAll();
 
-    // 3. Fetch Fees & Revenue
+    // 4. Fetch Fees & Revenue
     const storedPayments = localStorage.getItem('fee_payments_demo');
     const allPayments = storedPayments ? JSON.parse(storedPayments) : [];
     const totalRev = allPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || 0), 0);
@@ -44,14 +47,6 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     const storedLedgers = localStorage.getItem('student_ledgers_demo');
     const allLedgers = storedLedgers ? JSON.parse(storedLedgers) : [];
     const totalDues = allLedgers.reduce((sum: number, l: any) => sum + (l.dueAmount || 0), 0);
-
-    // 4. Fetch Enquiries
-    const storedEnquiries = localStorage.getItem('enquiries_demo_data');
-    const allEnquiries = storedEnquiries ? JSON.parse(storedEnquiries) : [];
-
-    // 5. Fetch Announcements
-    const storedAnnouncements = localStorage.getItem('school_announcements');
-    const allAnnouncements = storedAnnouncements ? JSON.parse(storedAnnouncements) : [];
 
     // Update Stats
     setStats({
@@ -63,32 +58,18 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       enquiries: allEnquiries.length,
     });
 
-    // 6. Map Upcoming Events
-    const events = allAnnouncements
-      .filter((a: any) => ['event', 'holiday', 'reminder'].includes(a.type))
-      .slice(0, 3)
-      .map((a: any, idx: number) => ({
-        id: a.id,
-        title: a.title,
-        date: a.date,
-        time: 'All Day',
-        color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
-      }));
+    // 5. Map Upcoming Events from central service
+    const events = eventService.getUpcoming().slice(0, 3).map((e: any, idx: number) => ({
+      id: e.id,
+      title: e.title,
+      date: e.date,
+      time: e.startTime || 'All Day',
+      color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
+    }));
     setUpcomingEvents(events);
 
-    // 7. Aggregate Recent Activities
+    // 6. Aggregate Recent Activities
     const activities: any[] = [];
-
-    // Add Announcements
-    allAnnouncements.slice(0, 2).forEach((a: any) => {
-      activities.push({
-        id: `ann-${a.id}`,
-        type: 'communication',
-        message: `${a.type.toUpperCase()}: ${a.title}`,
-        time: 'Recently',
-        timestamp: a.id
-      });
-    });
 
     // Add Admissions
     allAdmissions.slice(-2).forEach((adm: any) => {
@@ -97,7 +78,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         type: 'admission',
         message: `Admission ${adm.status}: ${adm.name}`,
         time: 'Today',
-        timestamp: adm.id
+        timestamp: Date.now()
       });
     });
 
@@ -108,7 +89,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         type: 'fee',
         message: `Payment received: ₹${p.totalAmount.toLocaleString()} from ${p.studentName}`,
         time: p.paymentDate,
-        timestamp: p.id
+        timestamp: Date.now() - 1000
       });
     });
 
@@ -117,48 +98,54 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       activities.push({
         id: `enq-${e.id}`,
         type: 'enquiry',
-        message: `New enquiry for ${e.childName} (Class ${e.classInterest})`,
+        message: `New enquiry for ${e.studentName} (Class ${e.classApplied})`,
         time: e.enquiryDate,
-        timestamp: e.id
+        timestamp: Date.now() - 2000
       });
     });
 
-    // Sort and limit activities
-    setRecentActivities(activities.sort((a, b) => {
-      const tsA = isNaN(Number(a.timestamp)) ? 0 : Number(a.timestamp);
-      const tsB = isNaN(Number(b.timestamp)) ? 0 : Number(b.timestamp);
-      return tsB - tsA;
-    }).slice(0, 5));
+    // Add Attendance Activity
+    if (todaysAttendance.length > 0) {
+      activities.push({
+        id: `attendance-today`,
+        type: 'attendance',
+        message: `${todaysAttendance.length} students attendance marked for today`,
+        time: 'Just now',
+        timestamp: Date.now() + 1000
+      });
+    }
 
-    // 8. Calculate Class Performance
-    const classGroups: { [key: string]: { total: number, count: number } } = {};
-    allStudents.forEach((s: any) => {
-      const cls = `Class ${s.class}`;
-      if (!classGroups[cls]) classGroups[cls] = { total: 0, count: 0 };
-      classGroups[cls].total += (s.attendance || 0);
-      classGroups[cls].count += 1;
-    });
+    setRecentActivities(activities.sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5));
 
-    const performance = Object.entries(classGroups)
-      .map(([cls, data]) => ({
-        class: cls,
-        attendance: Math.round(data.total / data.count),
-        color: cls.includes('6') ? 'bg-purple-500' : cls.includes('5') ? 'bg-pink-500' : cls.includes('4') ? 'bg-indigo-500' : 'bg-blue-500'
-      }))
-      .sort((a, b) => b.attendance - a.attendance)
-      .slice(0, 4);
+    // 7. Calculate Class Performance based on historical attendance
+    const classes = classService.getAll();
+    const performance = classes.map((cls: any) => {
+      const classStudents = studentService.getByClass(cls.className, cls.section);
+      let totalPresence = 0;
+      let totalRecords = 0;
+
+      classStudents.forEach((s: any) => {
+        const stats = attendanceService.getAttendanceStats(s.id);
+        totalPresence += stats.present;
+        totalRecords += stats.total;
+      });
+
+      const avgAttendance = totalRecords > 0 ? Math.round((totalPresence / totalRecords) * 100) : 0;
+
+      return {
+        class: `${cls.className}-${cls.section}`,
+        attendance: avgAttendance,
+        color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500'
+      };
+    }).sort((a, b) => b.attendance - a.attendance).slice(0, 4);
 
     if (performance.length > 0) {
       setClassPerformance(performance);
     } else {
       setClassPerformance([
-        { class: 'Class 6-A', attendance: 96, color: 'bg-purple-500' },
-        { class: 'Class 5-B', attendance: 94, color: 'bg-pink-500' },
-        { class: 'Class 4-A', attendance: 92, color: 'bg-indigo-500' },
-        { class: 'Class 7-C', attendance: 88, color: 'bg-blue-500' },
+        { class: 'Class 8-A', attendance: 0, color: 'bg-purple-500' },
       ]);
     }
-
   }, []);
 
 

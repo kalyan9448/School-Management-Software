@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Copy, ArrowRightLeft } from 'lucide-react';
+import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Copy, ArrowRightLeft, Calendar } from 'lucide-react';
 import { StudentPromotionTool } from './StudentPromotionTool.tsx';
 import SubjectMappingView from './SubjectMappingView';
+import { TimetableManagement } from './TimetableManagement';
 import { AcademicYear, ClassSection, DEFAULT_YEARS, DEFAULT_CLASSES } from '../utils/classUtils';
 
 export function AcademicStructureView() {
-  const [activeTab, setActiveTab] = useState<'years' | 'classes' | 'subject-mapping' | 'promotion'>('years');
+  const [activeTab, setActiveTab] = useState<'years' | 'classes' | 'subject-mapping' | 'timetable' | 'promotion'>('years');
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [classSections, setClassSections] = useState<ClassSection[]>([]);
 
@@ -202,6 +203,15 @@ export function AcademicStructureView() {
         >
           Subject Mapping
         </button>
+        <button
+          onClick={() => setActiveTab('timetable')}
+          className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'timetable'
+            ? 'border-purple-600 text-purple-600 font-medium'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+        >
+          Timetable
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">
@@ -362,6 +372,11 @@ export function AcademicStructureView() {
         {/* Subject Mapping Tab */}
         {activeTab === 'subject-mapping' && (
           <SubjectMappingView isEmbedded={true} />
+        )}
+
+        {/* Timetable Tab */}
+        {activeTab === 'timetable' && (
+          <TimetableManagement />
         )}
       </div>
 
