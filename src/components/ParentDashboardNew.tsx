@@ -32,7 +32,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
-import { useStudents, useAttendance, useLessons, useNotifications } from '../hooks/useDataService';
+import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useStudentPerformance, useAssignments, useExams, useExamResults } from '../hooks/useDataService';
 
 type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions';
 type ReportPeriod = 'weekly' | 'monthly';
@@ -97,7 +97,7 @@ interface FeeRecord {
 
 interface Notification {
   id: string;
-  type: 'attendance' | 'progress' | 'fee' | 'announcement';
+  type: 'attendance' | 'progress' | 'fee' | 'announcement' | 'assignment' | 'exam' | 'general';
   title: string;
   message: string;
   date: string;
@@ -142,6 +142,13 @@ export function ParentDashboardNew() {
 
   const { notifications: dynamicNotifications } = useNotifications(user?.id);
 
+  // Additional dynamic data for progress, fees, etc.
+  const { payments: feeRecords } = useFeePayments({ studentId: selectedChild?.id });
+  const { performance: studentPerformance } = useStudentPerformance(selectedChild?.id);
+  const { assignments } = useAssignments({ class: selectedChild?.class, section: selectedChild?.section });
+  const { exams } = useExams({ class: selectedChild?.class, section: selectedChild?.section });
+  const { results: examResults } = useExamResults({ studentId: selectedChild?.id });
+
   // Demo data fallback / merging
   const todayDate = new Date().toISOString().split('T')[0];
 
@@ -166,21 +173,8 @@ export function ParentDashboardNew() {
       quizCompleted: false,
     }));
 
-  // Fallback to demo if no activities logged yet for a better UI experience in demo mode
-  const effectiveActivities = todayActivities.length > 0 ? todayActivities : [
-    {
-      id: '1',
-      date: todayDate,
-      subject: 'Mathematics',
-      topic: 'Quadratic Equations - Solving by Factorization',
-      objectives: ['Understand quadratic equations', 'Apply factorization method to solve equations', 'Verify solutions by substitution'],
-      teacherNote: 'Aarav showed excellent understanding of the concept and solved all practice problems correctly!',
-      quizAssigned: true,
-      quizCompleted: true,
-      quizScore: 9,
-      quizTotal: 10,
-    }
-  ];
+  // Fallback to empty if no activities logged yet
+  const effectiveActivities = todayActivities;
 
   const weekTimeline: DailyActivity[] = lessons
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -195,213 +189,141 @@ export function ParentDashboardNew() {
       quizCompleted: false,
     }));
 
-  const progressData: ProgressData[] = [
-    {
-      subject: 'Mathematics',
-      averageScore: 88,
-      totalQuizzes: 15,
-      trend: 'improving',
-      lastScore: 90,
-    },
-    {
-      subject: 'Science',
-      averageScore: 82,
-      totalQuizzes: 14,
-      trend: 'improving',
-      lastScore: 85,
-    },
-    {
-      subject: 'English',
-      averageScore: 85,
-      totalQuizzes: 12,
-      trend: 'steady',
-      lastScore: 85,
-    },
-    {
-      subject: 'Social Studies',
-      averageScore: 78,
-      totalQuizzes: 11,
-      trend: 'steady',
-      lastScore: 80,
-    },
-    {
-      subject: 'Hindi',
-      averageScore: 72,
-      totalQuizzes: 10,
-      trend: 'needs-attention',
-      lastScore: 70,
-    },
-    {
-      subject: 'Computer Science',
-      averageScore: 92,
-      totalQuizzes: 8,
-      trend: 'improving',
-      lastScore: 95,
-    },
-  ];
+  // Generate Progress Data Dynamically
+  const progressData: ProgressData[] = useMemo(() => {
+    if (!examResults || examResults.length === 0) return [];
 
-  const feeRecords: FeeRecord[] = [
-    {
-      id: '1',
-      feeHead: 'Tuition Fee - March 2024',
-      amount: 5000,
-      dueDate: '2024-03-05',
-      status: 'pending',
-    },
-    {
-      id: '2',
-      feeHead: 'Transport Fee - March 2024',
-      amount: 2000,
-      dueDate: '2024-03-05',
-      status: 'pending',
-    },
-    {
-      id: '3',
-      feeHead: 'Tuition Fee - February 2024',
-      amount: 5000,
-      dueDate: '2024-02-05',
-      status: 'paid',
-      paidDate: '2024-02-03',
-      receiptNo: 'REC2024001',
-    },
-    {
-      id: '4',
-      feeHead: 'Transport Fee - February 2024',
-      amount: 2000,
-      dueDate: '2024-02-05',
-      status: 'paid',
-      paidDate: '2024-02-03',
-      receiptNo: 'REC2024002',
-    },
-  ];
+    // Group results by subject
+    const subjectGroups: Record<string, { totalScores: number, count: number, lastScore: number }> = {};
 
-  const notifications = dynamicNotifications.length > 0 ? dynamicNotifications : [
-    {
-      id: 'demo-1',
-      type: 'announcement',
-      title: 'Welcome to the New Dashboard',
-      message: 'Explore your childs daily learning and progress in real-time.',
-      date: todayDate,
-      read: true,
-    }
-  ];
+    examResults.forEach(result => {
+      const exam = exams.find(e => e.id === result.examId);
+      if (exam) {
+        if (!subjectGroups[exam.subject]) {
+          subjectGroups[exam.subject] = { totalScores: 0, count: 0, lastScore: 0 };
+        }
+        subjectGroups[exam.subject].totalScores += result.percentage;
+        subjectGroups[exam.subject].count += 1;
+        // Simplified "last score" logic, assuming chronological order loosely
+        subjectGroups[exam.subject].lastScore = result.percentage;
+      }
+    });
+
+    return Object.entries(subjectGroups).map(([subject, data]) => {
+      const avg = Math.round(data.totalScores / data.count);
+      let trend: 'improving' | 'steady' | 'needs-attention' = 'steady';
+      if (avg >= 80) trend = 'improving';
+      else if (avg < 60) trend = 'needs-attention';
+
+      return {
+        subject,
+        averageScore: avg,
+        totalQuizzes: data.count,
+        trend,
+        lastScore: data.lastScore
+      };
+    });
+  }, [examResults, exams]);
+
+  const notifications = dynamicNotifications;
+
+  const payments = feeRecords || [];
+
+  // Determine pending fees dynamically using fee structure if we had one
+  // For now, if we have payments we show them. We map payments to 'paid' status.
+  const paidFees = payments.map(p => ({
+    id: p.id,
+    feeHead: p.components?.[0]?.name || 'School Fee',
+    amount: p.amount,
+    dueDate: p.academicYear,
+    status: 'paid',
+    paidDate: p.paymentDate,
+    receiptNo: p.receiptNo
+  }));
+
+  // A generic pending fee for demo if paid fees are 0
+  const pendingFees = payments.length === 0 ? [{
+    id: 'pending-1',
+    feeHead: 'Tuition Fee',
+    amount: 5000,
+    dueDate: new Date().getFullYear().toString() + '-04-05',
+    status: 'pending',
+  }] : [];
 
   const unreadCount = notifications.filter((n: any) => !n.read).length;
-  const pendingFees = feeRecords.filter((f) => f.status === 'pending');
+
   const totalDue = pendingFees.reduce((sum, f) => sum + f.amount, 0);
 
   const [selectedReportPeriod, setSelectedReportPeriod] = useState<ReportPeriod>('weekly');
 
-  // Weekly Report Data (Last 7 days)
-  const weeklyReportData = {
-    period: 'Feb 12 - Feb 18, 2024',
-    attendanceSummary: {
-      present: 5,
-      absent: 0,
+  // Helper to calculate assignment stats
+  const calculateAssignmentStats = (days: number) => {
+    const cutoffDate = new Date(new Date().getTime() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const recentAssignments = assignments.filter(a => a.assignedDate >= cutoffDate);
+    const assigned = recentAssignments.length;
+    // Assuming we don't have detailed submission tracking per assignment easily here, we mock the completion relatively based on studentPerformance
+    const completionRate = studentPerformance?.assignmentPercentage || 0;
+    const completed = Math.round((completionRate / 100) * assigned);
+    return {
+      assigned,
+      completed,
+      onTime: completed, // Assuming on time for simplicity
       late: 0,
-      total: 5,
-    },
-    homeworkSummary: {
-      assigned: 12,
-      completed: 11,
-      onTime: 10,
-      late: 1,
-      pending: 1,
-      completionRate: 92,
-    },
-    performanceBySubject: [
-      { subject: 'Mathematics', quizzes: 2, avgScore: 90, trend: 'improving' as const },
-      { subject: 'Science', quizzes: 2, avgScore: 85, trend: 'improving' as const },
-      { subject: 'English', quizzes: 2, avgScore: 88, trend: 'steady' as const },
-      { subject: 'Social Studies', quizzes: 1, avgScore: 80, trend: 'steady' as const },
-      { subject: 'Hindi', quizzes: 1, avgScore: 70, trend: 'needs-attention' as const },
-    ],
-    skillGrowth: [
-      { skill: 'Problem Solving', currentLevel: 85, change: 7, subject: 'Mathematics' },
-      { skill: 'Critical Thinking', currentLevel: 80, change: 5, subject: 'Science' },
-      { skill: 'Reading Comprehension', currentLevel: 88, change: 0, subject: 'English' },
-      { skill: 'Written Expression', currentLevel: 82, change: -3, subject: 'English' },
-    ],
-    highlights: [
-      'Excellent performance in Mathematics - scored 90% average',
-      'Perfect attendance this week',
-      'Showing improvement in Science concepts',
-      'Need to focus on Hindi grammar exercises',
-    ],
-    teacherComments: [
-      { subject: 'Mathematics', comment: 'Aarav shows strong understanding of quadratic equations' },
-      { subject: 'English', comment: 'Great participation in literature discussions' },
-    ],
+      pending: assigned - completed,
+      completionRate: assigned > 0 ? completionRate : 100,
+    };
   };
 
-  // Monthly Report Data (Last 30 days)
-  const monthlyReportData = {
-    period: 'February 2024',
-    attendanceSummary: {
-      present: 18,
-      absent: 1,
-      late: 1,
-      total: 20,
-    },
-    homeworkSummary: {
-      assigned: 45,
-      completed: 42,
-      onTime: 38,
-      late: 4,
-      pending: 3,
-      completionRate: 93,
-    },
-    performanceBySubject: [
-      { subject: 'Mathematics', quizzes: 8, avgScore: 88, trend: 'improving' as const },
-      { subject: 'Science', quizzes: 7, avgScore: 82, trend: 'improving' as const },
-      { subject: 'English', quizzes: 6, avgScore: 85, trend: 'steady' as const },
-      { subject: 'Social Studies', quizzes: 5, avgScore: 78, trend: 'steady' as const },
-      { subject: 'Hindi', quizzes: 4, avgScore: 72, trend: 'needs-attention' as const },
-      { subject: 'Computer Science', quizzes: 3, avgScore: 92, trend: 'improving' as const },
-    ],
-    skillGrowth: [
-      { skill: 'Problem Solving', currentLevel: 85, change: 12, subject: 'Mathematics' },
-      { skill: 'Critical Thinking', currentLevel: 80, change: 8, subject: 'Science' },
-      { skill: 'Reading Comprehension', currentLevel: 88, change: 2, subject: 'English' },
-      { skill: 'Written Expression', currentLevel: 82, change: -5, subject: 'English' },
-      { skill: 'Analytical Skills', currentLevel: 76, change: 6, subject: 'Social Studies' },
-      { skill: 'Grammar & Syntax', currentLevel: 68, change: -3, subject: 'Hindi' },
-    ],
-    highlights: [
-      'Strong month overall with 90% attendance',
-      'Consistent improvement in Mathematics and Science',
-      'Computer Science remains strongest subject',
-      'Need additional support in Hindi',
-      'Homework completion rate is excellent at 93%',
-    ],
-    teacherComments: [
-      { subject: 'Mathematics', comment: 'Excellent progress in algebra. Keep up the good work!' },
-      { subject: 'Science', comment: 'Shows curiosity and asks thoughtful questions' },
-      { subject: 'Hindi', comment: 'Needs regular practice in grammar. Please encourage reading Hindi books at home.' },
-    ],
-    areasOfImprovement: [
-      {
-        subject: 'Hindi',
-        currentScore: 72,
-        suggestions: [
-          'Practice grammar exercises daily for 15 minutes',
-          'Read one Hindi story book per week',
-          'Watch Hindi educational videos to improve vocabulary',
-        ],
+  // Generate Report Data Dynamically
+  const weeklyReportData = useMemo(() => {
+    const hwStats = calculateAssignmentStats(7);
+    return {
+      period: 'Last 7 Days',
+      attendanceSummary: {
+        present: attendanceStats?.present || 0,
+        absent: attendanceStats?.absent || 0,
+        late: attendanceStats?.late || 0,
+        total: attendanceStats?.total || 0,
       },
-      {
-        subject: 'Written Expression',
-        currentScore: 82,
-        suggestions: [
-          'Maintain a daily journal',
-          'Practice essay writing on diverse topics',
-          'Review and edit written work before submission',
-        ],
-      },
-    ],
-  };
+      homeworkSummary: hwStats,
+      performanceBySubject: progressData, // Reusing progress data
+      skillGrowth: [], // Kept empty or static as it's a very advanced feature not currently in the data model
+      highlights: [
+        `Attendance is at ${attendanceStats?.percentage || 0}%`,
+        `Completed ${hwStats.completed} assignments recently.`
+      ],
+      teacherComments: [],
+    };
+  }, [attendanceStats, assignments, progressData, studentPerformance]);
 
-  // AI Discussion Suggestions
+  const monthlyReportData = useMemo(() => {
+    const hwStats = calculateAssignmentStats(30);
+    return {
+      period: 'Last 30 Days',
+      attendanceSummary: {
+        present: attendanceStats?.present || 0,
+        absent: attendanceStats?.absent || 0,
+        late: attendanceStats?.late || 0,
+        total: attendanceStats?.total || 0,
+      },
+      homeworkSummary: hwStats,
+      performanceBySubject: progressData,
+      skillGrowth: [],
+      highlights: [
+        `Monthly attendance: ${attendanceStats?.percentage || 0}%`,
+        `Overall Exam Score: ${studentPerformance?.examPercentage || 0}%`
+      ],
+      teacherComments: [],
+      areasOfImprovement: progressData
+        .filter(p => p.averageScore < 70)
+        .map(p => ({
+          subject: p.subject,
+          currentScore: p.averageScore,
+          suggestions: [`Review upcoming lessons for ${p.subject}`, `Practice more past assignments.`]
+        }))
+    };
+  }, [attendanceStats, assignments, progressData, studentPerformance]);
+
   // AI Discussion Suggestions derived from todays lessons
   const aiDiscussionSuggestions: AIDiscussionSuggestion[] = lessons
     .filter(l => l.date === todayDate)
@@ -419,21 +341,6 @@ export function ParentDashboardNew() {
       encouragementTip: `Excellent work participating in the ${l.subject} class!`,
       difficulty: 'moderate' as const,
     }));
-
-  // Fallback to static suggestions if no lessons today
-  if (aiDiscussionSuggestions.length === 0) {
-    aiDiscussionSuggestions.push({
-      id: 'demo-ai-1',
-      subject: 'Mathematics',
-      topic: 'Quadratic Equations',
-      recentLesson: 'Solving quadratic equations by factorization',
-      conversationStarter: 'I heard you learned about quadratic equations today! Can you explain what makes an equation "quadratic"?',
-      keyQuestions: ['Can you show me how to solve a simple quadratic equation?'],
-      realLifeConnection: 'Quadratic equations are used in calculating areas of land and video game physics.',
-      encouragementTip: 'Praise his understanding and encourage him to keep practicing.',
-      difficulty: 'moderate',
-    });
-  }
 
   const renderReports = () => {
     const reportData = selectedReportPeriod === 'weekly' ? weeklyReportData : monthlyReportData;
@@ -629,19 +536,19 @@ export function ParentDashboardNew() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl text-gray-900">{subject.avgScore}%</p>
-                    <p className="text-gray-600 text-sm">{subject.quizzes} quizzes</p>
+                    <p className="text-2xl text-gray-900">{subject.averageScore}%</p>
+                    <p className="text-gray-600 text-sm">{subject.totalQuizzes} quizzes</p>
                   </div>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div
-                    className={`h-3 rounded-full ${subject.avgScore >= 80
+                    className={`h-3 rounded-full ${subject.averageScore >= 80
                       ? 'bg-green-600'
-                      : subject.avgScore >= 60
+                      : subject.averageScore >= 60
                         ? 'bg-blue-600'
                         : 'bg-orange-600'
                       }`}
-                    style={{ width: `${subject.avgScore}%` }}
+                    style={{ width: `${subject.averageScore}%` }}
                   ></div>
                 </div>
               </div>
@@ -650,58 +557,60 @@ export function ParentDashboardNew() {
         </div>
 
         {/* Skill Growth Analysis */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-600" />
-            Skill Growth Analysis
-          </h3>
-          <div className="space-y-4">
-            {reportData.skillGrowth.map((skill) => (
-              <div key={skill.skill} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h4 className="text-gray-900 mb-1">{skill.skill}</h4>
-                    <p className="text-gray-600 text-sm">{skill.subject}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-2xl text-gray-900">{skill.currentLevel}%</p>
-                      <div className="flex items-center gap-1">
-                        {skill.change > 0 ? (
-                          <>
-                            <TrendingUp className="w-4 h-4 text-green-600" />
-                            <span className="text-green-600 text-sm">+{skill.change}%</span>
-                          </>
-                        ) : skill.change < 0 ? (
-                          <>
-                            <TrendingDown className="w-4 h-4 text-red-600" />
-                            <span className="text-red-600 text-sm">{skill.change}%</span>
-                          </>
-                        ) : (
-                          <>
-                            <Minus className="w-4 h-4 text-gray-600" />
-                            <span className="text-gray-600 text-sm">No change</span>
-                          </>
-                        )}
+        {reportData.skillGrowth && reportData.skillGrowth.length > 0 && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-600" />
+              Skill Growth Analysis
+            </h3>
+            <div className="space-y-4">
+              {(reportData.skillGrowth as any[]).map((skill: any) => (
+                <div key={skill.skill} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="text-gray-900 mb-1">{skill.skill}</h4>
+                      <p className="text-gray-600 text-sm">{skill.subject}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-2xl text-gray-900">{skill.currentLevel}%</p>
+                        <div className="flex items-center gap-1">
+                          {skill.change > 0 ? (
+                            <>
+                              <TrendingUp className="w-4 h-4 text-green-600" />
+                              <span className="text-green-600 text-sm">+{skill.change}%</span>
+                            </>
+                          ) : skill.change < 0 ? (
+                            <>
+                              <TrendingDown className="w-4 h-4 text-red-600" />
+                              <span className="text-red-600 text-sm">{skill.change}%</span>
+                            </>
+                          ) : (
+                            <>
+                              <Minus className="w-4 h-4 text-gray-600" />
+                              <span className="text-gray-600 text-sm">No change</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full ${skill.change > 0
+                        ? 'bg-green-600'
+                        : skill.change < 0
+                          ? 'bg-orange-600'
+                          : 'bg-blue-600'
+                        }`}
+                      style={{ width: `${skill.currentLevel}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className={`h-3 rounded-full ${skill.change > 0
-                      ? 'bg-green-600'
-                      : skill.change < 0
-                        ? 'bg-orange-600'
-                        : 'bg-blue-600'
-                      }`}
-                    style={{ width: `${skill.currentLevel}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Highlights */}
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -720,25 +629,27 @@ export function ParentDashboardNew() {
         </div>
 
         {/* Teacher Comments */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-blue-600" />
-            Teacher Comments
-          </h3>
-          <div className="space-y-3">
-            {reportData.teacherComments.map((comment, idx) => (
-              <div key={idx} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-start gap-3">
-                  <MessageSquare className="w-5 h-5 text-blue-600 flex-shrink-0 mt-1" />
-                  <div>
-                    <p className="text-blue-900 font-medium mb-1">{comment.subject}</p>
-                    <p className="text-gray-700">{comment.comment}</p>
+        {reportData.teacherComments && reportData.teacherComments.length > 0 && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-blue-600" />
+              Teacher Comments
+            </h3>
+            <div className="space-y-3">
+              {(reportData.teacherComments as any[]).map((comment: any, idx: number) => (
+                <div key={idx} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="w-5 h-5 text-blue-600 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-blue-900 font-medium mb-1">{comment.subject}</p>
+                      <p className="text-gray-700">{comment.comment}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Areas of Improvement (Monthly only) */}
         {selectedReportPeriod === 'monthly' && monthlyReportData.areasOfImprovement && (
@@ -1370,8 +1281,7 @@ export function ParentDashboardNew() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {feeRecords
-                  .filter((f) => f.status === 'paid')
+                {paidFees
                   .map((fee) => (
                     <tr key={fee.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-gray-900">{fee.feeHead}</td>
@@ -1420,17 +1330,13 @@ export function ParentDashboardNew() {
                 <div
                   className={`w-10 h-10 rounded-lg flex items-center justify-center ${notification.type === 'attendance'
                     ? 'bg-green-100'
-                    : notification.type === 'progress'
-                      ? 'bg-blue-100'
-                      : notification.type === 'fee'
-                        ? 'bg-orange-100'
-                        : 'bg-purple-100'
+                    : notification.type === 'fee'
+                      ? 'bg-orange-100'
+                      : 'bg-purple-100'
                     }`}
                 >
                   {notification.type === 'attendance' ? (
                     <CheckCircle className="w-5 h-5 text-green-600" />
-                  ) : notification.type === 'progress' ? (
-                    <TrendingUp className="w-5 h-5 text-blue-600" />
                   ) : notification.type === 'fee' ? (
                     <DollarSign className="w-5 h-5 text-orange-600" />
                   ) : (

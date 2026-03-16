@@ -9,7 +9,22 @@ import { SuperAdminDashboardPage } from '../pages/super-admin/SuperAdminDashboar
 import { SchoolAdminDashboardPage } from '../pages/school-admin/SchoolAdminDashboardPage';
 import { TeacherDashboardPage } from '../pages/teacher/TeacherDashboardPage';
 import { ParentDashboardPage } from '../pages/parent/ParentDashboardPage';
-import { StudentDashboardPage } from '../pages/student/StudentDashboardPage';
+// Student Dashboard
+import StudentLayout from '../layouts/StudentLayout';
+import { Dashboard as StudentDashboard } from '../pages/student/StudentDashboardPage';
+import { SchedulePage as StudentTasks } from '../pages/student/StudentTasks';
+import { QuizSelectionPage as StudentQuizzes } from '../pages/student/StudentQuizzes';
+import { ProgressPage as StudentProgress } from '../pages/student/StudentProgress';
+import { ProfilePage as StudentProfile } from '../pages/student/StudentProfile';
+import { HomePage as StudentHome } from '../pages/student/HomePage';
+import { SettingsPage as StudentSettings } from '../pages/student/SettingsPage';
+import { TimelinePage as StudentTimeline } from '../pages/student/TimelinePage';
+import { SubjectDetailPage } from '../pages/student/SubjectDetailPage';
+import { TopicDetailPage } from '../pages/student/TopicDetailPage';
+import { FlashcardsPage } from '../pages/student/FlashcardsPage';
+import { ObjectiveQuestionsPage } from '../pages/student/ObjectiveQuestionsPage';
+import { QuizPage } from '../pages/student/QuizPage';
+import { ReviewMistakesPage } from '../pages/student/ReviewMistakesPage';
 
 // =============================================================================
 // Unauthorized page (inline — simple enough)
@@ -86,7 +101,26 @@ const router = createBrowserRouter([
             {
                 element: <RoleRoute allowedRoles={['student']} />,
                 children: [
-                    { path: '/student/dashboard', element: <StudentDashboardPage /> },
+                    {
+                        element: <StudentLayout />,
+                        children: [
+                            { path: '/student/dashboard', element: <StudentDashboard /> },
+                            { path: '/student/tasks', element: <StudentTasks /> },
+                            { path: '/student/quizzes', element: <StudentQuizzes /> },
+                            { path: '/student/profile', element: <StudentProfile /> },
+                            { path: '/homework', element: <StudentHome /> },
+                            { path: '/schedule', element: <StudentTasks /> },
+                            { path: '/analytics', element: <StudentProgress /> },
+                            { path: '/settings', element: <StudentSettings /> },
+                            { path: '/timeline', element: <StudentTimeline /> },
+                            { path: '/subject-detail/:id', element: <SubjectDetailPage /> },
+                            { path: '/homework/:topicId', element: <TopicDetailPage /> },
+                            { path: '/flashcards/:topicId', element: <FlashcardsPage /> },
+                            { path: '/objective-questions/:topicId', element: <ObjectiveQuestionsPage /> },
+                            { path: '/quiz', element: <QuizPage /> },
+                            { path: '/review-mistakes/:topicId', element: <ReviewMistakesPage /> },
+                        ]
+                    }
                 ],
             },
         ],
