@@ -17,7 +17,8 @@ import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
-import { homeworkTopics, todaysClasses, studentData } from "@/data/studentMockData";
+import { type HomeworkTopic } from "@/data/studentMockData";
+import { HomeworkService, TodaysClasses, StudentProfile, Flashcards as FlashcardService } from "@/services/student/studentDataService";
 import { aiService } from "@/services/aiService";
 
 export function FlashcardsPage() {
@@ -27,9 +28,14 @@ export function FlashcardsPage() {
   
   const source = location.state?.source || 'homework';
   
-  // Find data from either todaysClasses or homeworkTopics
-  const classItem = todaysClasses.find((c) => c.id === Number(topicId));
-  const homeworkTopic = homeworkTopics.find((t) => t.id === Number(topicId));
+  // Dynamic data from localStorage
+  const allClasses = TodaysClasses.getAll();
+  const allHomeworkTopics = HomeworkService.getAll();
+  const studentData = StudentProfile.get();
+  
+  // Find data from either classes or homework topics
+  const classItem = allClasses.find((c: any) => c.id === Number(topicId));
+  const homeworkTopic = allHomeworkTopics.find((t) => t.id === Number(topicId));
   
   // Use subject from classItem or homeworkTopic
   const decodedSubject = classItem?.subject || homeworkTopic?.subject || "";
@@ -42,7 +48,7 @@ export function FlashcardsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Find the corresponding homework topic for navigation
-  const currentTopic = homeworkTopic || homeworkTopics.find((t) => t.subject === decodedSubject);
+  const currentTopic = homeworkTopic || allHomeworkTopics.find((t) => t.subject === decodedSubject);
 
   useEffect(() => {
     async function loadFlashcards() {
@@ -80,19 +86,20 @@ export function FlashcardsPage() {
   // Save completion status to localStorage when all cards are reviewed
   useEffect(() => {
     if (allCardsReviewed && currentTopic) {
-      localStorage.setItem(
-        `flashcard_completed_${currentTopic.id}`,
-        JSON.stringify({
-          completed: true,
-          progress: 100,
-          knownCards: knownCards.length,
-          reviewCards: reviewCards.length,
-          timestamp: new Date().toISOString(),
-        })
-      );
-      console.log("Flashcards completed! Saved to localStorage:", currentTopic.id);
+      const progressValue = 100;
+      
+      // Update central homework service
+      HomeworkService.updateFlashcardProgress(currentTopic.id, progressValue);
+      
+      // Also save individual card progress if needed
+      if (decodedSubject) {
+        knownCards.forEach(id => FlashcardService.markMastered(decodedSubject, id));
+        reviewCards.forEach(id => FlashcardService.markViewed(decodedSubject, id));
+      }
+
+      console.log(`Flashcards completed for topic ${currentTopic.id}! Progress updated via HomeworkService.`);
     }
-  }, [allCardsReviewed, currentTopic, knownCards.length, reviewCards.length]);
+  }, [allCardsReviewed, currentTopic, knownCards.length, reviewCards.length, decodedSubject]);
 
   if (isLoading) {
     return (
@@ -185,10 +192,12 @@ export function FlashcardsPage() {
     <div className="min-h-screen bg-[#FAFBFF] pb-24">
       {/* Header */}
       <div 
-        className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2.5rem] shadow-xl relative overflow-hidden mb-8"
+        className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2.5rem] shadow-xl relative mb-8"
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2.5rem]">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        </div>
         <div className="max-w-4xl mx-auto relative z-10">
           <Button
             variant="ghost"
@@ -200,18 +209,20 @@ export function FlashcardsPage() {
             Back
           </Button>
 
-          <div className="flex items-center justify-between mb-6">
-            <div>
+          <div className="flex items-center justify-between mb-6 relative">
+            <div className="flex-1">
               <h1 className="text-3xl font-bold tracking-tight mb-1">{decodedSubject}</h1>
               <div className="flex items-center gap-2 text-white/80">
                 <Sparkles className="w-4 h-4 text-blue-400" />
                 <p className="text-sm font-medium">AI-Generated Flashcards</p>
               </div>
             </div>
-            <Badge className="bg-white/15 backdrop-blur-md text-white border-white/20 px-4 py-2 rounded-xl text-sm font-semibold">
-              <BookOpen className="w-4 h-4 mr-2" />
-              {flashcards.length} Cards
-            </Badge>
+            <div className="flex items-center gap-3">
+              <Badge className="bg-white/15 backdrop-blur-md text-white border-white/20 px-4 py-2 rounded-xl text-sm font-semibold">
+                <BookOpen className="w-4 h-4 mr-2" />
+                {flashcards.length} Cards
+              </Badge>
+            </div>
           </div>
 
           <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10">

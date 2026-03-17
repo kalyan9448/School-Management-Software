@@ -13,7 +13,7 @@ import {
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
-import { objectiveQuestions, homeworkTopics } from "@/data/studentMockData";
+import { HomeworkService, ObjectiveQuestions } from "@/services/student/studentDataService";
 
 interface SavedAnswer {
   questionId: number;
@@ -30,6 +30,7 @@ interface QuizData {
   timestamp: string;
   answers?: SavedAnswer[];
   questionIds?: number[];
+  questions?: any[]; // Added this
 }
 
 export function ReviewMistakesPage() {
@@ -37,10 +38,10 @@ export function ReviewMistakesPage() {
   const location = useLocation();
   const { topicId } = useParams<{ topicId: string }>();
 
-  // Get quiz data from localStorage
-  const quizDataString = localStorage.getItem(`questions_completed_${topicId}`);
+  // Get quiz data from our centralized service
+  const quizData = HomeworkService.getDetailedResults(Number(topicId)) as QuizData | undefined;
   
-  if (!quizDataString) {
+  if (!quizData) {
     return (
       <div className="min-h-screen bg-[#FAFBFF] flex items-center justify-center p-4">
         <Card className="p-8 text-center max-w-md">
@@ -60,25 +61,27 @@ export function ReviewMistakesPage() {
     );
   }
 
-  const quizData: QuizData = JSON.parse(quizDataString);
-  const topic = homeworkTopics.find((t) => t.id === Number(topicId));
-
-  // Get the questions and answers
-  const savedAnswers = quizData.answers || [];
-  const questionIds = quizData.questionIds || [];
-
+  // Find the target topic
+  const allHomeworkTopics = HomeworkService.getAll();
+  const topic = allHomeworkTopics.find((t) => t.id === Number(topicId));
+  
   // Get the actual question objects
-  const reviewQuestions = questionIds
-    .map((qId) => objectiveQuestions.find((q) => q.id === qId))
-    .filter((q) => q !== undefined);
-
-  // Get only the wrong answers
+  const allObjectiveQuestions = ObjectiveQuestions.getAll();
+  const savedAnswers = quizData.answers || [];
+  const savedQuestions = quizData.questions || [];
+  
   const wrongAnswers = savedAnswers
-    .map((answer, index) => ({
-      question: reviewQuestions[index],
-      savedAnswer: answer,
-    }))
-    .filter((item) => item.question && !item.savedAnswer.isCorrect);
+    .filter(ans => !ans.isCorrect)
+    .map(ans => {
+      // Look in saved questions first, then fallback to global questions
+      const questionFound = savedQuestions.find(q => q.id === ans.questionId) || 
+                           allObjectiveQuestions.find(q => q.id === ans.questionId);
+      return {
+        question: questionFound,
+        savedAnswer: ans
+      };
+    })
+    .filter(item => item.question !== undefined);
 
   const wrongCount = wrongAnswers.length;
   const correctCount = quizData.correctAnswers;
@@ -88,10 +91,12 @@ export function ReviewMistakesPage() {
     <div className="min-h-screen bg-[#FAFBFF] pb-24">
       {/* Header */}
       <div 
-        className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2.5rem] shadow-xl relative overflow-hidden sticky top-0 z-20"
+        className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2.5rem] shadow-xl relative sticky top-0 z-20"
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2.5rem]">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        </div>
         <div className="max-w-4xl mx-auto relative z-10">
           <Button
             variant="ghost"
@@ -104,14 +109,14 @@ export function ReviewMistakesPage() {
           </Button>
 
           <div className="flex items-center justify-between mb-2">
-            <div>
+            <div className="flex-1">
               <h1 className="text-3xl font-bold tracking-tight mb-1">Review Mistakes</h1>
               <div className="flex items-center gap-2 text-white/80">
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
                 <p className="text-sm md:text-base font-semibold">{topic?.subject} • {topic?.topic}</p>
               </div>
             </div>
-            <div className="text-right">
+            <div className="flex items-center gap-4">
               <div className="bg-white/15 backdrop-blur-md rounded-2xl px-6 py-3 border border-white/20 shadow-xl">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1">Final Score</p>
                 <p className="text-3xl font-black">{quizData.accuracy}%</p>
@@ -268,7 +273,7 @@ export function ReviewMistakesPage() {
 
                     {/* Options */}
                     <div className="space-y-4 mb-6">
-                      {question.options.map((option, optionIndex) => {
+                      {question.options.map((option: string, optionIndex: number) => {
                         const isCorrectOption = optionIndex === question.correctAnswer;
                         const wasSelected = optionIndex === savedAnswer.selectedAnswer;
 

@@ -26,17 +26,21 @@ import { Progress } from "@/components/student/ui/progress";
 import { Badge } from "@/components/student/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/student/ui/avatar";
 import {
-  studentData,
-  motivationalQuotes,
-  todaysClasses,
-  pendingTasks,
-  learningGoals,
-  dailyTasksBySubject,
-  homeworkTopics,
+  type HomeworkTopic,
 } from "@/data/studentMockData";
+import {
+  StudentProfile,
+  Quotes,
+  TodaysClasses,
+  PendingTasks,
+  LearningGoals,
+  DailyTasks,
+  HomeworkService,
+} from "@/services/student/studentDataService";
 import { useNavigate } from "react-router";
 import { WelcomeBanner } from "@/components/student/modules/WelcomeBanner";
 import { NotificationCenter } from "@/components/student/NotificationCenter";
+import { UserMenu } from "@/components/student/UserMenu";
 
 const iconMap: Record<string, any> = {
   calculator: Calculator,
@@ -61,6 +65,16 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [showDueToday, setShowDueToday] = useState(true);
   const [taskCompletionState, setTaskCompletionState] = useState<Record<number, boolean>>({});
+
+  // ── Dynamic data from localStorage ──
+  const [studentInfo] = useState(() => StudentProfile.get());
+  const [allPendingTasks, setAllPendingTasks] = useState(() => PendingTasks.getAll());
+  const [allClasses] = useState(() => TodaysClasses.getAll());
+  const [goals, setGoals] = useState(() => LearningGoals.getAll());
+  const [dailyTasksBySubject, setDailyTasksBySubject] = useState(() => DailyTasks.getAll());
+  const [hwTopics] = useState(() => HomeworkService.getAll());
+  const [quote] = useState(() => Quotes.getRandom());
+
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -72,11 +86,10 @@ export function Dashboard() {
       : new Date().getHours() < 18
         ? "Good afternoon"
         : "Good evening";
-  const quote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
 
   const filteredTasks = showDueToday
-    ? pendingTasks.filter((task) => task.dueDate === "Today")
-    : pendingTasks;
+    ? allPendingTasks.filter((task: any) => task.dueDate === "Today")
+    : allPendingTasks;
 
   return (
     <div className="min-h-screen bg-[#FAFBFF]">
@@ -85,18 +98,38 @@ export function Dashboard() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
-        className="text-white p-6 md:p-10 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative overflow-hidden"
+        className="text-white p-6 md:p-10 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative"
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+        {/* Decorative Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2rem] md:rounded-b-[3rem]">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+        </div>
+
         <div className="max-w-screen-xl mx-auto relative z-10">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-start justify-between mb-6 relative">
+            {/* Left: greeting + date */}
             <div className="flex-1">
               <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2 tracking-tight">
-                {greeting}, {studentData.name.split(" ")[0]}! 👋
+                {greeting}, {studentInfo.name.split(" ")[0]}! 👋
               </h1>
               <div className="flex items-center gap-2 text-white/80">
                 <Calendar className="w-4 h-4" />
                 <span className="text-sm font-medium">{today}</span>
+              </div>
+            </div>
+
+            {/* Right: notification bell + profile avatar */}
+            <div className="flex items-center gap-2 -mt-1" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' }}>
+              <div style={{
+                '--usermenu-icon-color': '#fff',
+              } as React.CSSProperties} className="usermenu-banner">
+                <style>{`
+                  .usermenu-banner button.usermenu-trigger { color: white !important; }
+                  .usermenu-banner button.usermenu-trigger:hover { background: rgba(255,255,255,0.15) !important; }
+                  .usermenu-banner button.usermenu-trigger svg { color: white !important; stroke: white !important; }
+                  .usermenu-banner .usermenu-trigger span { pointer-events: none; }
+                `}</style>
+                <UserMenu />
               </div>
             </div>
           </div>
@@ -114,12 +147,12 @@ export function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xl font-bold text-gray-900">Today's Classes</h2>
-            <Badge variant="secondary">{todaysClasses.length} classes</Badge>
+            <Badge variant="secondary">{allClasses.length} classes</Badge>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {todaysClasses && todaysClasses.length > 0 ? (
-              todaysClasses.map((classItem, index) => {
+            {allClasses && allClasses.length > 0 ? (
+              allClasses.map((classItem: any, index: number) => {
                 const Icon = iconMap[classItem.icon];
                 return (
                   <motion.div
@@ -142,7 +175,7 @@ export function Dashboard() {
                             <span className="text-sm text-gray-500">{classItem.time}</span>
                           </div>
                           <div className="flex flex-wrap gap-2 mb-2">
-                            {classItem.topics && classItem.topics.length > 0 && classItem.topics.map((topic, i) => (
+                            {classItem.topics && classItem.topics.length > 0 && classItem.topics.map((topic: any, i: number) => (
                               <Badge key={i} variant="outline" className="text-xs">
                                 {topic}
                               </Badge>
@@ -169,7 +202,7 @@ export function Dashboard() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xl font-bold text-gray-900">Homework - Topics of the Day</h2>
             <Badge variant="secondary">
-              {homeworkTopics.length} subjects
+              {hwTopics.length} subjects
             </Badge>
           </div>
 
@@ -177,7 +210,7 @@ export function Dashboard() {
             {dailyTasksBySubject && dailyTasksBySubject.length > 0 ? (
               dailyTasksBySubject.map((subjectData, subjectIndex) => {
                 const SubjectIcon = iconMap[subjectData.icon];
-                const homeworkTopic = homeworkTopics.find(ht => ht.subject === subjectData.subject);
+                const homeworkTopic = hwTopics.find((ht: any) => ht.subject === subjectData.subject);
 
                 return (
                   <motion.div
@@ -370,8 +403,8 @@ export function Dashboard() {
 
             <Card className="p-5">
               <div className="space-y-4">
-                {learningGoals && learningGoals.length > 0 ? (
-                  learningGoals.map((goal, index) => {
+                {goals && goals.length > 0 ? (
+                  goals.map((goal: any, index: number) => {
                     const Icon = iconMap[goal.icon];
                     const progress = (goal.current / goal.target) * 100;
                     const isComplete = goal.current >= goal.target;
@@ -408,7 +441,7 @@ export function Dashboard() {
                   </div>
                 )}
               </div>
-              {learningGoals && learningGoals.every((g) => g.current >= g.target) && (
+              {goals && goals.every((g: any) => g.current >= g.target) && (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}

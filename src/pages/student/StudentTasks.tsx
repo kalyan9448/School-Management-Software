@@ -21,7 +21,8 @@ import {
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
-import { calendarEvents, type CalendarEvent } from "@/data/studentMockData";
+import { type CalendarEvent } from "@/data/studentMockData";
+import { CalendarService } from "@/services/student/studentDataService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -80,6 +81,9 @@ const TYPE_DOT_COLOR: Record<string, string> = {
 export function SchedulePage() {
   const navigate = useNavigate();
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+
+  // Dynamic data from localStorage
+  const [calendarEvents] = useState<CalendarEvent[]>(() => CalendarService.getAll());
 
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [currentDate, setCurrentDate] = useState(today);
@@ -308,15 +312,17 @@ export function SchedulePage() {
                 {today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToToday}
-              className="text-white hover:bg-white/10 border border-white/20"
-            >
-              <CalendarIcon className="w-4 h-4 mr-2" />
-              Today
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goToToday}
+                className="text-white hover:bg-white/10 border border-white/20"
+              >
+                <CalendarIcon className="w-4 h-4 mr-2" />
+                Today
+              </Button>
+            </div>
           </div>
 
           {/* Quick stats grid */}

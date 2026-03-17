@@ -69,7 +69,7 @@ export const generateHomeworkReminders = (): Notification[] => {
         id: generateId(),
         type: "homework",
         title: `Complete ${classItem.subject} Homework`,
-        message: `You have pending homework for "${classItem.topicDetails?.mainTopic || classItem.topics[0]}". Complete flashcards and questions before the deadline.`,
+        message: `You have pending homework for "${classItem.topicDetails?.mainTopic || classItem.topics?.[0]}". Complete flashcards and questions before the deadline.`,
         timestamp: todayAt(8, 0),
         read: false,
         priority: "high",
@@ -84,7 +84,7 @@ export const generateHomeworkReminders = (): Notification[] => {
         id: generateId(),
         type: "reminder",
         title: `Upcoming Class: ${classItem.subject}`,
-        message: `Your ${classItem.subject} class with ${classItem.teacher} starts at ${classItem.time}. Topic: ${classItem.topicDetails?.mainTopic || classItem.topics[0]}`,
+        message: `Your ${classItem.subject} class with ${classItem.teacher} starts at ${classItem.time}. Topic: ${classItem.topicDetails?.mainTopic || classItem.topics?.[0]}`,
         timestamp: todayAt(7, 30),
         read: false,
         priority: "medium",
@@ -261,7 +261,7 @@ export const generateAllReminders = (): Notification[] => {
 
 // Check and update reminders (call this on app load)
 export const updateReminders = (): Notification[] => {
-  const existingNotifications = localStorage.getItem("notifications");
+  const existingNotifications = localStorage.getItem("student_notifications");
   const existing: Notification[] = existingNotifications
     ? JSON.parse(existingNotifications)
     : [];
@@ -281,7 +281,7 @@ export const updateReminders = (): Notification[] => {
   );
 
   // Save back to localStorage
-  localStorage.setItem("notifications", JSON.stringify(combined));
+  localStorage.setItem("student_notifications", JSON.stringify(combined));
 
   return combined;
 };
@@ -290,13 +290,13 @@ export const updateReminders = (): Notification[] => {
 export const initializeReminders = () => {
   const hasInitialized = localStorage.getItem("reminders_initialized");
   // Always regenerate if stored data has stale (pre-2026-03) timestamps
-  const storedData = localStorage.getItem("notifications");
+  const storedData = localStorage.getItem("student_notifications");
   const isStale = storedData && storedData.includes("2026-02-2");
 
   if (!hasInitialized || isStale) {
     // First time or stale data - generate all reminders fresh
     const reminders = generateAllReminders();
-    localStorage.setItem("notifications", JSON.stringify(reminders));
+    localStorage.setItem("student_notifications", JSON.stringify(reminders));
     localStorage.setItem("reminders_initialized", "true");
     localStorage.setItem("last_reminder_check", new Date().toISOString());
     return reminders;
@@ -312,7 +312,7 @@ export const initializeReminders = () => {
     }
   }
 
-  const existing = localStorage.getItem("notifications");
+  const existing = localStorage.getItem("student_notifications");
   return existing ? JSON.parse(existing) : [];
 };
 
@@ -333,7 +333,7 @@ export const addReminder = (
   priority: "high" | "medium" | "low",
   actionUrl?: string
 ): void => {
-  const notifications = localStorage.getItem("notifications");
+  const notifications = localStorage.getItem("student_notifications");
   const existing: Notification[] = notifications ? JSON.parse(notifications) : [];
 
   const newNotification: Notification = {
@@ -349,12 +349,12 @@ export const addReminder = (
   };
 
   existing.unshift(newNotification);
-  localStorage.setItem("notifications", JSON.stringify(existing));
+  localStorage.setItem("student_notifications", JSON.stringify(existing));
 };
 
 // Clear old notifications (older than 30 days)
 export const clearOldNotifications = (): void => {
-  const notifications = localStorage.getItem("notifications");
+  const notifications = localStorage.getItem("student_notifications");
   if (!notifications) return;
 
   const existing: Notification[] = JSON.parse(notifications);
@@ -365,5 +365,5 @@ export const clearOldNotifications = (): void => {
     (n) => new Date(n.timestamp) > thirtyDaysAgo
   );
 
-  localStorage.setItem("notifications", JSON.stringify(filtered));
+  localStorage.setItem("student_notifications", JSON.stringify(filtered));
 };

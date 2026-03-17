@@ -449,11 +449,10 @@ const initializeData = () => {
   if (!localStorage.getItem('app_users') || JSON.parse(localStorage.getItem('app_users') || '[]').length === 0) {
     const demoUsers: User[] = [
       { id: '0', email: 'superadmin@platform.com', name: 'Super Admin', role: 'superadmin', isFirstLogin: false },
-      { id: '1', email: 'admin@school.com', name: 'Admin User', role: 'admin', isFirstLogin: false },
-      { id: '3', email: 'teacher@school.com', name: 'John Teacher', role: 'teacher', isFirstLogin: false },
-      { id: '4', email: 'accountant@school.com', name: 'Fee Manager', role: 'accountant', isFirstLogin: false },
-      { id: '5', email: 'parent@school.com', name: 'Parent User', role: 'parent', isFirstLogin: false },
-      { id: '6', email: 'student@school.com', name: 'Aarav Sharma', role: 'student', isFirstLogin: false },
+      { id: '1', email: 'admin@school.com', name: 'Admin User', role: 'admin', isFirstLogin: false, school_id: 'SCHOOL001' },
+      { id: '3', email: 'teacher@school.com', name: 'John Teacher', role: 'teacher', isFirstLogin: false, school_id: 'SCHOOL001' },
+      { id: '5', email: 'parent@school.com', name: 'Parent User', role: 'parent', isFirstLogin: false, school_id: 'SCHOOL001' },
+      { id: '6', email: 'student@school.com', name: 'Aarav Sharma', role: 'student', isFirstLogin: false, school_id: 'SCHOOL001' },
     ];
     localStorage.setItem('app_users', JSON.stringify(demoUsers));
   }

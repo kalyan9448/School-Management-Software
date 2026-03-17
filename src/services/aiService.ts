@@ -5,7 +5,7 @@
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+const DEFAULT_MODEL = 'llama-3.1-8b-instant';
 
 interface GroqMessage {
     role: 'system' | 'user' | 'assistant';
@@ -131,7 +131,7 @@ export const aiService = {
              return parsed.questions || [];
         } catch (error) {
              console.error("Failed to parse quiz:", error);
-             return [];
+             return getFallbackQuiz(subject, topic);
         }
     },
 
@@ -208,3 +208,85 @@ export const aiService = {
         return callGroq([{ role: 'user', content: text }]);
     },
 };
+
+/**
+ * Provides fallback questions when AI generation fails or is rate-limited.
+ */
+function getFallbackQuiz(subject: string, topic: string): any[] {
+    const fallbackMap: Record<string, any[]> = {
+        "Shakespearean Sonnets Analysis": [
+            {
+                question: "What is the standard structure of a Shakespearean sonnet?",
+                options: [
+                    "Three quatrains and a couplet",
+                    "Two octaves and a sestet",
+                    "Four tercets and a couplet",
+                    "A single 14-line stanza without breaks"
+                ],
+                correctAnswer: 0,
+                explanation: "A Shakespearean (or English) sonnet consists of 14 lines: three quatrains (4 lines each) followed by a final rhyming couplet.",
+                difficulty: "easy",
+                category: "Structure"
+            },
+            {
+                question: "Which rhyme scheme is characteristic of a Shakespearean sonnet?",
+                options: [
+                    "ABBA ABBA CDE CDE",
+                    "ABAB CDCD EFEF GG",
+                    "AABB CCDD EEFF GG",
+                    "ABAB BCBC CDCD EE"
+                ],
+                correctAnswer: 1,
+                explanation: "The Shakespearean sonnet follows the rhyme scheme ABAB CDCD EFEF GG.",
+                difficulty: "medium",
+                category: "Rhyme Scheme"
+            },
+            {
+                question: "What is the typical meter of Shakespeare's sonnets?",
+                options: [
+                    "Dactylic hexameter",
+                    "Anapestic tetrameter",
+                    "Iambic pentameter",
+                    "Trochaic octameter"
+                ],
+                correctAnswer: 2,
+                explanation: "Shakespeare's sonnets are almost exclusively written in iambic pentameter, which mimics the natural rhythm of English speech.",
+                difficulty: "easy",
+                category: "Meter"
+            }
+        ],
+        "Quadratic Equations": [
+            {
+                question: "What is the value of the discriminant in the quadratic formula?",
+                options: ["-b", "2a", "b² - 4ac", "√(b² - 4ac)"],
+                correctAnswer: 2,
+                explanation: "The discriminant is the part under the square root in the quadratic formula: b² - 4ac.",
+                difficulty: "easy",
+                category: "Formula"
+            }
+        ],
+        "Newton's Laws": [
+            {
+                question: "According to Newton's Second Law, force is equal to mass times what?",
+                options: ["Velocity", "Acceleration", "Inertia", "Energy"],
+                correctAnswer: 1,
+                explanation: "Newton's Second Law is expressed as F = ma, where a is acceleration.",
+                difficulty: "easy",
+                category: "Physics"
+            }
+        ]
+    };
+
+    // Return specific fallback or a generic set
+    return fallbackMap[topic] || [
+        {
+            question: `What is the primary focus of ${topic}?`,
+            options: ["Option A", "Option B", "Option C", "Option D"],
+            correctAnswer: 0,
+            explanation: `This is a fallback question for ${topic} in ${subject}.`,
+            difficulty: "easy",
+            category: "General"
+        }
+    ];
+}
+

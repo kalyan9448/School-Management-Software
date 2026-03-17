@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Calendar,
   BookOpen,
@@ -21,7 +22,7 @@ import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Input } from "@/components/student/ui/input";
 import { Avatar, AvatarFallback } from "@/components/student/ui/avatar";
-import { timelineEvents } from "@/data/studentMockData";
+import { TimelineService } from "@/services/student/studentDataService";
 
 
 const iconMap: Record<string, any> = {
@@ -47,10 +48,13 @@ const eventTypeIcons: Record<string, any> = {
 };
 
 export function TimelinePage() {
+  const navigate = useNavigate();
   const [filterType, setFilterType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredEvents = timelineEvents.filter((event) => {
+  const [allEvents] = useState(() => TimelineService.getAll());
+
+  const filteredEvents = allEvents.filter((event: any) => {
     const matchesType = filterType === "all" || event.type === filterType;
     const matchesSearch =
       searchQuery === "" ||
@@ -59,19 +63,27 @@ export function TimelinePage() {
     return matchesType && matchesSearch;
   });
 
-  const groupedEvents = filteredEvents.reduce((acc, event) => {
+  const groupedEvents = filteredEvents.reduce((acc: any, event: any) => {
     const date = event.date;
     if (!acc[date]) acc[date] = [];
     acc[date].push(event);
     return acc;
-  }, {} as Record<string, typeof timelineEvents>);
+  }, {} as Record<string, any[]>);
 
   return (
     <div className="min-h-screen pb-24" style={{ background: '#FAFBFF' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }} className="text-white p-6 rounded-b-3xl shadow-lg mb-6">
+      <div 
+        style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }} 
+        className="text-white p-6 rounded-b-3xl shadow-lg mb-6 relative"
+      >
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-3xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        </div>
         <div className="max-w-screen-xl mx-auto">
-          <h1 className="text-2xl font-bold mb-4">Learning Timeline</h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold">Learning Timeline</h1>
+          </div>
 
           {/* Search */}
           <div className="relative mb-4">
@@ -135,13 +147,13 @@ export function TimelinePage() {
         </div>
 
         {/* Timeline */}
-        <div className="relative">
+        <div className="max-w-screen-xl mx-auto px-4 md:px-6">
           {/* Vertical line */}
           <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gradient-to-b from-purple-200 to-blue-200" />
 
-          <div className="space-y-6">
-            {Object.entries(groupedEvents).map(([date, events], dateIndex) => (
-              <div key={date}>
+          <div className="space-y-8">
+            {Object.entries(groupedEvents).map(([date, events]: [string, any]) => (
+              <div key={date} className="relative">
                 {/* Date Header */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="bg-white rounded-full p-3 shadow-sm z-10 border-2 border-purple-200">
@@ -161,7 +173,7 @@ export function TimelinePage() {
 
                 {/* Events */}
                 <div className="space-y-4 ml-16">
-                  {events.map((event, eventIndex) => {
+                  {events.map((event: any, eventIndex: number) => {
                     const EventIcon = eventTypeIcons[event.type];
                     const SubjectIcon = event.icon ? iconMap[event.icon] : null;
 
@@ -188,23 +200,33 @@ export function TimelinePage() {
                                 </div>
                                 <h3 className="font-semibold text-gray-900 mb-2">{event.title}</h3>
                                 <div className="flex flex-wrap gap-2 mb-2">
-                                  {event.topics?.map((topic, i) => (
+                                  {event.topics?.map((topic: any, i: number) => (
                                     <Badge key={i} variant="secondary" className="text-xs">
                                       {topic}
                                     </Badge>
                                   ))}
                                 </div>
                                 <p className="text-sm text-gray-600">👨‍🏫 {event.teacher}</p>
-                                {event.objectives && (
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {event.objectives.map((obj, i) => (
-                                      <span key={i} className="text-xs text-gray-500">
-                                        • {obj}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                                 {event.objectives && (
+                                   <div className="mt-2 flex flex-wrap gap-2">
+                                     {event.objectives.map((obj: any, i: number) => (
+                                       <span key={i} className="text-xs text-gray-500">
+                                         • {obj}
+                                       </span>
+                                     ))}
+                                   </div>
+                                 )}
+                                 {event.topicId && (
+                                   <Button 
+                                     variant="outline" 
+                                     size="sm" 
+                                     className="mt-3"
+                                     onClick={() => navigate(`/student/homework/${event.topicId}`)}
+                                   >
+                                     View Topic
+                                   </Button>
+                                 )}
+                               </div>
                             </div>
                           </Card>
                         )}
@@ -246,9 +268,14 @@ export function TimelinePage() {
                                     </p>
                                   </div>
                                 </div>
-                                <Button variant="outline" size="sm" className="mt-3">
-                                  View Details
-                                </Button>
+                                 <Button 
+                                   variant="outline" 
+                                   size="sm" 
+                                   className="mt-3"
+                                   onClick={() => event.topicId && navigate(`/student/homework/review/${event.topicId}`)}
+                                 >
+                                   Review Mistakes
+                                 </Button>
                               </div>
                             </div>
                           </Card>

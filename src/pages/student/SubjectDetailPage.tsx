@@ -11,15 +11,19 @@ import {
 import { useState, useEffect } from "react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
-import { todaysClasses, flashcardsBySubject, studentData } from "@/data/studentMockData";
+import { TodaysClasses, StudentProfile, Flashcards as FlashcardService } from "@/services/student/studentDataService";
 import { aiService } from "@/services/aiService";
 
 export function SubjectDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   
+  // Dynamic data from localStorage
+  const studentData = StudentProfile.get();
+  const allClasses = TodaysClasses.getAll();
+
   // Find the class data by ID
-  const classItem = todaysClasses.find((c) => c.id === Number(id));
+  const classItem = allClasses.find((c: any) => c.id === Number(id));
 
   const [aiTopicDetails, setAiTopicDetails] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -49,7 +53,7 @@ export function SubjectDetailPage() {
 
   // Use AI details if generated, otherwise fall back to mock data
   const topicDetails = aiTopicDetails || classItem?.topicDetails;
-  const flashcardsAvailable = flashcardsBySubject[classItem?.subject || ""] || [];
+  const flashcardsAvailable = FlashcardService.getBySubject(classItem?.subject || "");
 
   // If no class data, show error
   if (!classItem) {

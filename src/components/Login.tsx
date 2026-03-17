@@ -115,7 +115,7 @@ export function Login() {
     { email: 'superadmin@platform.com', role: 'Super Admin' },
     { email: 'admin@school.com', role: 'School Admin' },
     { email: 'teacher@school.com', role: 'Teacher' },
-    { email: 'accountant@school.com', role: 'Accountant' },
+    { email: 'student@school.com', role: 'Student' },
     { email: 'parent@school.com', role: 'Parent' },
   ];
 

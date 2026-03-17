@@ -42,7 +42,6 @@ const DEMO_USERS: User[] = [
     { id: '0', email: 'superadmin@platform.com', name: 'Super Admin', role: 'superadmin', isFirstLogin: false },
     { id: '1', email: 'admin@school.com', name: 'Admin User', role: 'admin', isFirstLogin: false, school_id: 'SCHOOL001' },
     { id: '3', email: 'teacher@school.com', name: 'John Teacher', role: 'teacher', isFirstLogin: false, school_id: 'SCHOOL001' },
-    { id: '4', email: 'accountant@school.com', name: 'Fee Manager', role: 'accountant', isFirstLogin: false, school_id: 'SCHOOL001' },
     { id: '5', email: 'parent@school.com', name: 'Parent User', role: 'parent', isFirstLogin: false, school_id: 'SCHOOL001' },
     { id: '6', email: 'student@school.com', name: 'Aarav Sharma', role: 'student', isFirstLogin: false, school_id: 'SCHOOL001' },
 ];

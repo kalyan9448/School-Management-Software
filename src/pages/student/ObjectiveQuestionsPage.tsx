@@ -14,7 +14,8 @@ import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
-import { homeworkTopics, studentData } from "@/data/studentMockData";
+import { type HomeworkTopic } from "@/data/studentMockData";
+import { HomeworkService, StudentProfile } from "@/services/student/studentDataService";
 import { PerformanceRewardScreen } from "@/components/student/modules/PerformanceRewardScreen";
 import { aiService } from "@/services/aiService";
 
@@ -28,8 +29,12 @@ export function ObjectiveQuestionsPage() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Dynamic data from localStorage
+  const studentData = StudentProfile.get();
+  const allHomeworkTopics = HomeworkService.getAll();
+
   // Find the target topic
-  const topicDetails = homeworkTopics.find((t) => t.id === Number(topicId));
+  const topicDetails = allHomeworkTopics.find((t: any) => t.id === Number(topicId));
 
   useEffect(() => {
     async function loadQuiz() {
@@ -82,15 +87,22 @@ export function ObjectiveQuestionsPage() {
 
   // Save quiz completion to localStorage when results are shown
   useEffect(() => {
-    if (showResults && topicId) {
-      // Create saved answers array with question IDs and correctness
+    if (showResults && topicId && questions.length > 0) {
+      HomeworkService.updateQuestionsProgress(
+        Number(topicId),
+        questions.length, // attempted all
+        correctAnswers,
+        questions.length
+      );
+      
+      // Save detailed answers for mistake review
       const savedAnswers = questions.map((q, idx) => ({
         questionId: q.id,
         selectedAnswer: answers[idx] ?? -1,
         isCorrect: answers[idx] === q.correctAnswer,
       }));
 
-      const quizData = {
+      const detailedData = {
         completed: true,
         questionsAttempted: questions.length,
         totalQuestions: questions.length,
@@ -98,17 +110,15 @@ export function ObjectiveQuestionsPage() {
         accuracy,
         timestamp: new Date().toISOString(),
         answers: savedAnswers,
-        questionIds: questions.map((q) => q.id),
+        questionIds: questions.map((q: any) => q.id),
+        questions: questions, // Save actual questions for review
       };
+
+      HomeworkService.saveDetailedResults(Number(topicId), detailedData);
       
-      localStorage.setItem(
-        `questions_completed_${topicId}`,
-        JSON.stringify(quizData)
-      );
-      
-      console.log("Quiz completed! Saved to localStorage:", topicId, quizData);
+      console.log("Quiz completed and detailed results saved via HomeworkService");
     }
-  }, [showResults, topicId, questions, answers, correctAnswers, accuracy]);
+  }, [showResults, topicId, questions, correctAnswers, accuracy, answers]);
 
   const handleAnswerSelect = (optionIndex: number) => {
     if (showExplanation) return;
@@ -169,7 +179,7 @@ export function ObjectiveQuestionsPage() {
   // Results Screen - Use Performance Reward Screen
   if (showResults) {
     // Get topic info
-    const topic = homeworkTopics.find((t) => t.id === Number(topicId));
+    const topic = allHomeworkTopics.find((t: any) => t.id === Number(topicId));
     
     // Get previous score from localStorage
     const previousQuizData = localStorage.getItem(`questions_completed_${topicId}_previous`);
@@ -211,10 +221,12 @@ export function ObjectiveQuestionsPage() {
     <div className="min-h-screen bg-[#FAFBFF]">
       {/* Header */}
       <div 
-        className="text-white p-6 md:p-10 lg:p-12 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative overflow-hidden mb-8"
+        className="text-white p-6 md:p-10 lg:p-12 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative mb-8"
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2rem] md:rounded-b-[3rem]">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        </div>
         <div className="max-w-4xl mx-auto relative z-10">
           <Button
             variant="ghost"
@@ -226,18 +238,20 @@ export function ObjectiveQuestionsPage() {
             Exit Quiz
           </Button>
 
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative">
+            <div className="flex-1">
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-1">Objective Quiz</h1>
               <div className="flex items-center gap-2 text-white/80">
                 <Clock className="w-4 h-4 text-blue-400" />
                 <p className="text-sm font-medium">Question {currentQuestionIndex + 1} of {questions.length}</p>
               </div>
             </div>
-            <Badge className="w-fit bg-white/15 backdrop-blur-md text-white border-white/20 px-4 py-2 rounded-xl text-sm font-semibold">
-              <Target className="w-4 h-4 mr-2" />
-              Accuracy: {accuracy}%
-            </Badge>
+            <div className="flex items-center gap-3">
+              <Badge className="w-fit bg-white/15 backdrop-blur-md text-white border-white/20 px-4 py-2 rounded-xl text-sm font-semibold">
+                <Target className="w-4 h-4 mr-2" />
+                Accuracy: {accuracy}%
+              </Badge>
+            </div>
           </div>
 
           <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   Bell,
@@ -13,24 +13,35 @@ import {
   Monitor,
   ArrowLeft,
   Check,
+  LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { useNavigate } from "react-router";
+import { SettingsService } from "@/services/student/studentDataService";
+
+type SettingItem = 
+  | { id: string; label: string; description: string; type: "toggle"; value: boolean; onChange: () => void; icon?: LucideIcon }
+  | { id: string; label: string; description: string; type: "select"; value: string; options: { value: string; label: string; icon?: LucideIcon }[]; onChange: (val: string) => void; icon?: LucideIcon }
+  | { id: string; label: string; description: string; type: "action"; icon: LucideIcon };
+
+interface SettingsSection {
+  title: string;
+  icon: LucideIcon;
+  items: SettingItem[];
+}
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState({
-    quizReminders: true,
-    assignmentDue: true,
-    weeklyReport: false,
-  });
-  const [theme, setTheme] = useState("light");
-  const [language, setLanguage] = useState("en");
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [settings, setSettings] = useState(() => SettingsService.get());
 
-  const settingsSections = [
+  const updateSettings = (updates: any) => {
+    const updated = SettingsService.update(updates);
+    setSettings(updated);
+  };
+
+  const settingsSections: SettingsSection[] = [
     {
       title: "Notifications",
       icon: Bell,
@@ -40,37 +51,42 @@ export function SettingsPage() {
           label: "Quiz Reminders",
           description: "Get notified about upcoming quizzes",
           type: "toggle",
-          value: notifications.quizReminders,
+          value: settings.notifications.quizReminders,
           onChange: () =>
-            setNotifications((prev) => ({
-              ...prev,
-              quizReminders: !prev.quizReminders,
-            })),
+            updateSettings({
+              notifications: {
+                ...settings.notifications,
+                quizReminders: !settings.notifications.quizReminders,
+              },
+            }),
         },
         {
           id: "assignmentDue",
           label: "Assignment Due Dates",
           description: "Reminders for assignment deadlines",
           type: "toggle",
-          value: notifications.assignmentDue,
+          value: settings.notifications.assignmentDue,
           onChange: () =>
-            setNotifications((prev) => ({
-              ...prev,
-              assignmentDue: !prev.assignmentDue,
-            })),
+            updateSettings({
+              notifications: {
+                ...settings.notifications,
+                assignmentDue: !settings.notifications.assignmentDue,
+              },
+            }),
         },
-
         {
           id: "weeklyReport",
           label: "Weekly Progress Report",
           description: "Receive weekly summary of your progress",
           type: "toggle",
-          value: notifications.weeklyReport,
+          value: settings.notifications.weeklyReport,
           onChange: () =>
-            setNotifications((prev) => ({
-              ...prev,
-              weeklyReport: !prev.weeklyReport,
-            })),
+            updateSettings({
+              notifications: {
+                ...settings.notifications,
+                weeklyReport: !settings.notifications.weeklyReport,
+              },
+            }),
         },
       ],
     },
@@ -83,13 +99,13 @@ export function SettingsPage() {
           label: "Theme",
           description: "Choose your preferred theme",
           type: "select",
-          value: theme,
+          value: settings.theme,
           options: [
             { value: "light", label: "Light", icon: Sun },
             { value: "dark", label: "Dark", icon: Moon },
             { value: "system", label: "System", icon: Monitor },
           ],
-          onChange: setTheme,
+          onChange: (val: string) => updateSettings({ theme: val }),
         },
       ],
     },
@@ -102,14 +118,14 @@ export function SettingsPage() {
           label: "Language",
           description: "Select your preferred language",
           type: "select",
-          value: language,
+          value: settings.language,
           options: [
             { value: "en", label: "English" },
             { value: "es", label: "Español" },
             { value: "fr", label: "Français" },
             { value: "de", label: "Deutsch" },
           ],
-          onChange: setLanguage,
+          onChange: (val: string) => updateSettings({ language: val }),
         },
       ],
     },
@@ -142,8 +158,8 @@ export function SettingsPage() {
           label: "Sound Effects",
           description: "Enable sound effects for interactions",
           type: "toggle",
-          value: soundEnabled,
-          onChange: () => setSoundEnabled(!soundEnabled),
+          value: settings.soundEnabled,
+          onChange: () => updateSettings({ soundEnabled: !settings.soundEnabled }),
         },
       ],
     },
@@ -217,9 +233,12 @@ export function SettingsPage() {
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          {item.icon && (
-                            <item.icon className="w-4 h-4" style={{ color: '#7A869A' }} />
-                          )}
+                          {(() => {
+                            const ItemIcon = (item as any).icon;
+                            return ItemIcon ? (
+                              <ItemIcon className="w-4 h-4" style={{ color: '#7A869A' }} />
+                            ) : null;
+                          })()}
                           <p className="font-medium" style={{ color: '#1A1A1A' }}>
                             {item.label}
                           </p>
@@ -231,7 +250,7 @@ export function SettingsPage() {
 
                       <div className="ml-4">
                         {item.type === "toggle" && (
-                          <ToggleSwitch checked={item.value as boolean} onChange={item.onChange as () => void} />
+                          <ToggleSwitch checked={item.value} onChange={item.onChange} />
                         )}
 
                         {item.type === "select" && item.options && (
@@ -241,7 +260,7 @@ export function SettingsPage() {
                               return (
                                 <button
                                   key={option.value}
-                                  onClick={() => (item.onChange as (value: string) => void)(option.value)}
+                                  onClick={() => item.onChange(option.value)}
                                   className="relative px-3 py-2 rounded-lg transition-all flex items-center gap-2"
                                   style={{
                                     background: item.value === option.value ? '#1F6FEB' : '#FAFBFF',

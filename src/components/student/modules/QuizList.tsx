@@ -1,16 +1,17 @@
-import { Clock, CheckCircle2, BookOpen, PenTool, Flag } from "lucide-react";
+import { Clock, CheckCircle2, BookOpen, PenTool, Flag, Calculator, Atom, Scroll } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { useNavigate } from "react-router";
+import { HomeworkService } from "@/services/student/studentDataService";
 
 const iconMap: Record<string, any> = {
-  calculator: Clock,
-  atom: CheckCircle2,
+  calculator: Calculator,
+  atom: Atom,
   "book-open": BookOpen,
-  scroll: PenTool,
-  leaf: Clock,
-  beaker: CheckCircle2,
+  scroll: Scroll,
+  leaf: BookOpen,
+  beaker: Atom,
 };
 
 interface Quiz {
@@ -96,11 +97,12 @@ const availableQuizzes: Quiz[] = [
 
 export function QuizList() {
   const navigate = useNavigate();
+  const availableQuizzes = HomeworkService.getRecommendedQuizzes();
 
   return (
     <div className="space-y-4">
       {availableQuizzes.map((quiz) => {
-        const Icon = iconMap[quiz.icon];
+        const Icon = iconMap[quiz.icon] || BookOpen;
         return (
           <Card key={quiz.id} className="p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-4">
@@ -129,7 +131,7 @@ export function QuizList() {
                   </span>
                 </div>
               </div>
-              <Button size="sm" onClick={() => navigate("/quiz")}>
+              <Button size="sm" onClick={() => navigate(`/student/homework/${quiz.id}`)}>
                 Start
               </Button>
             </div>

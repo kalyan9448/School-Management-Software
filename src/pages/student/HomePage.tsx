@@ -14,7 +14,8 @@ import {
 import { Card } from "@/components/student/ui/card";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
-import { homeworkTopics, HomeworkTopic } from "@/data/studentMockData";
+import { type HomeworkTopic } from "@/data/studentMockData";
+import { HomeworkService } from "@/services/student/studentDataService";
 
 const iconMap: Record<string, any> = {
   calculator: Calculator,
@@ -43,7 +44,7 @@ const statusConfig = {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [topics] = useState<HomeworkTopic[]>(homeworkTopics);
+  const [topics] = useState<HomeworkTopic[]>(() => HomeworkService.getAll());
 
   return (
     <div className="min-h-screen bg-[#FAFBFF] pb-24">
@@ -57,10 +58,14 @@ export function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8"
         >
-          <h1 className="text-3xl font-bold mb-2">AI Homework</h1>
-          <p className="text-white/80 text-sm">
-            Complete flashcards to unlock objective questions
-          </p>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">AI Homework</h1>
+              <p className="text-white/80 text-sm">
+                Complete flashcards to unlock objective questions
+              </p>
+            </div>
+          </div>
 
           {/* Stats Summary */}
           <div className="grid grid-cols-3 gap-3 mt-6">

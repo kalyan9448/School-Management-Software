@@ -37,12 +37,12 @@ import {
   Legend,
 } from "recharts";
 import {
-  performanceData,
-  subjectPerformance,
-  skillsData,
-  quizTrends,
-  attendanceData,
-} from "@/data/studentMockData";
+  PerformanceData,
+  SubjectPerformance,
+  SkillsData,
+  QuizTrends,
+  AttendanceService,
+} from "@/services/student/studentDataService";
 
 /**
  * Custom hook to get parent dimensions for Recharts
@@ -102,10 +102,17 @@ export function ProgressPage() {
   const [quizRef, quizDims] = useChartDimensions();
   const [skillsRef, skillsDims] = useChartDimensions();
 
+  // Dynamic data from localStorage
+  const [performanceData] = React.useState(() => PerformanceData.getAll());
+  const [subjectPerformance] = React.useState(() => SubjectPerformance.getAll());
+  const [skillsData] = React.useState(() => SkillsData.getAll());
+  const [quizTrends] = React.useState(() => QuizTrends.getAll());
+  const [attendanceData] = React.useState(() => AttendanceService.get());
+
   const fallbackWidth = typeof window !== 'undefined' ? Math.min(window.innerWidth - 300, 1200) : 800;
 
-  const currentAverage = performanceData[performanceData.length - 1].score;
-  const previousAverage = performanceData[performanceData.length - 2].score;
+  const currentAverage = performanceData[performanceData.length - 1]?.score || 0;
+  const previousAverage = performanceData[performanceData.length - 2]?.score || 0;
   const improvement = currentAverage - previousAverage;
 
   return (
@@ -117,7 +124,9 @@ export function ProgressPage() {
       >
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
         <div className="max-w-screen-xl mx-auto relative z-10">
-          <h1 className="text-2xl md:text-3xl font-extrabold mb-6 tracking-tight">Progress Insights</h1>
+          <div className="flex items-start justify-between mb-6">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Analytics Insights</h1>
+          </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4 bg-white/15 backdrop-blur-md border border-white/20 shadow-xl">

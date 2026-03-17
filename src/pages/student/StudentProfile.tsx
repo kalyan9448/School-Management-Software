@@ -25,11 +25,13 @@ import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/student/ui/avatar";
 import { Progress } from "@/components/student/ui/progress";
-import { studentData } from "@/data/studentMockData";
+import { studentData as _fallback } from "@/data/studentMockData";
 import { useNavigate } from "react-router";
+import { StudentProfile } from "@/services/student/studentDataService";
 
 export function ProfilePage() {
   const navigate = useNavigate();
+  const studentData = StudentProfile.get();
   const [isEditing, setIsEditing] = useState(false);
   const [showAddSkill, setShowAddSkill] = useState(false);
   const [newSkill, setNewSkill] = useState("");
@@ -243,19 +245,21 @@ export function ProfilePage() {
       >
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
         <div className="max-w-screen-xl mx-auto relative z-10">
-          <div className="flex items-center gap-4 mb-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(-1)}
-              className="text-white hover:bg-white/20 -ml-2"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate(-1)}
+                className="text-white hover:bg-white/20 -ml-2 mb-3"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Student Profile</h1>
+              <p className="text-white/80 text-sm md:text-base mt-2 font-medium">View and manage your profile information</p>
+            </div>
           </div>
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Student Profile</h1>
-          <p className="text-white/80 text-sm md:text-base mt-2 font-medium">View and manage your profile information</p>
         </div>
       </div>
 

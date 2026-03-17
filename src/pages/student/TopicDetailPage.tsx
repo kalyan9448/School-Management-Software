@@ -17,7 +17,8 @@ import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
-import { homeworkTopics, todaysClasses, studentData } from "@/data/studentMockData";
+import { type HomeworkTopic } from "@/data/studentMockData";
+import { HomeworkService, TodaysClasses, StudentProfile } from "@/services/student/studentDataService";
 import { AITopicChat } from "@/components/student/modules/AITopicChat";
 import { aiService } from "@/services/aiService";
 
@@ -36,11 +37,16 @@ export function TopicDetailPage() {
   const [questionsCompleted, setQuestionsCompleted] = useState(false);
   const [questionsAccuracy, setQuestionsAccuracy] = useState<number | null>(null);
 
-  // Find the homework topic
-  const topic = homeworkTopics.find((t) => t.id === Number(topicId));
+  // Dynamic data from localStorage
+  const studentData = StudentProfile.get();
+  const allHomeworkTopics = HomeworkService.getAll();
+  const allClasses = TodaysClasses.getAll();
+
+  // Find the target topic
+  const topic = allHomeworkTopics.find((t: any) => t.id === Number(topicId));
 
   // Find corresponding class data for curriculum overview
-  const classData = todaysClasses.find((c) => c.subject === topic?.subject);
+  const classData = allClasses.find((c: any) => c.subject === topic?.subject);
 
   const [aiTopicDetails, setAiTopicDetails] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -71,89 +77,32 @@ export function TopicDetailPage() {
   // Merge AI details with base topic details
   const topicDetails = aiTopicDetails || classData?.topicDetails;
 
-  // Check localStorage for flashcard completion status on mount
+  // Check progress on mount and whenever window regains focus
   useEffect(() => {
-    const checkFlashcardCompletion = () => {
-      if (topic) {
-        const storageKey = `flashcard_completed_${topic.id}`;
-        const savedData = localStorage.getItem(storageKey);
-
-        if (savedData) {
-          try {
-            const data = JSON.parse(savedData);
-            console.log("Loaded flashcard completion from localStorage:", data);
-            setFlashcardCompleted(data.completed || false);
-            setFlashcardProgress(data.progress || 0);
-          } catch (error) {
-            console.error("Error parsing flashcard data from localStorage:", error);
-          }
-        } else {
-          // Use initial values from topic data
-          setFlashcardCompleted(topic.flashcardsCompleted || false);
-          setFlashcardProgress(topic.flashcardProgress || 0);
+    const refreshProgress = () => {
+      if (topicId) {
+        const currentTopic = HomeworkService.getById(Number(topicId));
+        if (currentTopic) {
+          setFlashcardProgress(currentTopic.flashcardProgress);
+          setFlashcardCompleted(currentTopic.flashcardsCompleted);
+          setQuestionsAttempted(currentTopic.questionsAttempted);
+          setQuestionsProgress(currentTopic.questionsProgress);
+          setQuestionsCompleted(currentTopic.questionsCompleted);
+          setQuestionsAccuracy(currentTopic.accuracy);
         }
       }
     };
 
-    // Check on mount
-    checkFlashcardCompletion();
+    refreshProgress();
 
-    // Also check when window regains focus (user comes back from flashcards)
     const handleFocus = () => {
-      console.log("Window focused, checking flashcard completion...");
-      checkFlashcardCompletion();
+      console.log("Window focused, refreshing progress details...");
+      refreshProgress();
     };
 
     window.addEventListener("focus", handleFocus);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [topic?.id, topic?.flashcardsCompleted, topic?.flashcardProgress, location.pathname]);
-
-  // Check localStorage for questions completion status
-  useEffect(() => {
-    const checkQuestionsCompletion = () => {
-      if (topic) {
-        const storageKey = `questions_completed_${topic.id}`;
-        const savedData = localStorage.getItem(storageKey);
-
-        if (savedData) {
-          try {
-            const data = JSON.parse(savedData);
-            setQuestionsProgress(
-              ((data.questionsAttempted || 0) / topic.totalQuestions) * 100
-            );
-            setQuestionsCompleted(data.completed || false);
-            setQuestionsAccuracy(data.accuracy || null);
-          } catch (error) {
-            console.error("Error parsing questions data from localStorage:", error);
-          }
-        } else {
-          // Use initial values from topic data
-          setQuestionsAttempted(topic.questionsAttempted || 0);
-          setQuestionsProgress(topic.questionsProgress || 0);
-          setQuestionsCompleted(topic.questionsCompleted || false);
-          setQuestionsAccuracy(topic.accuracy);
-        }
-      }
-    };
-
-    // Check on mount
-    checkQuestionsCompletion();
-
-    // Also check when window regains focus
-    const handleFocus = () => {
-      console.log("Window focused, checking questions completion...");
-      checkQuestionsCompletion();
-    };
-
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [topic?.id, topic?.questionsAttempted, topic?.questionsCompleted, topic?.accuracy, topic?.totalQuestions, location.pathname]);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [topicId, location.pathname]);
 
   if (!topic) {
     return (
@@ -177,10 +126,12 @@ export function TopicDetailPage() {
     <div className="min-h-screen bg-[#FAFBFF]">
       {/* Header */}
       <div 
-        className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2rem] md:rounded-b-[2.5rem] shadow-xl relative overflow-hidden mb-6 md:mb-8"
+        className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2rem] md:rounded-b-[2.5rem] shadow-xl relative mb-6 md:mb-8"
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2rem] md:rounded-b-[2.5rem]">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        </div>
         <div className="max-w-4xl mx-auto relative z-10">
           <Button
             variant="ghost"
@@ -192,8 +143,8 @@ export function TopicDetailPage() {
             Back to Homework
           </Button>
 
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 relative">
+            <div className="flex-1">
               <div className="flex items-center gap-2 text-blue-300 font-bold uppercase tracking-widest text-[10px] md:text-xs mb-2">
                 <Brain className="w-4 h-4" />
                 Adaptive Learning Path
@@ -202,7 +153,7 @@ export function TopicDetailPage() {
               <p className="text-lg md:text-xl text-white/90 font-semibold">{topic.topic}</p>
             </div>
             
-            <div className="flex gap-3 md:gap-4">
+            <div className="flex items-center gap-3 md:gap-4 md:self-end">
               <div className="bg-white/15 backdrop-blur-md rounded-xl md:rounded-2xl px-4 md:px-5 py-2 md:py-3 border border-white/20 shadow-xl flex-1 md:flex-none text-center md:text-left">
                 <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-white/70 mb-0.5 md:mb-1">Flashcards</p>
                 <p className="text-xl md:text-2xl font-black">{flashcardProgress}%</p>

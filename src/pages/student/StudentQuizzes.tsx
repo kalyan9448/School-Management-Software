@@ -14,9 +14,17 @@ export function QuizSelectionPage() {
   return (
     <div className="min-h-screen pb-24" style={{ background: '#FAFBFF' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }} className="text-white p-6 rounded-b-3xl shadow-lg mb-6">
+      <div 
+        style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }} 
+        className="text-white p-6 rounded-b-3xl shadow-lg mb-6 relative"
+      >
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-3xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+        </div>
         <div className="max-w-screen-xl mx-auto">
-          <h1 className="text-2xl font-bold mb-4">Available Quizzes</h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold">Available Quizzes</h1>
+          </div>
 
           {/* Search */}
           <div className="relative">

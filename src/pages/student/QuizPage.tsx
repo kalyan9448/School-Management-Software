@@ -15,7 +15,7 @@ import { Button } from "@/components/student/ui/button";
 import { Input } from "@/components/student/ui/input";
 import { Progress } from "@/components/student/ui/progress";
 import { Badge } from "@/components/student/ui/badge";
-import { quizQuestions } from "@/data/studentMockData";
+import { QuizService, StudentProfile } from "@/services/student/studentDataService";
 import { useNavigate } from "react-router";
 
 type Answer = number | string | boolean | null;
@@ -28,7 +28,8 @@ export function QuizPage() {
   
   // Shuffle and select random questions on mount or retry
   const [shuffledQuestions] = useState(() => {
-    const shuffled = [...quizQuestions].sort(() => Math.random() - 0.5);
+    const allQuestions = QuizService.getAll();
+    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, Math.min(10, shuffled.length)); // Take up to 10 random questions
   });
   
@@ -39,6 +40,28 @@ export function QuizPage() {
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [fillBlankAnswer, setFillBlankAnswer] = useState("");
+
+  // Save result when quiz is completed
+  useEffect(() => {
+    if (quizCompleted) {
+      const score = calculateScore();
+      const percentage = Math.round((score / shuffledQuestions.length) * 100);
+      
+      QuizService.saveResult({
+        score,
+        total: shuffledQuestions.length,
+        percentage,
+        duration: timeElapsed,
+        date: new Date().toISOString(),
+        answers: answers.reduce((acc, ans, idx) => {
+          acc[shuffledQuestions[idx].id] = ans;
+          return acc;
+        }, {} as Record<number, any>)
+      });
+      
+      console.log("Quiz result saved via QuizService");
+    }
+  }, [quizCompleted]);
 
   const currentQuestion = shuffledQuestions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / shuffledQuestions.length) * 100;
