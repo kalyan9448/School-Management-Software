@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Upload, X, Image as ImageIcon, FileText, Camera } from 'lucide-react';
 import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { studentService } from '../utils/centralDataService';
 
 interface AdmissionFormProps {
   student: any;
@@ -30,7 +31,8 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     parentName: student?.parentName || '', // Kept for backwards compatibility
     phone: student?.phone || '',
     emergencyContactNumber: student?.emergencyContactNumber || '',
-    email: student?.email || '',
+    email: student?.email || '', // Student Login Email
+    parentEmail: student?.parentEmail || '', // Guardian Email
     address: student?.address || '',
     classApplied: student?.classApplied || student?.class || '',
     classAllotted: student?.classAllotted || student?.class || '',
@@ -42,6 +44,14 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
   });
 
   const [studentPhoto, setStudentPhoto] = useState<string | null>(student?.photo || null);
+
+  // Auto-suggest roll number when class, section or academic year changes
+  useEffect(() => {
+    if (!student && formData.classAllotted && formData.section && formData.academicYear) {
+      const nextRoll = studentService.getNextRollNumber(formData.classAllotted, formData.section, formData.academicYear);
+      setFormData(prev => ({ ...prev, rollNo: nextRoll }));
+    }
+  }, [formData.classAllotted, formData.section, formData.academicYear, student]);
 
   const [documents, setDocuments] = useState<{
     birthCertificate: DocumentUpload;
@@ -65,6 +75,20 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate Roll Number Uniqueness
+    const isUnique = studentService.isRollNumberUnique(
+      formData.rollNo,
+      formData.classAllotted || formData.classApplied,
+      formData.section,
+      formData.academicYear,
+      student?.id
+    );
+
+    if (!isUnique) {
+      alert(`Error: Roll Number "${formData.rollNo}" already exists in ${formData.classAllotted || formData.classApplied} - ${formData.section} for academic year ${formData.academicYear}. Please use a unique roll number.`);
+      return;
+    }
 
     // Documents are now optional as per user request
 
@@ -265,9 +289,35 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
               />
               {!student && (
                 <p className="mt-1 text-xs text-gray-500 italic">
-                  Note: The system automatically prefixes the unique School Code.
+                    Note: Prefixed with School Code.
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">Roll Number</label>
+              <input
+                type="text"
+                name="rollNo"
+                value={formData.rollNo}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Suggested: e.g. 031"
+              />
+              <p className="mt-1 text-xs text-gray-500 italic">Auto-suggested based on class strength.</p>
+            </div>
+            
+            <div>
+              <label className="block text-gray-700 mb-2">Student Email (Optional)</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="student@school.com"
+              />
+              <p className="mt-1 text-xs text-gray-500">Only needed for student portal access.</p>
             </div>
           </div>
         </div>
@@ -387,15 +437,17 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
             </div>
 
             <div>
-              <label className="block text-gray-700 mb-2">Email ID</label>
+              <label className="block text-gray-700 mb-2">Guardian Email (For Login) *</label>
               <input
                 type="email"
-                name="email"
-                value={formData.email}
+                name="parentEmail"
+                value={formData.parentEmail}
                 onChange={handleChange}
+                required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="parent@email.com"
               />
+              <p className="mt-1 text-xs text-gray-500">Used for parent portal login.</p>
             </div>
 
             <div>

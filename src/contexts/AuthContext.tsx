@@ -95,9 +95,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const checkEmail = async (email: string): Promise<CheckEmailResponse> => {
         const allUsers = services.user.getAll();
-        const found = allUsers.find(u => u.email === email) || DEMO_USERS.find(u => u.email === email);
+        const lowerEmail = email.toLowerCase();
+        const found = allUsers.find(u => u.email.toLowerCase() === lowerEmail) || 
+                      DEMO_USERS.find(u => u.email.toLowerCase() === lowerEmail);
+        
         if (!found) return { exists: false, isFirstLogin: false, error: 'No account found for this email.' };
-        const isFirst = !!(found.isFirstLogin && !localStorage.getItem(`pw_${found.id}`));
+        
+        // Passwords in demo are stored as pw_<userId>
+        const hasPassword = !!localStorage.getItem(`pw_${found.id}`);
+        const isFirst = !!(found.isFirstLogin || !hasPassword);
+        
         return { exists: true, isFirstLogin: isFirst };
     };
 
@@ -111,10 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             // Check if it's a first time login (no password set yet)
-            if (found.isFirstLogin || !localStorage.getItem(`pw_${found.id}`)) {
-                if (found.role === 'admin' && found.isFirstLogin !== false) {
-                    return { success: true, requiresPasswordCreation: true };
-                }
+            const hasPassword = !!localStorage.getItem(`pw_${found.id}`);
+            if (found.isFirstLogin || !hasPassword) {
+                return { success: true, requiresPasswordCreation: true };
             }
 
             const expectedPassword = getPasswordForUser(found.id);

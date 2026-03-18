@@ -38,10 +38,12 @@ export interface Student {
   motherName: string;
   parentPhone: string;
   parentEmail: string;
+  email?: string; // Optional student email for login
   parentId?: string;
   address: string;
   admissionDate: string;
-  status: 'active' | 'inactive' | 'transferred';
+  academicYear?: string;
+  status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted' | 'active' | 'inactive' | 'transferred';
   photo?: string;
   bloodGroup?: string;
   medicalInfo?: string;
@@ -287,6 +289,7 @@ const initializeData = () => {
         motherName: 'Priya Sharma',
         parentPhone: '+91 9876543210',
         parentEmail: 'parent@school.com',
+        email: 'student@school.com',
         parentId: '5',
         address: '123 MG Road, Mumbai',
         admissionDate: '2024-04-01',
@@ -306,6 +309,7 @@ const initializeData = () => {
         motherName: 'Neha Patel',
         parentPhone: '+91 9876543211',
         parentEmail: 'patel@example.com',
+        email: 'diya.patel@example.com',
         address: '456 Park Street, Mumbai',
         admissionDate: '2024-04-01',
         status: 'active',
@@ -324,6 +328,7 @@ const initializeData = () => {
         motherName: 'Anita Singh',
         parentPhone: '+91 9876543212',
         parentEmail: 'singh@example.com',
+        email: 'arjun.singh@example.com',
         address: '789 Lake Road, Mumbai',
         admissionDate: '2024-04-01',
         status: 'active',
@@ -644,12 +649,23 @@ export const userService = {
 
   create: (user: Partial<User>): User => {
     const users = userService.getAll();
+    
+    // Simulate Firebase unique email check
+    const existing = users.find(u => u.email === user.email);
+    if (existing) {
+      console.warn(`User with email ${user.email} already exists. Returning existing user.`);
+      return existing;
+    }
+
     const newUser: User = {
       id: user.id || generateId(),
       email: user.email || '',
       name: user.name || '',
       role: user.role || 'student',
-      isFirstLogin: user.isFirstLogin ?? true, // Default to true for new users
+      isFirstLogin: user.isFirstLogin ?? true, 
+      school_id: user.school_id,
+      parentId: user.parentId,
+      childrenIds: user.childrenIds || [],
     };
 
     users.push(newUser);
@@ -719,13 +735,44 @@ export const studentService = {
     return students.filter(s => s.parentId === parentId);
   },
 
+  getNextRollNumber: (className: string, section: string, academicYear: string): string => {
+    const students = studentService.getAll();
+    const classStudents = students.filter(s => 
+      s.class === className && 
+      s.section === section && 
+      s.academicYear === academicYear
+    );
+    if (classStudents.length === 0) return '001';
+    
+    const rollNumbers = classStudents
+      .map(s => parseInt(s.rollNo))
+      .filter(n => !isNaN(n));
+    
+    if (rollNumbers.length === 0) return '001';
+    
+    const maxRoll = Math.max(...rollNumbers);
+    return String(maxRoll + 1).padStart(3, '0');
+  },
+
+  isRollNumberUnique: (rollNo: string, className: string, section: string, academicYear: string, excludeStudentId?: string): boolean => {
+    const students = studentService.getAll();
+    const existing = students.find(s => 
+      s.rollNo === rollNo && 
+      s.class === className && 
+      s.section === section && 
+      s.academicYear === academicYear &&
+      s.id !== excludeStudentId
+    );
+    return !existing;
+  },
+
   create: (student: Partial<Student>): Student => {
     const students = studentService.getAll();
     const newStudent: Student = {
       id: student.id || generateId(),
       admissionNo: student.admissionNo || `KVS${new Date().getFullYear()}${String(students.length + 1).padStart(3, '0')}`,
       name: student.name || '',
-      rollNo: student.rollNo || String(students.length + 1).padStart(3, '0'),
+      rollNo: student.rollNo || studentService.getNextRollNumber(student.class || '', student.section || 'A', student.academicYear || '2024-2025'),
       class: student.class || '',
       section: student.section || '',
       dateOfBirth: student.dateOfBirth || '',
@@ -734,6 +781,7 @@ export const studentService = {
       motherName: student.motherName || '',
       parentPhone: student.parentPhone || '',
       parentEmail: student.parentEmail || '',
+      email: student.email || '', // Student's unique email
       parentId: student.parentId,
       address: student.address || '',
       admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],

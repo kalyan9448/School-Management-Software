@@ -4,6 +4,7 @@ import { AdmissionForm } from './AdmissionForm';
 import { admissionAPI } from '../utils/api';
 import { AcademicYear, DEFAULT_YEARS, getActiveAcademicYearId } from '../utils/classUtils';
 import { useAuth } from '../contexts/AuthContext';
+import { userService, studentService } from '../utils/centralDataService';
 
 interface Student {
   id: string;
@@ -22,6 +23,7 @@ interface Student {
   phone: string;
   emergencyContactNumber?: string;
   email: string;
+  rollNo?: string;
   classApplied: string;
   classAllotted: string;
   status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted';
@@ -299,6 +301,50 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
               setView('list');
               setSelectedStudent(null);
             }
+
+            // --- PROVISIONING LOGIC ---
+            // Only create login accounts if the student is marked as "Admitted"
+            if (studentData.status === 'admitted') {
+              const studentId = selectedStudent ? selectedStudent.id : `${Date.now()}`;
+              
+              // 1. Provision Student Login Account (Only if email is provided)
+              if (studentData.email) {
+                userService.create({
+                  email: studentData.email,
+                  name: studentData.name,
+                  role: 'student',
+                  school_id: user?.school_id,
+                  isFirstLogin: true
+                });
+              }
+
+              // 2. Provision/Link Parent Login Account
+              const allUsers = userService.getAll();
+              const existingParent = allUsers.find(u => u.email === studentData.parentEmail && u.role === 'parent');
+
+              if (existingParent) {
+                // Link student to existing parent account
+                const currentChildren = existingParent.childrenIds || [];
+                if (!currentChildren.includes(studentId)) {
+                  userService.update(existingParent.id, {
+                    childrenIds: [...currentChildren, studentId]
+                  });
+                }
+              } else {
+                // Create new parent account and link student
+                userService.create({
+                  email: studentData.parentEmail,
+                  name: studentData.parentName || studentData.guardianName || 'Parent',
+                  role: 'parent',
+                  school_id: user?.school_id,
+                  childrenIds: [studentId],
+                  isFirstLogin: true
+                });
+              }
+              
+              console.log('Automated provisioning completed for:', studentData.email, studentData.parentEmail);
+            }
+            // --------------------------
           } catch (error: any) {
             console.error('Save admission error:', error);
             alert(`Failed to save admission: ${error.message || 'Unknown error'}\n\nPlease check the console for details.`);

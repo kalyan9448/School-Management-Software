@@ -64,10 +64,12 @@ export interface Student {
     motherName: string;
     parentPhone: string;
     parentEmail: string;
+    email?: string; // Optional student email for login
     parentId?: string;
     address: string;
     admissionDate: string;
-    status: 'active' | 'inactive' | 'transferred';
+    academicYear?: string;
+    status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted' | 'active' | 'inactive' | 'transferred';
     photo?: string;
     bloodGroup?: string;
     medicalInfo?: string;
