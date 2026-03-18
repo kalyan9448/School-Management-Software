@@ -26,6 +26,7 @@ interface AuthContextType {
     checkEmail: (email: string) => Promise<CheckEmailResponse>;
     login: (email: string, password?: string) => Promise<LoginResponse>;
     createPassword: (email: string, password: string) => Promise<boolean>;
+    resetPassword: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
 }
 
@@ -154,6 +155,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const resetPassword = async (email: string, password: string): Promise<boolean> => {
+        try {
+            const allUsers = services.user.getAll();
+            const found = allUsers.find(u => u.email === email) || DEMO_USERS.find(u => u.email === email);
+
+            if (found) {
+                // In demo, we just update the pw_ mapping
+                localStorage.setItem(`pw_${found.id}`, password);
+                
+                // If they were marked as firstLogin: true, reset it to false
+                if (found.isFirstLogin) {
+                    services.user.update(found.id, { isFirstLogin: false });
+                }
+
+                // Auto login after reset
+                setUser(found);
+                persistUser(found);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Reset password error', error);
+            return false;
+        }
+    };
+
     const logout = () => {
         setUser(null);
         sessionStorage.removeItem(STORAGE_KEY);
@@ -161,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, checkEmail, login, createPassword, logout }}>
+        <AuthContext.Provider value={{ user, loading, checkEmail, login, createPassword, resetPassword, logout }}>
             {children}
         </AuthContext.Provider>
     );

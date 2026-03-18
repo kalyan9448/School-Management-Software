@@ -15,12 +15,12 @@ import {
 import logoImage from '../assets/logo.png';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Step = 'email' | 'password' | 'create-password';
+type Step = 'email' | 'password' | 'create-password' | 'forgot-password' | 'reset-password';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function Login() {
   const navigate = useNavigate();
-  const { checkEmail, login, createPassword } = useAuth();
+  const { checkEmail, login, createPassword, resetPassword } = useAuth();
 
   // Step state
   const [step, setStep] = useState<Step>('email');
@@ -110,6 +110,60 @@ export function Login() {
     setLoading(false);
   };
 
+  // ── Step 3a: Forgot password (request reset) ──────────────────────────────
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    // Simulation: in a real app, this sends an email.
+    // For this demo, we just verify the account exists (already done in Step 1, but safe to check)
+    const result = await checkEmail(email);
+    if (!result.exists) {
+      setError('Account not found.');
+      setLoading(false);
+      return;
+    }
+
+    // Success simulation
+    setTimeout(() => {
+      setStep('reset-password');
+      setLoading(false);
+    }, 1000);
+  };
+
+  // ── Step 3b: Reset password (submit new) ──────────────────────────────────
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isPasswordValid) return;
+
+    setError('');
+    setLoading(true);
+
+    try {
+      const success = await resetPassword(email, password);
+      if (success) {
+        const allUsers = JSON.parse(localStorage.getItem('app_users') || '[]');
+        const demoUsers = [
+          { email: 'superadmin@platform.com', role: 'superadmin' },
+          { email: 'admin@school.com', role: 'admin' },
+          { email: 'teacher@school.com', role: 'teacher' },
+          { email: 'parent@school.com', role: 'parent' },
+          { email: 'student@school.com', role: 'student' },
+        ];
+        const found = allUsers.find((u: any) => u.email === email) || demoUsers.find(u => u.email === email);
+        const role = found?.role || 'admin';
+        navigate(getRoleDashboardPath(role as any), { replace: true });
+      } else {
+        setError('Failed to reset password. Please try again.');
+      }
+    } catch {
+      setError('An unexpected error occurred.');
+    }
+
+    setLoading(false);
+  };
+
   // ── Demo accounts list ─────────────────────────────────────────────────────
   const demoAccounts: { email: string; role: string }[] = [
     { email: 'superadmin@platform.com', role: 'Super Admin' },
@@ -157,12 +211,12 @@ export function Login() {
 
             {/* ── Step indicator ── */}
             <div className="flex items-center gap-2 mb-6">
-              <StepDot active={step === 'email'} done={step !== 'email'} label="Email" />
+              <StepDot active={step === 'email' || step === 'forgot-password'} done={step !== 'email' && step !== 'forgot-password'} label="Email" />
               <div className="flex-1 h-px bg-gray-200" />
               <StepDot
-                active={step === 'password' || step === 'create-password'}
+                active={step === 'password' || step === 'create-password' || step === 'reset-password'}
                 done={false}
-                label={step === 'create-password' ? 'Create Password' : 'Password'}
+                label={step === 'create-password' || step === 'reset-password' ? 'Set Password' : 'Password'}
               />
             </div>
 
@@ -253,9 +307,13 @@ export function Login() {
                 </div>
 
                 <div className="flex items-center justify-end">
-                  <a href="#" className="text-sm text-purple-600 hover:text-purple-800 font-medium">
+                  <button 
+                    type="button"
+                    onClick={() => setStep('forgot-password')}
+                    className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                  >
                     Forgot password?
-                  </a>
+                  </button>
                 </div>
 
                 <button
@@ -348,6 +406,108 @@ export function Login() {
                   {loading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
                     : 'Create Password & Sign In'}
+                </button>
+              </form>
+            )}
+
+            {/* ════════════════════════════════════════════
+                STEP 3a — Forgot Password (Request)
+            ════════════════════════════════════════════ */}
+            {step === 'forgot-password' && (
+              <form onSubmit={handleForgotPassword} className="space-y-5">
+                <div className="p-3 bg-purple-50 border border-purple-100 rounded-lg text-sm text-purple-900">
+                  <p className="font-medium mb-0.5">Password Recovery</p>
+                  <p className="text-xs text-purple-700 opacity-80">We'll send a password recovery code to your registered email address.</p>
+                </div>
+
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+                    placeholder="your@email.com"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !email}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2.5 rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-purple-500/20"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Recovery Code'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="w-full flex items-center justify-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition"
+                >
+                  Back to Sign In
+                </button>
+              </form>
+            )}
+
+            {/* ════════════════════════════════════════════
+                STEP 3b — Reset Password (Submit)
+            ════════════════════════════════════════════ */}
+            {step === 'reset-password' && (
+              <form onSubmit={handleResetPassword} className="space-y-5">
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+                  <p className="font-medium mb-0.5">Recovery Code Sent!</p>
+                  <p className="text-xs text-green-700">For this demo, you can proceed directly to setting your new password.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+                      placeholder="Enter new password"
+                      required
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm New Password</label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+                    placeholder="Confirm new password"
+                    required
+                  />
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
+                  <Req ok={validations.length} text="At least 8 characters" />
+                  <Req ok={validations.number} text="Contains a number" />
+                  <Req ok={validations.special} text="Contains a special character" />
+                  <Req ok={validations.match} text="Passwords match" />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!isPasswordValid || loading}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2.5 rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-purple-500/20"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Password & Sign In'}
                 </button>
               </form>
             )}
