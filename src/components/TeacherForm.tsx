@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Upload, X, Image as ImageIcon, FileText, Camera } from 'lucide-react';
 import { ClassMultiSelect } from './ClassMultiSelect';
+import { SubjectMultiSelect } from './SubjectMultiSelect';
 import { Teacher } from './TeachersData';
 
 interface TeacherFormProps {
@@ -26,7 +27,7 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
         email: teacher?.email || '',
         address: teacher?.address || '',
         employeeId: teacher?.employeeId || teacher?.id || '',
-        subject: teacher?.subject || '',
+        subjects: teacher?.subjects || ((teacher as any)?.subject ? [(teacher as any).subject] : []),
         qualification: teacher?.qualification || '',
         experience: teacher?.experience || '',
         joiningDate: teacher?.joiningDate || new Date().toISOString().split('T')[0],
@@ -317,15 +318,10 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
                         </div>
 
                         <div>
-                            <label className="block text-gray-700 mb-2">Subject Specialization *</label>
-                            <input
-                                type="text"
-                                name="subject"
-                                value={formData.subject}
-                                onChange={handleChange}
+                            <SubjectMultiSelect
+                                value={formData.subjects}
+                                onChange={(subjects) => setFormData({ ...formData, subjects })}
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                placeholder="e.g., Mathematics, English"
                             />
                         </div>
 

@@ -116,6 +116,7 @@ interface School {
   principalGmail?: string;
   subscriptionStart?: string;
   plan?: string;
+  schoolCode?: string;
 }
 
 interface Subscription {
@@ -261,6 +262,7 @@ export function SuperAdminDashboard() {
     plan: 'Basic',
     maxStudents: 200,
     maxTeachers: 20,
+    schoolCode: '',
   });
 
   // Subscription plan editing state
@@ -398,7 +400,7 @@ export function SuperAdminDashboard() {
     // Fallback exactly to what was there if completely empty, but save it to app_schools
     const demo = [
       {
-        id: 'SCH001',
+        id: 'SCHOOL001',
         name: 'Kidz Vision - Central Campus',
         organizationId: 'ORG001',
         organizationName: 'Kidz Vision Group',
@@ -422,9 +424,10 @@ export function SuperAdminDashboard() {
         state: 'Maharashtra',
         pincode: '400001',
         address: '123 Education Street',
+        schoolCode: 'KVC',
       },
       {
-        id: 'SCH002',
+        id: 'SCHOOL002',
         name: 'Kidz Vision - North Branch',
         organizationId: 'ORG001',
         organizationName: 'Kidz Vision Group',
@@ -448,9 +451,10 @@ export function SuperAdminDashboard() {
         principal: 'Mrs. Priya Sharma',
         subscriptionStart: '2024-01-15',
         plan: 'Enterprise',
+        schoolCode: 'KVN',
       },
       {
-        id: 'SCH003',
+        id: 'SCHOOL003',
         name: 'Rainbow International School',
         organizationId: 'ORG002',
         organizationName: 'Rainbow Education Network',
@@ -474,6 +478,7 @@ export function SuperAdminDashboard() {
         principal: 'Mr. Amit Verma',
         subscriptionStart: '2024-01-01',
         plan: 'Professional',
+        schoolCode: 'RIS',
       },
       {
         id: 'SCH004',
@@ -500,6 +505,7 @@ export function SuperAdminDashboard() {
         principal: 'Ms. Kavita Reddy',
         subscriptionStart: '2023-07-01',
         plan: 'Basic',
+        schoolCode: 'LSA',
       },
     ] as any;
     localStorage.setItem('app_schools', JSON.stringify(demo));
@@ -645,6 +651,39 @@ export function SuperAdminDashboard() {
     ];
   });
 
+  // Utility to generate unique school code
+  const generateSchoolCode = (name: string) => {
+    if (!name) return '';
+
+    // Remove special characters and split into words
+    const words = name.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 0);
+
+    let code = '';
+    if (words.length >= 3) {
+      // Use initials of first 3-5 words
+      code = words.slice(0, 5).map(w => w[0]).join('').toUpperCase();
+    } else if (words.length === 2) {
+      // First 2 letters of first word + first letter of second word (3 chars)
+      code = (words[0].slice(0, 2) + words[1].slice(0, 1)).toUpperCase();
+    } else if (words.length === 1) {
+      // First 3-4 letters of the word
+      code = words[0].slice(0, 4).toUpperCase();
+    }
+
+    // Default fallback if too short
+    if (code.length < 3) code = name.slice(0, 3).toUpperCase();
+
+    // Ensure uniqueness
+    let finalCode = code;
+    let counter = 1;
+    while (schools.some(s => s.schoolCode === finalCode)) {
+      finalCode = `${code}${counter}`;
+      counter++;
+    }
+
+    return finalCode;
+  };
+
   // Handler for creating organization
   const handleCreateOrganization = () => {
     // Validate required fields
@@ -724,8 +763,8 @@ export function SuperAdminDashboard() {
   // Handler for creating school
   const handleCreateSchool = () => {
     // Validate required fields
-    if (!schoolForm.name || !schoolForm.organizationId || !schoolForm.principalEmail) {
-      alert('Please fill in all required fields (School Name, Organization, Principal Email)');
+    if (!schoolForm.name || !schoolForm.organizationId || !schoolForm.principalEmail || !schoolForm.schoolCode) {
+      alert('Please fill in all required fields (School Name, School Code, Organization, Principal Email)');
       return;
     }
 
@@ -774,6 +813,7 @@ export function SuperAdminDashboard() {
       maxStudents: schoolForm.maxStudents,
       maxTeachers: schoolForm.maxTeachers,
       subscriptionStart: new Date().toISOString().split('T')[0],
+      schoolCode: schoolForm.schoolCode,
     };
 
     // Add to schools list
@@ -887,6 +927,7 @@ export function SuperAdminDashboard() {
       plan: 'Basic',
       maxStudents: 200,
       maxTeachers: 20,
+      schoolCode: '',
     });
 
     // Navigate to subscriptions view
@@ -1224,6 +1265,7 @@ export function SuperAdminDashboard() {
         plan: selectedSchool.plan || 'Basic',
         maxStudents: selectedSchool.maxStudents || 200,
         maxTeachers: selectedSchool.maxTeachers || 20,
+        schoolCode: selectedSchool.schoolCode || '',
       });
       setIsEditingSchool(true);
     }
@@ -1247,6 +1289,7 @@ export function SuperAdminDashboard() {
       plan: schoolForm.plan,
       maxStudents: schoolForm.maxStudents,
       maxTeachers: schoolForm.maxTeachers,
+      schoolCode: schoolForm.schoolCode,
     };
 
     setSchools(schools.map((s) => (s.id === selectedSchool.id ? updatedSchool : s)));
@@ -1272,6 +1315,7 @@ export function SuperAdminDashboard() {
       plan: 'Basic',
       maxStudents: 200,
       maxTeachers: 20,
+      schoolCode: '',
     });
   };
 
@@ -3986,6 +4030,17 @@ export function SuperAdminDashboard() {
                         placeholder="Enter school name"
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-2">School Code *</label>
+                      <input
+                        type="text"
+                        value={schoolForm.schoolCode}
+                        onChange={(e) => setSchoolForm({ ...schoolForm, schoolCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="e.g., KVS"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">3-5 characters, uppercase letters and numbers only.</p>
+                    </div>
                   </div>
                 </div>
 
@@ -5703,17 +5758,36 @@ export function SuperAdminDashboard() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* School Name */}
-          <div className="md:col-span-2">
+          <div className="md:col-span-1">
             <label className="block text-gray-700 mb-2">
               School Name <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
               value={schoolForm.name}
-              onChange={(e) => setSchoolForm({ ...schoolForm, name: e.target.value })}
+              onChange={(e) => {
+                const newName = e.target.value;
+                const newCode = generateSchoolCode(newName);
+                setSchoolForm({ ...schoolForm, name: newName, schoolCode: newCode });
+              }}
               placeholder="e.g., Kidz Vision - Central Campus"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
+          </div>
+
+          {/* School Code */}
+          <div className="md:col-span-1">
+            <label className="block text-gray-700 mb-2">
+              School Code <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="text"
+              value={schoolForm.schoolCode}
+              onChange={(e) => setSchoolForm({ ...schoolForm, schoolCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) })}
+              placeholder="e.g., KVS"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            <p className="text-xs text-gray-500 mt-1">Generated automatically, but can be manually overridden.</p>
           </div>
 
           {/* Organization */}

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Edit, Eye, CheckCircle, Clock, XCircle, UserPlus, Calendar, Phone, Mail, Grid3x3, List, Users } from 'lucide-react';
 import { AdmissionForm } from './AdmissionForm';
 import { admissionAPI } from '../utils/api';
+import { AcademicYear, DEFAULT_YEARS, getActiveAcademicYearId } from '../utils/classUtils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Student {
   id: string;
@@ -38,26 +40,63 @@ interface Student {
 
 interface AdmissionModuleProps {
   initialView?: 'list' | 'form';
+  initialData?: any;
 }
 
-export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps = {}) {
+export function AdmissionModule({ initialView = 'list', initialData }: AdmissionModuleProps = {}) {
   const [view, setView] = useState<'list' | 'form'>(initialView);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(initialData || null);
+  const [selectedYear, setSelectedYear] = useState<string>(getActiveAcademicYearId());
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [filterStatus, setFilterStatus] = useState<string>('admitted');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
   const [usingLocalData, setUsingLocalData] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+  const { user } = useAuth();
 
-  // Load admissions from backend
+  // Load data
   useEffect(() => {
+    // Load academic years
+    const storedYears = localStorage.getItem('school_academic_years');
+    if (storedYears) {
+      setAcademicYears(JSON.parse(storedYears));
+    } else {
+      setAcademicYears(DEFAULT_YEARS);
+    }
+
     if (view === 'list') {
       loadAdmissions();
     }
-  }, [view]);
+  }, [view, selectedYear]);
+
+  // Migration logic to fix missing admission numbers
+  useEffect(() => {
+    if (students.length > 0 && usingLocalData) {
+      const hasMissingIds = students.some(s => !s.admissionNo || s.admissionNo.trim() === '');
+      if (hasMissingIds) {
+        const currentYear = new Date().getFullYear();
+        const schools = JSON.parse(localStorage.getItem('app_schools') || '[]');
+        const currentSchool = schools.find((s: any) => s.id === user?.school_id);
+        const schoolCode = currentSchool?.schoolCode || (user?.school_id === 'SCHOOL001' ? 'KVC' : 'ADM');
+
+        const updatedStudents = students.map((s, index) => {
+          if (!s.admissionNo || s.admissionNo.trim() === '') {
+            return {
+              ...s,
+              admissionNo: `${schoolCode}-${currentYear}-${(index + 1).toString().padStart(4, '0')}`
+            };
+          }
+          return s;
+        });
+
+        setStudents(updatedStudents);
+        localStorage.setItem('admissions_demo_data', JSON.stringify(updatedStudents));
+      }
+    }
+  }, [students, usingLocalData, user?.school_id]);
 
   const loadAdmissions = async () => {
     try {
@@ -110,6 +149,7 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
             classAllotted: 'LKG',
             status: 'admitted',
             appliedDate: '2024-01-12',
+            academicYear: '2024-2025',
           },
           {
             id: '3',
@@ -123,23 +163,25 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
             email: 'suresh.kumar@email.com',
             classApplied: 'Nursery',
             classAllotted: '',
-            status: 'confirmed',
+            status: 'admitted',
             appliedDate: '2024-02-01',
+            academicYear: '2024-2025',
           },
           {
             id: '4',
-            admissionNo: '',
-            name: 'Ananya Singh',
-            dob: '2019-11-05',
+            admissionNo: 'ADM2023001',
+            name: 'Pooja Shetty',
+            dob: '2009-09-15',
             gender: 'Female',
-            bloodGroup: 'AB+',
-            parentName: 'Mrs. Kavita Singh',
-            phone: '+91 98765 43213',
-            email: 'kavita.singh@email.com',
-            classApplied: 'Nursery',
-            classAllotted: '',
-            status: 'in-process',
-            appliedDate: '2024-02-10',
+            bloodGroup: 'A-',
+            parentName: 'Krishna Shetty',
+            phone: '+91 98765 43237',
+            email: 'pooja.shetty@email.com',
+            classApplied: 'Class 7',
+            classAllotted: 'Class 7',
+            status: 'admitted',
+            appliedDate: '2023-03-01',
+            academicYear: '2023-2024',
           },
         ];
 
@@ -175,18 +217,24 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
   };
 
   const filteredStudents = students.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.admissionNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.parentName.toLowerCase().includes(searchTerm.toLowerCase());
+    // If student has no academic year recorded, assume current for demo purposes
+    const studentYear = student.academicYear || getActiveAcademicYearId();
+    const matchesYear = studentYear === selectedYear;
     const matchesFilter = filterStatus === 'all' || student.status === filterStatus;
-    return matchesSearch && matchesFilter;
+    return matchesYear && matchesFilter;
   });
 
   // Function to auto-generate admission number
   const generateAdmissionNumber = () => {
     const currentYear = new Date().getFullYear();
     const admissionCount = students.length + 1;
-    return `ADM${currentYear}${admissionCount.toString().padStart(4, '0')}`;
+    
+    // Get school code
+    const schools = JSON.parse(localStorage.getItem('app_schools') || '[]');
+    const currentSchool = schools.find((s: any) => s.id === user?.school_id);
+    const schoolCode = currentSchool?.schoolCode || 'ADM';
+
+    return `${schoolCode}-${currentYear}-${admissionCount.toString().padStart(4, '0')}`;
   };
 
   if (view === 'form') {
@@ -204,18 +252,26 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
               const id = `${Date.now()}`;
               const year = new Date().getFullYear();
               const count = students.length + 1;
-              const admissionNo = `ADM${year}${count.toString().padStart(4, '0')}`;
+              
+              // Get school code
+              const schoolsList = JSON.parse(localStorage.getItem('app_schools') || '[]');
+              const currentSchool = schoolsList.find((s: any) => s.id === user?.school_id);
+              const schoolCode = currentSchool?.schoolCode || 'ADM';
+              
+              const admissionNo = `${schoolCode}-${year}-${count.toString().padStart(4, '0')}`;
 
               const newAdmission = {
-                id,
-                admissionNo,
                 ...studentData,
+                id,
+                admissionNo: (studentData.admissionNo && studentData.admissionNo.trim() !== '') 
+                  ? studentData.admissionNo 
+                  : admissionNo,
                 appliedDate: new Date().toISOString().split('T')[0],
                 status: studentData.status || 'enquiry'
               };
 
               const updatedStudents = selectedStudent
-                ? students.map(s => s.id === selectedStudent.id ? { ...s, ...studentData } : s)
+                ? students.map(s => s.id === selectedStudent.id ? { ...s, ...studentData, admissionNo: studentData.admissionNo || s.admissionNo } : s)
                 : [...students, newAdmission as Student];
 
               setStudents(updatedStudents);
@@ -265,7 +321,12 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">{viewingStudent.name}</h3>
-                <p className="text-gray-500 font-medium">{viewingStudent.admissionNo || 'Pending ID'}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-500 font-medium">{viewingStudent.admissionNo || 'Pending ID'}</p>
+                  <span className="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-[10px] font-bold text-gray-500 uppercase">
+                    School Code: {viewingStudent.admissionNo?.split('-')[0] || 'N/A'}
+                  </span>
+                </div>
               </div>
             </div>
             <button
@@ -285,7 +346,7 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
               </div>
               <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
                 <p className="text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">Applied For</p>
-                <p className="text-blue-900 font-bold">Class {viewingStudent.classApplied}</p>
+                <p className="text-blue-900 font-bold">{viewingStudent.classApplied}</p>
               </div>
               <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
                 <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Allotted</p>
@@ -445,8 +506,8 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-gray-900 mb-2">Admission Management</h1>
-          <p className="text-gray-600">Manage student admissions and applications</p>
+          <h1 className="text-gray-900 mb-2">Admitted Students List</h1>
+          <p className="text-gray-600">View and manage the list of successfully admitted students</p>
           {loading && (
             <p className="text-blue-600 mt-1">⏳ Loading admissions from server...</p>
           )}
@@ -503,7 +564,21 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
           </div>
 
           <button
-            onClick={() => setView('form')}
+            onClick={() => {
+              const schoolsList = JSON.parse(localStorage.getItem('app_schools') || '[]');
+              let currentSchool = schoolsList.find((s: any) => s.id === user?.school_id);
+              
+              // Robust fallback for demo mode to ensure code is never missing for the main school
+              if (!currentSchool?.schoolCode && (user?.school_id === 'SCHOOL001' || user?.school_id === 'SCH001')) {
+                currentSchool = { ...currentSchool, schoolCode: 'KVC' };
+              }
+
+              if (!currentSchool?.schoolCode) {
+                alert('⚠️ School Code not configured. Please contact Super Admin to set one before creating admissions.');
+                return;
+              }
+              setView('form');
+            }}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/30"
           >
             <Plus className="w-5 h-5" />
@@ -512,78 +587,36 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-purple-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-200 to-purple-300 rounded-bl-full opacity-50"></div>
-          <div className="relative">
-            <p className="text-gray-600 mb-1">Total</p>
-            <p className="text-gray-900">{stats.total}</p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-gray-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-bl-full opacity-50"></div>
-          <div className="relative">
-            <p className="text-gray-600 mb-1">Enquiry</p>
-            <p className="text-gray-900">{stats.enquiry}</p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-yellow-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-yellow-200 to-yellow-300 rounded-bl-full opacity-50"></div>
-          <div className="relative">
-            <p className="text-gray-600 mb-1">In Process</p>
-            <p className="text-gray-900">{stats.inProcess}</p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-purple-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-200 to-purple-300 rounded-bl-full opacity-50"></div>
-          <div className="relative">
-            <p className="text-gray-600 mb-1">Confirmed</p>
-            <p className="text-gray-900">{stats.confirmed}</p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-green-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-200 to-green-300 rounded-bl-full opacity-50"></div>
-          <div className="relative">
-            <p className="text-gray-600 mb-1">Admitted</p>
-            <p className="text-gray-900">{stats.admitted}</p>
-          </div>
-        </div>
-      </div>
+      {/* Stats Cards Removed to focus on Admitted List */}
 
       {/* Filters */}
       <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name, admission no, or parent..."
-              className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-purple-600" />
+            <span className="font-bold text-gray-700">Filter by Academic Year:</span>
           </div>
-
-          {/* Status Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="relative flex-1 md:max-w-xs">
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none"
+              value={selectedYear}
+              onChange={(e) => {
+                setLoading(true);
+                setTimeout(() => {
+                  setSelectedYear(e.target.value);
+                  setLoading(false);
+                }, 400); // Simulate dynamic loading
+              }}
+              className="w-full pl-4 pr-10 py-3 border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white font-medium text-gray-700"
             >
-              <option value="all">All Status</option>
-              <option value="enquiry">Enquiry</option>
-              <option value="in-process">In Process</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="admitted">Admitted</option>
+              {academicYears.map(year => (
+                <option key={year.id} value={year.id}>{year.name} {year.status === 'active' ? '(Current)' : ''}</option>
+              ))}
             </select>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
         </div>
       </div>
@@ -618,7 +651,7 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-2 bg-purple-50 rounded-xl">
                     <span className="text-gray-600">Class</span>
-                    <span className="text-gray-900">Class {student.classApplied}</span>
+                    <span className="text-gray-900">{student.classApplied}</span>
                   </div>
 
                   <div className="flex items-center justify-between p-2 bg-gray-50 rounded-xl">
@@ -647,8 +680,8 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
                   </div>
 
                   <div className="flex items-center justify-between p-2 bg-yellow-50 rounded-xl">
-                    <span className="text-gray-600">Applied</span>
-                    <span className="text-gray-900">{student.appliedDate}</span>
+                    <span className="text-gray-600">Admitted On</span>
+                    <span className="text-gray-900">{student.admissionDate || student.appliedDate}</span>
                   </div>
                 </div>
 
@@ -699,7 +732,7 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
 
                   <div>
                     <p className="text-gray-500">Class</p>
-                    <p className="text-gray-900">Class {student.classApplied}</p>
+                    <p className="text-gray-900">{student.classApplied}</p>
                   </div>
 
                   <div>
@@ -713,8 +746,8 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
                   </div>
 
                   <div>
-                    <p className="text-gray-500">Applied</p>
-                    <p className="text-gray-900">{student.appliedDate}</p>
+                    <p className="text-gray-500">Admitted On</p>
+                    <p className="text-gray-900">{student.admissionDate || student.appliedDate}</p>
                   </div>
                 </div>
 
@@ -755,16 +788,16 @@ export function AdmissionModule({ initialView = 'list' }: AdmissionModuleProps =
             <UserPlus className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-gray-900 mb-2">No Admissions Found</h3>
             <p className="text-gray-500 mb-6">
-              {searchTerm || filterStatus !== 'all'
-                ? 'No admissions match your search criteria. Try adjusting your filters.'
-                : 'Get started by creating your first admission using the "New Admission" button above.'}
+              {students.some(s => s.academicYear === selectedYear)
+                ? 'No admissions match your selected status. Try adjusting your filters.'
+                : `No admitted students found for the academic year ${selectedYear}.`}
             </p>
-            {!searchTerm && filterStatus === 'all' && (
+            {filteredStudents.length === 0 && (
               <button
                 onClick={() => setView('form')}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/30"
               >
-                Create First Admission
+                New Admission for {selectedYear}
               </button>
             )}
           </div>

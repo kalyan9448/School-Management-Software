@@ -34,7 +34,7 @@ export function TeachersModule() {
   const filteredTeachers = teachers.filter(teacher =>
     teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     teacher.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    teacher.subject.toLowerCase().includes(searchQuery.toLowerCase())
+    teacher.subjects.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleDelete = (id: string) => {
@@ -125,7 +125,7 @@ export function TeachersModule() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Subjects</p>
-              <p className="text-gray-900">{new Set(teachers.map(t => t.subject)).size}</p>
+              <p className="text-gray-900">{new Set(teachers.flatMap(t => t.subjects)).size}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-blue-600" />
@@ -172,7 +172,13 @@ export function TeachersModule() {
                 </div>
                 <div>
                   <h3 className="text-gray-900 mb-1">{teacher.name}</h3>
-                  <p className="text-purple-600 mb-2">{teacher.subject}</p>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {teacher.subjects?.map((sub, i) => (
+                      <span key={i} className="text-purple-600 text-xs font-medium bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                        {sub}
+                      </span>
+                    ))}
+                  </div>
                   <span className={`inline-block px-3 py-1 rounded-full text-xs ${teacher.status === 'active'
                     ? 'bg-green-100 text-green-700'
                     : 'bg-orange-100 text-orange-700'
@@ -219,7 +225,7 @@ export function TeachersModule() {
             <div className="mt-4 pt-4 border-t border-gray-200">
               <p className="text-gray-600 mb-2">Assigned Classes:</p>
               <div className="flex flex-wrap gap-2">
-                {teacher.classes.map((cls, index) => (
+                {teacher.classes?.map((cls, index) => (
                   <span key={index} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
                     {cls}
                   </span>

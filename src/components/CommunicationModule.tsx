@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Send, MessageSquare, Bell, Calendar as CalendarIcon, Plus } from 'lucide-react';
+import { NotificationService } from '../services/student/studentDataService';
 
 interface Announcement {
   id: string;
@@ -74,6 +75,24 @@ export function CommunicationModule() {
       date: new Date().toISOString().split('T')[0],
     };
     setAnnouncements([newAnnouncement, ...announcements]);
+
+    // Send to student dashboard if applicable
+    if (formData.targetRole === 'students' || formData.targetRole === 'all') {
+      const studentNotifType = formData.type === 'announcement' ? 'announcement' : 
+                               formData.type === 'reminder' ? 'reminder' : 
+                               formData.type === 'event' ? 'reminder' : 'reminder';
+      
+      NotificationService.add({
+        type: studentNotifType as any,
+        title: formData.title,
+        message: formData.message,
+        timestamp: new Date().toISOString(),
+        read: false,
+        priority: 'medium',
+        color: formData.type === 'holiday' ? '#10b981' : '#6366f1'
+      });
+    }
+
     setFormData({
       title: '',
       message: '',
@@ -138,15 +157,15 @@ export function CommunicationModule() {
         </div>
         <div className="bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4">
           <p className="text-blue-700 mb-1">Announcements</p>
-          <p className="text-blue-900">{announcements.filter(a => a.type === 'announcement').length}</p>
+          <p className="text-blue-900">{announcements.filter((a: Announcement) => a.type === 'announcement').length}</p>
         </div>
         <div className="bg-yellow-50 rounded-lg shadow-md border border-yellow-200 p-4">
           <p className="text-yellow-700 mb-1">Reminders</p>
-          <p className="text-yellow-900">{announcements.filter(a => a.type === 'reminder').length}</p>
+          <p className="text-yellow-900">{announcements.filter((a: Announcement) => a.type === 'reminder').length}</p>
         </div>
         <div className="bg-purple-50 rounded-lg shadow-md border border-purple-200 p-4">
           <p className="text-purple-700 mb-1">Events</p>
-          <p className="text-purple-900">{announcements.filter(a => a.type === 'event').length}</p>
+          <p className="text-purple-900">{announcements.filter((a: Announcement) => a.type === 'event').length}</p>
         </div>
       </div>
 
@@ -189,6 +208,7 @@ export function CommunicationModule() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">All Users</option>
+                  <option value="students">Students Only</option>
                   <option value="parents">Parents Only</option>
                   <option value="teachers">Teachers Only</option>
                   <option value="staff">Staff Only</option>
@@ -231,9 +251,8 @@ export function CommunicationModule() {
         </div>
       )}
 
-      {/* Announcements List */}
       <div className="space-y-4">
-        {announcements.map((announcement) => (
+        {announcements.map((announcement: Announcement) => (
           <div key={announcement.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow">
             <div className="flex items-start gap-4">
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${getTypeStyle(announcement.type)}`}>
@@ -252,7 +271,11 @@ export function CommunicationModule() {
 
                 <div className="flex items-center gap-4 text-gray-500">
                   <span>📅 {announcement.date}</span>
-                  <span>👥 Sent to: {announcement.targetRole === 'all' ? 'All Users' : announcement.targetRole}</span>
+                  <span>👥 Sent to: {
+                    announcement.targetRole === 'all' ? 'All Users' : 
+                    announcement.targetRole === 'students' ? 'Students Only' :
+                    announcement.targetRole
+                  }</span>
                 </div>
               </div>
             </div>

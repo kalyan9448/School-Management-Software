@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List, Trash2 } from 'lucide-react';
 import { enquiryAPI } from '../utils/api';
 import { getUniqueClasses } from '../utils/classUtils';
 
@@ -16,7 +16,11 @@ interface Enquiry {
   status: 'pending' | 'followed-up' | 'converted' | 'closed';
 }
 
-export function EnquiryModule() {
+interface EnquiryModuleProps {
+  onConvert?: (enquiry: Enquiry) => void;
+}
+
+export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
   const [showForm, setShowForm] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -177,6 +181,14 @@ export function EnquiryModule() {
     );
     setEnquiries(updatedEnquiries);
     localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
+  };
+
+  const handleDeleteEnquiry = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this enquiry? This action cannot be undone.')) {
+      const updatedEnquiries = enquiries.filter(e => e.id !== id);
+      setEnquiries(updatedEnquiries);
+      localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -660,9 +672,18 @@ export function EnquiryModule() {
                     <h3 className="text-gray-900 mb-1">{enquiry.childName}</h3>
                     <p className="text-gray-600">Class {enquiry.classInterest} Interest</p>
                   </div>
-                  <span className={`px-3 py-1.5 rounded-xl border ${getStatusBadge(enquiry.status)}`}>
-                    {enquiry.status.replace('-', ' ').toUpperCase()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1.5 rounded-xl border ${getStatusBadge(enquiry.status)}`}>
+                      {enquiry.status.replace('-', ' ').toUpperCase()}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteEnquiry(enquiry.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                      title="Delete Enquiry"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -701,7 +722,7 @@ export function EnquiryModule() {
                     Follow Up
                   </button>
                   <button
-                    onClick={() => handleStatusChange(enquiry.id, 'converted')}
+                    onClick={() => onConvert ? onConvert(enquiry) : handleStatusChange(enquiry.id, 'converted')}
                     className="flex-1 px-3 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
                   >
                     Convert
@@ -758,11 +779,18 @@ export function EnquiryModule() {
                     <CheckCircle className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleStatusChange(enquiry.id, 'converted')}
+                    onClick={() => onConvert ? onConvert(enquiry) : handleStatusChange(enquiry.id, 'converted')}
                     className="p-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
                     title="Convert to Admission"
                   >
                     <CheckCircle className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteEnquiry(enquiry.id)}
+                    className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
+                    title="Delete Enquiry"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>

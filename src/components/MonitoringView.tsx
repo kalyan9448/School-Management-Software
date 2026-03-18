@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
 
-export function MonitoringView() {
+interface MonitoringViewProps {
+  onNavigate?: (view: string, options?: any) => void;
+}
+
+export function MonitoringView({ onNavigate }: MonitoringViewProps) {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
   const [stats, setStats] = useState({
     activeUsers: 0,
@@ -239,10 +243,23 @@ export function MonitoringView() {
           <div className="divide-y divide-gray-200">
             {classes.length > 0 ? (
               classes.map((item, index) => (
-                <div key={index} className="p-4 hover:bg-gray-50">
+                <div 
+                  key={index} 
+                  className="p-4 hover:bg-purple-50 cursor-pointer transition-all border-l-4 border-transparent hover:border-purple-600 group"
+                  onClick={() => {
+                    const classMatch = item.class.match(/(.*)\s(.*)/);
+                    if (classMatch && onNavigate) {
+                      onNavigate('students', {
+                        tab: 'attendance',
+                        class: classMatch[1],
+                        section: classMatch[2]
+                      });
+                    }
+                  }}
+                >
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <h4 className="text-gray-900">{item.class}</h4>
+                      <h4 className="text-gray-900 group-hover:text-purple-700 transition-colors">{item.class}</h4>
                       <p className="text-gray-600 text-sm">{item.teacher}</p>
                     </div>
                     <span

@@ -170,7 +170,7 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                 >
                                     <option value="">Select Teacher</option>
                                     {teachers.map((teacher) => (
-                                        <option key={teacher.id} value={teacher.name}>{teacher.name} ({teacher.subject})</option>
+                                        <option key={teacher.id} value={teacher.name}>{teacher.name} ({teacher.subjects?.join(', ') || ''})</option>
                                     ))}
                                     {teachers.length === 0 && <option value="" disabled>No active teachers found</option>}
                                 </select>

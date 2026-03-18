@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ViewType } from './AdminDashboard';
 import {
@@ -15,7 +16,6 @@ import {
   Settings,
   Shield,
   BarChart3,
-  CheckCircle,
   FileCheck,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
@@ -27,20 +27,32 @@ interface SidebarProps {
 
 export function Sidebar({ activeView, setActiveView }: SidebarProps) {
   const { user, logout } = useAuth();
+  const [schoolCode, setSchoolCode] = useState<string>('');
+
+  useEffect(() => {
+    if (user?.school_id) {
+      const savedSchools = localStorage.getItem('app_schools');
+      if (savedSchools) {
+        const schools = JSON.parse(savedSchools);
+        const school = schools.find((s: any) => s.id === user.school_id);
+        if (school?.schoolCode) {
+          setSchoolCode(school.schoolCode);
+        }
+      }
+    }
+  }, [user]);
 
   const menuItems = [
     { id: 'dashboard', icon: Home, label: 'Dashboard', roles: ['admin', 'accountant'] },
     { id: 'admission', icon: UserPlus, label: 'Admissions', roles: ['admin'] },
-    { id: 'admission-activation', icon: CheckCircle, label: 'Admission Activation', roles: ['admin'] },
     { id: 'enquiry', icon: HelpCircle, label: 'Enquiries', roles: ['admin'] },
     { id: 'fees', icon: DollarSign, label: 'Fee Management', roles: ['admin', 'accountant'] },
     { id: 'students', icon: Users, label: 'Students', roles: ['admin'] },
     { id: 'teachers', icon: GraduationCap, label: 'Teachers', roles: ['admin'] },
     { id: 'academic-structure', icon: BookOpen, label: 'Academic Structure', roles: ['admin'] },
-    { id: 'user-management', icon: Settings, label: 'User Management', roles: ['admin'] },
     { id: 'monitoring', icon: BarChart3, label: 'Monitoring', roles: ['admin'] },
-    { id: 'communication', icon: MessageSquare, label: 'Communication', roles: ['admin'] },
-    { id: 'reports-approval', icon: FileCheck, label: 'Reports & Announcements', roles: ['admin'] },
+    { id: 'communication', icon: MessageSquare, label: 'Announcement', roles: ['admin'] },
+    { id: 'reports-approval', icon: FileCheck, label: 'Reports & Analytics', roles: ['admin'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item =>
@@ -89,6 +101,11 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
           <p className="text-purple-200">Logged in as</p>
           <p>{user?.name}</p>
           <p className="text-purple-300">{user?.email}</p>
+          {schoolCode && (
+            <div className="mt-1 px-2 py-0.5 bg-yellow-400/20 border border-yellow-400/30 rounded text-xs font-bold text-yellow-300 inline-block">
+              CODE: {schoolCode}
+            </div>
+          )}
         </div>
         <button
           onClick={logout}

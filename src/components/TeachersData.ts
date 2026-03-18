@@ -3,7 +3,7 @@ export interface Teacher {
     name: string;
     email: string;
     phone: string;
-    subject: string;
+    subjects: string[];
     classes: string[];
     qualification: string;
     joiningDate: string;
@@ -31,7 +31,7 @@ export const initialTeachers: Teacher[] = [
         name: 'Priya Sharma',
         email: 'priya.sharma@joykids.com',
         phone: '+91 98765 43210',
-        subject: 'English & Hindi',
+        subjects: ['English', 'Hindi'],
         classes: ['Class 1', 'Class 2'],
         qualification: 'B.Ed, M.A. English',
         joiningDate: '2020-06-15',
@@ -43,7 +43,7 @@ export const initialTeachers: Teacher[] = [
         name: 'Rajesh Kumar',
         email: 'rajesh.kumar@joykids.com',
         phone: '+91 98765 43211',
-        subject: 'Mathematics & Science',
+        subjects: ['Mathematics', 'Science'],
         classes: ['Class 3', 'Class 4'],
         qualification: 'B.Sc, B.Ed',
         joiningDate: '2019-08-20',
@@ -55,7 +55,7 @@ export const initialTeachers: Teacher[] = [
         name: 'Anita Reddy',
         email: 'anita.reddy@joykids.com',
         phone: '+91 98765 43212',
-        subject: 'Social Studies',
+        subjects: ['Social Studies'],
         classes: ['Class 5', 'Class 6'],
         qualification: 'M.A. History, B.Ed',
         joiningDate: '2021-04-10',
@@ -67,7 +67,7 @@ export const initialTeachers: Teacher[] = [
         name: 'Sanjay Patel',
         email: 'sanjay.patel@joykids.com',
         phone: '+91 98765 43213',
-        subject: 'Physical Education',
+        subjects: ['Physical Education'],
         classes: ['All Classes'],
         qualification: 'B.P.Ed',
         joiningDate: '2022-01-05',

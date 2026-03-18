@@ -3,52 +3,21 @@ import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp, Pl
 
 export function ReportsApprovalView() {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [scheduledReports, setScheduledReports] = useState<any[]>([]);
   const [recentReports, setRecentReports] = useState<any[]>([]);
-
-  const [newAnnouncement, setNewAnnouncement] = useState({
-    title: '',
-    message: '',
-    priority: 'medium',
-    recipients: 'All Parents',
+  const [showReportBuilder, setShowReportBuilder] = useState(false);
+  const [reportConfig, setReportConfig] = useState({
+    type: 'Attendance',
+    class: 'all',
+    section: 'all',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    format: 'PDF'
   });
 
   // Load everything on mount
   useEffect(() => {
-    // 1. Announcements (Shared with CommunicationModule)
-    const savedAnnouncements = localStorage.getItem('school_announcements');
-    if (savedAnnouncements) {
-      setAnnouncements(JSON.parse(savedAnnouncements));
-    } else {
-      const defaultAnnouncements = [
-        {
-          id: '1',
-          title: 'Annual Sports Day - March 15, 2024',
-          message: 'All students are required to participate in the annual sports day. Parent attendance is encouraged.',
-          priority: 'high',
-          recipients: 'All Parents, All Students',
-          scheduledFor: '2024-02-20 09:00 AM',
-          status: 'scheduled',
-          type: 'event'
-        },
-        {
-          id: '2',
-          title: 'Parent-Teacher Meeting',
-          message: "PTM scheduled for Feb 25. Please check your ward's progress report beforehand.",
-          priority: 'medium',
-          recipients: 'All Parents',
-          scheduledFor: '2024-02-22 10:00 AM',
-          status: 'scheduled',
-          type: 'event'
-        }
-      ];
-      setAnnouncements(defaultAnnouncements);
-      localStorage.setItem('school_announcements', JSON.stringify(defaultAnnouncements));
-    }
-
-    // 2. Scheduled Reports
+    // 1. Scheduled Reports
     const savedScheduled = localStorage.getItem('school_reports_scheduled');
     if (savedScheduled) {
       setScheduledReports(JSON.parse(savedScheduled));
@@ -97,24 +66,6 @@ export function ReportsApprovalView() {
     }
   }, []);
 
-  const handleCreateAnnouncement = (e: React.FormEvent) => {
-    e.preventDefault();
-    const announcement = {
-      id: Date.now().toString(),
-      ...newAnnouncement,
-      scheduledFor: 'Immediate',
-      status: 'sent',
-      date: new Date().toISOString().split('T')[0],
-      type: 'announcement'
-    };
-
-    const updated = [announcement, ...announcements];
-    setAnnouncements(updated);
-    localStorage.setItem('school_announcements', JSON.stringify(updated));
-    setShowAnnouncementForm(false);
-    setNewAnnouncement({ title: '', message: '', priority: 'medium', recipients: 'All Parents' });
-  };
-
   const toggleReportStatus = (id: string) => {
     const updated = scheduledReports.map(r =>
       r.id === id ? { ...r, status: r.status === 'active' ? 'paused' : 'active' } : r
@@ -127,41 +78,42 @@ export function ReportsApprovalView() {
     setIsGenerating(true);
     setTimeout(() => {
       setIsGenerating(false);
-      alert('Report generated successfully! Download started.');
-    }, 2000);
-  };
+      
+      const configName = reportConfig.class === 'all' 
+        ? `${reportConfig.type} Summary` 
+        : `${reportConfig.type} - Class ${reportConfig.class}${reportConfig.section !== 'all' ? ` ${reportConfig.section}` : ''}`;
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'bg-red-100 text-red-700 border-red-200';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'low':
-        return 'bg-green-100 text-green-700 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
+      const newReport = {
+        id: Date.now().toString(),
+        name: configName,
+        type: reportConfig.type,
+        generatedOn: new Date().toISOString().split('T')[0],
+        format: reportConfig.format,
+        size: '1.4 MB',
+      };
+
+      const updated = [newReport, ...recentReports];
+      setRecentReports(updated);
+      localStorage.setItem('school_reports_recent', JSON.stringify(updated));
+      setShowReportBuilder(false);
+      alert('Custom report generated successfully!');
+    }, 2000);
   };
 
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-gray-900">Reports & Announcements</h2>
-          <p className="text-gray-600">Generate reports and manage announcements</p>
+          <h2 className="text-gray-900">Reports & Analytics</h2>
+          <p className="text-gray-600">Generate and manage school performance reports</p>
         </div>
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-            <FileText className="w-4 h-4" />
-            Generate Report
-          </button>
-          <button
-            onClick={() => setShowAnnouncementForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          <button 
+            onClick={() => setShowReportBuilder(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all shadow-md active:scale-95"
           >
-            <Bell className="w-4 h-4" />
-            New Announcement
+            <Plus className="w-4 h-4" />
+            Build Custom Report
           </button>
         </div>
       </div>
@@ -214,165 +166,199 @@ export function ReportsApprovalView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Recent Reports */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-gray-900">Recent Reports</h3>
-            <p className="text-gray-600 text-sm">Recently generated reports</p>
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-gray-900">Recent Reports</h3>
+              <p className="text-gray-600 text-sm">Recently generated school reports</p>
+            </div>
           </div>
-          <div className="divide-y divide-gray-200">
-            {recentReports.map((report) => (
-              <div key={report.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-gray-900">{report.name}</p>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span>{report.format}</span>
-                        <span>•</span>
-                        <span>{report.size}</span>
-                        <span>•</span>
-                        <span>{report.generatedOn}</span>
+          <div className="divide-y divide-gray-200 max-h-[400px] overflow-y-auto">
+            {recentReports.length > 0 ? (
+              recentReports.map((report) => (
+                <div key={report.id} className="p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-gray-900 font-medium">{report.name}</p>
+                        <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Target className="w-3 h-4" />
+                            {report.type}
+                          </span>
+                          <span>•</span>
+                          <span>{report.format}</span>
+                          <span>•</span>
+                          <span>{report.size}</span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-4" />
+                            {report.generatedOn}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    <button className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all">
+                      <Download className="w-6 h-6" />
+                    </button>
                   </div>
-                  <button className="p-2 text-gray-400 hover:text-purple-600">
-                    <Download className="w-5 h-5" />
-                  </button>
                 </div>
+              ))
+            ) : (
+              <div className="p-12 text-center text-gray-500">
+                <FileText className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p>No reports generated yet.</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Pending Announcements */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-gray-900">Scheduled Announcements</h3>
-            <p className="text-gray-600 text-sm">Upcoming and sent announcements</p>
-          </div>
-          <div className="divide-y divide-gray-200">
-            {announcements.map((announcement) => (
-              <div key={announcement.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="text-gray-900 flex-1">{announcement.title}</h4>
-                  <span
-                    className={`px-2 py-1 rounded text-xs border ${getPriorityColor(
-                      announcement.priority
-                    )}`}
-                  >
-                    {announcement.priority}
-                  </span>
-                </div>
-                <p className="text-gray-600 text-sm mb-3">{announcement.message}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Calendar className="w-3 h-3" />
-                    <span>{announcement.scheduledFor}</span>
-                  </div>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${announcement.status === 'sent'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-blue-100 text-blue-700'
-                      }`}
-                  >
-                    {announcement.status}
-                  </span>
-                </div>
-              </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
 
-      {/* New Announcement Modal */}
-      {showAnnouncementForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">New Announcement</h3>
+      {/* Custom Report Builder Modal */}
+      {showReportBuilder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Custom Report Builder</h3>
+                  <p className="text-gray-500 text-sm">Configure your tailored school report</p>
+                </div>
+              </div>
               <button
-                onClick={() => setShowAnnouncementForm(false)}
-                className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600"
+                onClick={() => setShowReportBuilder(false)}
+                className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAnnouncement} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input
-                  type="text"
-                  required
-                  value={newAnnouncement.title}
-                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none"
-                  placeholder="Sports Day Announcement..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={newAnnouncement.message}
-                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, message: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none resize-none"
-                  placeholder="Enter message details here..."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Report Type</label>
                   <select
-                    value={newAnnouncement.priority}
-                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                    value={reportConfig.type}
+                    onChange={(e) => setReportConfig({ ...reportConfig, type: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
                   >
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="Attendance">Attendance Report</option>
+                    <option value="Fees">Fee Collection Report</option>
+                    <option value="Academic">Academic Performance</option>
+                    <option value="Admissions">Admissions Summary</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Recipients</label>
-                  <select
-                    value={newAnnouncement.recipients}
-                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, recipients: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none"
-                  >
-                    <option value="All Parents">All Parents</option>
-                    <option value="All Students">All Students</option>
-                    <option value="Teachers Only">Teachers Only</option>
-                    <option value="Staff Only">Staff Only</option>
-                  </select>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
+                    <select
+                      value={reportConfig.class}
+                      onChange={(e) => setReportConfig({ ...reportConfig, class: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
+                    >
+                      <option value="all">All Classes</option>
+                      <option value="Nursery">Nursery</option>
+                      <option value="LKG">LKG</option>
+                      <option value="UKG">UKG</option>
+                      <option value="Class 1">Class 1</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Section</label>
+                    <select
+                      value={reportConfig.section}
+                      onChange={(e) => setReportConfig({ ...reportConfig, section: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
+                    >
+                      <option value="all">All Sections</option>
+                      <option value="A">Section A</option>
+                      <option value="B">Section B</option>
+                      <option value="C">Section C</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                >
-                  <Send className="w-5 h-5" />
-                  Send Announcement
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAnnouncementForm(false)}
-                  className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all"
-                >
-                  Cancel
-                </button>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={reportConfig.startDate}
+                        onChange={(e) => setReportConfig({ ...reportConfig, startDate: e.target.value })}
+                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={reportConfig.endDate}
+                        onChange={(e) => setReportConfig({ ...reportConfig, endDate: e.target.value })}
+                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Export Format</label>
+                  <div className="flex gap-4">
+                    {['PDF', 'Excel', 'CSV'].map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => setReportConfig({ ...reportConfig, format: fmt })}
+                        className={`flex-1 py-3 rounded-xl border-2 transition-all font-semibold ${
+                          reportConfig.format === fmt
+                            ? 'border-purple-600 bg-purple-50 text-purple-700'
+                            : 'border-gray-100 text-gray-500 hover:border-gray-200'
+                        }`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </form>
+            </div>
+
+            <div className="mt-10 flex gap-4">
+              <button
+                onClick={handleGenerateReport}
+                disabled={isGenerating}
+                className="flex-[2] py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 transition-all shadow-lg hover:shadow-purple-200 disabled:opacity-50 flex items-center justify-center gap-3 active:scale-[0.98]"
+              >
+                {isGenerating ? (
+                  <>
+                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                    Generating Report...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-5 h-5" />
+                    Build & Generate Report
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowReportBuilder(false)}
+                className="flex-1 py-4 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

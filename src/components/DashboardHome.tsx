@@ -8,7 +8,7 @@ interface DashboardHomeProps {
 }
 
 export function DashboardHome({ onNavigate }: DashboardHomeProps) {
-  const { schoolName } = useTenant();
+  const { schoolName, schoolId } = useTenant();
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalRevenue: 0,
@@ -17,12 +17,23 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     feeDues: 0,
     enquiries: 0,
   });
+  const [schoolCode, setSchoolCode] = useState<string>('');
 
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
   const [classPerformance, setClassPerformance] = useState<any[]>([]);
 
   useEffect(() => {
+    // Fetch School Code
+    const savedSchools = localStorage.getItem('app_schools');
+    if (savedSchools && schoolId) {
+      const schools = JSON.parse(savedSchools);
+      const school = schools.find((s: any) => s.id === schoolId);
+      if (school?.schoolCode) {
+        setSchoolCode(school.schoolCode);
+      }
+    }
+
     // 1. Fetch Students
     const allStudents = studentService.getAll();
     const totalStudentsCount = allStudents.length;
@@ -155,7 +166,14 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-gray-900 mb-2">Dashboard Overview</h1>
-          <p className="text-gray-600">Welcome back! Here's what's happening at {schoolName || 'your school'} today.</p>
+          <div className="flex items-center gap-3">
+            <p className="text-gray-600">Welcome back! Here's what's happening at {schoolName || 'your school'} today.</p>
+            {schoolCode && (
+              <span className="px-3 py-1 bg-purple-100 border border-purple-200 rounded-full text-purple-700 text-sm font-bold shadow-sm">
+                School Code: {schoolCode}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -262,7 +280,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Pending Admissions */}
         <button
-          onClick={() => onNavigate?.('admission')}
+          onClick={() => onNavigate?.('enquiry')}
           className="relative overflow-hidden bg-orange-50 rounded-3xl p-6 shadow-md border-2 border-orange-200 hover:shadow-xl transition-all hover:-translate-y-1 text-left cursor-pointer group"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-orange-200 rounded-bl-full opacity-30 group-hover:scale-110 transition-transform"></div>
@@ -335,6 +353,12 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-900">Recent Activities</h3>
+            <button
+              onClick={() => onNavigate?.('monitoring')}
+              className="text-purple-600 hover:text-purple-700 transition-colors"
+            >
+              View All
+            </button>
           </div>
           <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6">
             <div className="space-y-4">
@@ -369,6 +393,12 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-900">Upcoming Events</h3>
+            <button
+              onClick={() => onNavigate?.('communication')}
+              className="text-purple-600 hover:text-purple-700 transition-colors"
+            >
+              View All
+            </button>
           </div>
           <div className="space-y-4">
             {upcomingEvents.map((event) => (

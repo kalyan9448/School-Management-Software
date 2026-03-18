@@ -261,8 +261,13 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 onChange={handleChange}
                 readOnly={!!student}
                 className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${student ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                placeholder="Auto-generated or enter manual"
+                placeholder="Auto-generated (includes School Code)"
               />
+              {!student && (
+                <p className="mt-1 text-xs text-gray-500 italic">
+                  Note: The system automatically prefixes the unique School Code.
+                </p>
+              )}
             </div>
           </div>
         </div>

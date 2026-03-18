@@ -35,8 +35,7 @@
 - ✅ **14 Modules**:
   1. Dashboard Home
   2. Admissions
-  3. Admission Activation
-  4. Enquiries
+  3. Enquiries
   5. Fee Management
   6. Students
   7. Teachers

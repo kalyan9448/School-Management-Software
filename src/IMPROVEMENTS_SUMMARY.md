@@ -222,21 +222,19 @@ Headers:          Semantic sizes (h1, h2, h3)
 - Downloadable reports (weekly/monthly)
 
 ### Admin Dashboard
-**14 Modules:**
+**13 Modules:**
 1. Dashboard
 2. Admissions
-3. Admission Activation
-4. Enquiries
+3. Enquiries
 5. Fee Management
 6. Students
 7. Teachers
 8. Academic Structure
 9. Subject Mapping
-10. User Management
-11. Monitoring
-12. Communication
-13. Reports
-14. Reports & Announcements
+10. Monitoring
+11. Communication
+12. Reports
+13. Reports & Announcements
 
 **Key Features:**
 - Comprehensive admission management

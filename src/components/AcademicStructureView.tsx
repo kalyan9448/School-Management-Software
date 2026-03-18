@@ -4,11 +4,22 @@ import { StudentPromotionTool } from './StudentPromotionTool.tsx';
 import SubjectMappingView from './SubjectMappingView';
 import { TimetableManagement } from './TimetableManagement';
 import { AcademicYear, ClassSection, DEFAULT_YEARS, DEFAULT_CLASSES } from '../utils/classUtils';
+import { Teacher } from './TeachersData';
+
+const CLASS_OPTIONS = [
+  'Playgroup', 'Nursery', 'LKG', 'UKG',
+  'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
+  'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10',
+  'Class 11', 'Class 12'
+];
+
+const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
 export function AcademicStructureView() {
   const [activeTab, setActiveTab] = useState<'years' | 'classes' | 'subject-mapping' | 'timetable' | 'promotion'>('years');
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [classSections, setClassSections] = useState<ClassSection[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   // Modal state
   const [showAddYearModal, setShowAddYearModal] = useState(false);
@@ -19,10 +30,12 @@ export function AcademicStructureView() {
   const [newYearStart, setNewYearStart] = useState('');
   const [newYearEnd, setNewYearEnd] = useState('');
   const [baseYearId, setBaseYearId] = useState(''); // Which year to clone structure from
+  const [editingYearId, setEditingYearId] = useState<string | null>(null);
 
   const [newClassName, setNewClassName] = useState('');
   const [newSectionName, setNewSectionName] = useState('');
   const [newClassTeacher, setNewClassTeacher] = useState('');
+  const [newCapacity, setNewCapacity] = useState('30');
   const [selectedClassNameForSection, setSelectedClassNameForSection] = useState('');
 
   useEffect(() => {
@@ -43,6 +56,12 @@ export function AcademicStructureView() {
       setClassSections(DEFAULT_CLASSES);
       localStorage.setItem(`school_class_sections_${activeY}`, JSON.stringify(DEFAULT_CLASSES));
     }
+
+    // Load Teachers
+    const storedTeachers = localStorage.getItem('school_teachers');
+    if (storedTeachers) {
+      setTeachers(JSON.parse(storedTeachers));
+    }
   }, []);
 
   const handleAddAcademicYear = () => {
@@ -51,40 +70,81 @@ export function AcademicStructureView() {
       return;
     }
 
-    const newYear: AcademicYear = {
-      id: newYearName,
-      name: newYearName,
-      startDate: newYearStart,
-      endDate: newYearEnd,
-      status: 'upcoming'
-    };
+    if (editingYearId) {
+      // Update existing year
+      const updatedYears = academicYears.map(year => 
+        year.id === editingYearId 
+          ? { ...year, name: newYearName, startDate: newYearStart, endDate: newYearEnd }
+          : year
+      );
+      setAcademicYears(updatedYears);
+      localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
+    } else {
+      // Create new year
+      const newYear: AcademicYear = {
+        id: newYearName,
+        name: newYearName,
+        startDate: newYearStart,
+        endDate: newYearEnd,
+        status: 'upcoming'
+      };
 
-    const updatedYears = [...academicYears, newYear];
-    setAcademicYears(updatedYears);
-    localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
+      const updatedYears = [...academicYears, newYear];
+      setAcademicYears(updatedYears);
+      localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
 
-    // Duplicate structure if a base year is selected
-    if (baseYearId) {
-      // Copy Classes
-      let baseClasses = localStorage.getItem(`school_class_sections_${baseYearId}`);
-      if (!baseClasses && baseYearId === '2024-2025') baseClasses = JSON.stringify(DEFAULT_CLASSES);
-      if (baseClasses) {
-        localStorage.setItem(`school_class_sections_${newYearName}`, baseClasses);
-      }
+      // Duplicate structure if a base year is selected
+      if (baseYearId) {
+        // Copy Classes
+        let baseClasses = localStorage.getItem(`school_class_sections_${baseYearId}`);
+        if (!baseClasses && baseYearId === '2024-2025') baseClasses = JSON.stringify(DEFAULT_CLASSES);
+        if (baseClasses) {
+          localStorage.setItem(`school_class_sections_${newYearName}`, baseClasses);
+        }
 
-      // Copy Subject Mappings (handles legacy un-suffixed key if running for first time)
-      let baseSubjects = localStorage.getItem(`school_subject_mappings_${baseYearId}`);
-      if (!baseSubjects) baseSubjects = localStorage.getItem('school_subject_mappings');
-      if (baseSubjects) {
-        localStorage.setItem(`school_subject_mappings_${newYearName}`, baseSubjects);
+        // Copy Subject Mappings (handles legacy un-suffixed key if running for first time)
+        let baseSubjects = localStorage.getItem(`school_subject_mappings_${baseYearId}`);
+        if (!baseSubjects) baseSubjects = localStorage.getItem('school_subject_mappings');
+        if (baseSubjects) {
+          localStorage.setItem(`school_subject_mappings_${newYearName}`, baseSubjects);
+        }
       }
     }
 
     setShowAddYearModal(false);
+    setEditingYearId(null);
     setNewYearName('');
     setNewYearStart('');
     setNewYearEnd('');
     setBaseYearId('');
+  };
+
+  const handleDeleteAcademicYear = (id: string) => {
+    const yearToDelete = academicYears.find(y => y.id === id);
+    if (!yearToDelete) return;
+
+    if (yearToDelete.status === 'active') {
+      alert("Cannot delete an active academic year.");
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete ${yearToDelete.name}? This will remove all associated data.`)) {
+      const updatedYears = academicYears.filter(y => y.id !== id);
+      setAcademicYears(updatedYears);
+      localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
+      
+      // Clean up associated data
+      localStorage.removeItem(`school_class_sections_${id}`);
+      localStorage.removeItem(`school_subject_mappings_${id}`);
+    }
+  };
+
+  const handleEditYear = (year: AcademicYear) => {
+    setEditingYearId(year.id);
+    setNewYearName(year.name);
+    setNewYearStart(year.startDate);
+    setNewYearEnd(year.endDate);
+    setShowAddYearModal(true);
   };
 
   const handleAddClass = () => {
@@ -99,7 +159,7 @@ export function AcademicStructureView() {
       section: newSectionName,
       classTeacher: newClassTeacher,
       students: 0,
-      capacity: 30
+      capacity: parseInt(newCapacity) || 30
     };
 
     const activeY = academicYears.find(y => y.status === 'active')?.id || '2024-2025';
@@ -111,6 +171,7 @@ export function AcademicStructureView() {
     setNewClassName('');
     setNewSectionName('');
     setNewClassTeacher('');
+    setNewCapacity('30');
   };
 
   const handleAddSection = () => {
@@ -125,7 +186,7 @@ export function AcademicStructureView() {
       section: newSectionName,
       classTeacher: newClassTeacher,
       students: 0,
-      capacity: 30
+      capacity: parseInt(newCapacity) || 30
     };
 
     const activeY = academicYears.find(y => y.status === 'active')?.id || '2024-2025';
@@ -136,6 +197,7 @@ export function AcademicStructureView() {
     setShowAddSectionModal(false);
     setNewSectionName('');
     setNewClassTeacher('');
+    setNewCapacity('30');
     setSelectedClassNameForSection('');
   };
 
@@ -260,10 +322,18 @@ export function AcademicStructureView() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 self-start sm:self-auto">
-                      <button className="p-2 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors" title="Edit Year">
+                      <button 
+                        onClick={() => handleEditYear(year)}
+                        className="p-2 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors" 
+                        title="Edit Year"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" title="Delete Year">
+                      <button 
+                        onClick={() => handleDeleteAcademicYear(year.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" 
+                        title="Delete Year"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -385,8 +455,10 @@ export function AcademicStructureView() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">Create Academic Year</h3>
-              <p className="text-sm text-gray-500 mt-1">Set up a new academic year and clone existing structure.</p>
+              <h3 className="text-xl font-bold text-gray-900">{editingYearId ? 'Edit Academic Year' : 'Create Academic Year'}</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {editingYearId ? 'Update dates and details for this academic year.' : 'Set up a new academic year and clone existing structure.'}
+              </p>
             </div>
 
             <div className="p-6 space-y-4">
@@ -421,23 +493,25 @@ export function AcademicStructureView() {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-gray-100 mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                  <Copy className="w-4 h-4 text-gray-400" />
-                  Clone Structure From
-                </label>
-                <p className="text-xs text-gray-500 mb-2">Automatically copy classes, sections, and teacher allocations from a previous year.</p>
-                <select
-                  value={baseYearId}
-                  onChange={e => setBaseYearId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50"
-                >
-                  <option value="">Start Fresh (No copying)</option>
-                  {academicYears.map(year => (
-                    <option key={year.id} value={year.id}>{year.name}</option>
-                  ))}
-                </select>
-              </div>
+              {!editingYearId && (
+                <div className="pt-2 border-t border-gray-100 mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <Copy className="w-4 h-4 text-gray-400" />
+                    Clone Structure From
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">Automatically copy classes, sections, and teacher allocations from a previous year.</p>
+                  <select
+                    value={baseYearId}
+                    onChange={e => setBaseYearId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50"
+                  >
+                    <option value="">Start Fresh (No copying)</option>
+                    {academicYears.map(year => (
+                      <option key={year.id} value={year.id}>{year.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
@@ -451,8 +525,17 @@ export function AcademicStructureView() {
                 onClick={handleAddAcademicYear}
                 className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-lg shadow-sm transition-all font-medium flex items-center gap-2"
               >
-                <Plus className="w-4 h-4" />
-                Create Year
+                {editingYearId ? (
+                  <>
+                    <Edit className="w-4 h-4" />
+                    Update Year
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Create Year
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -469,33 +552,58 @@ export function AcademicStructureView() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class Name (e.g., Class 2)</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Name *</label>
+                <select
                   value={newClassName}
                   onChange={e => setNewClassName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="Class 2"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white"
+                >
+                  <option value="">Select Class</option>
+                  {CLASS_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Initial Section (e.g., A)</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Initial Section *</label>
+                <select
                   value={newSectionName}
                   onChange={e => setNewSectionName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="A"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white"
+                >
+                  <option value="">Select Section</option>
+                  {SECTION_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher *</label>
+                <select
                   value={newClassTeacher}
                   onChange={e => setNewClassTeacher(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white"
+                >
+                  <option value="">Select Teacher</option>
+                  {teachers.map(teacher => (
+                    <option key={teacher.id} value={teacher.name}>
+                      {teacher.name} ({teacher.subjects?.join(', ') || ''})
+                    </option>
+                  ))}
+                </select>
+                {teachers.length === 0 && (
+                  <p className="text-xs text-orange-600 mt-1">No teachers found. Please add teachers first.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Capacity *</label>
+                <input
+                  type="number"
+                  value={newCapacity}
+                  onChange={e => setNewCapacity(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="Teacher Name"
+                  placeholder="30"
+                  min="1"
                 />
               </div>
             </div>
@@ -528,23 +636,45 @@ export function AcademicStructureView() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Section Name (e.g., C)</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Section Name *</label>
+                <select
                   value={newSectionName}
                   onChange={e => setNewSectionName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="C"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white"
+                >
+                  <option value="">Select Section</option>
+                  {SECTION_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher *</label>
+                <select
                   value={newClassTeacher}
                   onChange={e => setNewClassTeacher(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white"
+                >
+                  <option value="">Select Teacher</option>
+                  {teachers.map(teacher => (
+                    <option key={teacher.id} value={teacher.name}>
+                      {teacher.name} ({teacher.subjects?.join(', ') || ''})
+                    </option>
+                  ))}
+                </select>
+                {teachers.length === 0 && (
+                  <p className="text-xs text-orange-600 mt-1">No teachers found. Please add teachers first.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Section Capacity *</label>
+                <input
+                  type="number"
+                  value={newCapacity}
+                  onChange={e => setNewCapacity(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="Teacher Name"
+                  placeholder="30"
+                  min="1"
                 />
               </div>
             </div>

@@ -25,10 +25,18 @@ interface MonthlyAttendance {
 
 interface StudentInformationProps {
   onNavigate?: (view: string) => void;
+  initialTab?: 'profiles' | 'attendance';
+  initialClass?: string;
+  initialSection?: string;
 }
 
-export function StudentInformation({ onNavigate }: StudentInformationProps = {}) {
-  const [activeMainTab, setActiveMainTab] = useState<'profiles' | 'attendance'>('attendance');
+export function StudentInformation({ 
+  onNavigate, 
+  initialTab = 'attendance',
+  initialClass = 'all',
+  initialSection = 'all'
+}: StudentInformationProps = {}) {
+  const [activeMainTab, setActiveMainTab] = useState<'profiles' | 'attendance'>(initialTab);
   const [attendanceTab, setAttendanceTab] = useState<'daily' | 'monthly'>('daily');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,8 +158,8 @@ export function StudentInformation({ onNavigate }: StudentInformationProps = {})
   }, [loadDynamicStudents]);
 
   // Attendance and Search state
-  const [selectedClass, setSelectedClass] = useState('all');
-  const [selectedSection, setSelectedSection] = useState('all');
+  const [selectedClass, setSelectedClass] = useState(initialClass);
+  const [selectedSection, setSelectedSection] = useState(initialSection);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
 

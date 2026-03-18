@@ -374,7 +374,6 @@ const initializeData = () => {
     'app_events',
     'app_notifications',
     'app_users',
-    'app_schools',
   ];
 
   collections.forEach(collection => {
@@ -382,6 +381,34 @@ const initializeData = () => {
       localStorage.setItem(collection, JSON.stringify([]));
     }
   });
+
+  // Initialize demo schools
+  if (!localStorage.getItem('app_schools') || JSON.parse(localStorage.getItem('app_schools') || '[]').length === 0) {
+    const demoSchools = [
+      {
+        id: 'SCHOOL001',
+        name: 'Kidz Vision - Central Campus',
+        schoolCode: 'KVC',
+        status: 'active',
+        plan: 'Enterprise',
+      },
+      {
+        id: 'SCHOOL002',
+        name: 'Kidz Vision - North Branch',
+        schoolCode: 'KVN',
+        status: 'active',
+        plan: 'Enterprise',
+      },
+      {
+        id: 'SCHOOL003',
+        name: 'Rainbow International School',
+        schoolCode: 'RIS',
+        status: 'active',
+        plan: 'Professional',
+      }
+    ];
+    localStorage.setItem('app_schools', JSON.stringify(demoSchools));
+  }
 
   // Initialize demo notifications for teacher
   if (!localStorage.getItem('app_notifications') || JSON.parse(localStorage.getItem('app_notifications') || '[]').length === 0) {
@@ -550,6 +577,52 @@ const initializeData = () => {
       }
     ];
     localStorage.setItem('app_lessons', JSON.stringify(demoLessons));
+  }
+
+  // Initialize demo events
+  if (!localStorage.getItem('app_events') || JSON.parse(localStorage.getItem('app_events') || '[]').length === 0) {
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+    const inTwoWeeks = new Date(today);
+    inTwoWeeks.setDate(today.getDate() + 14);
+
+    const demoEvents: Event[] = [
+      {
+        id: 'EVT001',
+        title: 'Annual Sports Meet',
+        description: 'Annual inter-school sports competition',
+        type: 'sports',
+        date: nextWeek.toISOString().split('T')[0],
+        startTime: '09:00 AM',
+        endTime: '04:00 PM',
+        venue: 'Main Ground',
+        targetAudience: 'all'
+      },
+      {
+        id: 'EVT002',
+        title: 'Parent-Teacher Meeting',
+        description: 'Quarterly review of student progress',
+        type: 'ptm',
+        date: inTwoWeeks.toISOString().split('T')[0],
+        startTime: '10:00 AM',
+        endTime: '01:00 PM',
+        venue: 'Classrooms',
+        targetAudience: 'all'
+      },
+      {
+        id: 'EVT003',
+        title: 'Science Exhibition',
+        description: 'Exhibition of student projects',
+        type: 'cultural',
+        date: new Date(today.getTime() + 86400000 * 3).toISOString().split('T')[0],
+        startTime: '11:00 AM',
+        endTime: '03:00 PM',
+        venue: 'Science Lab',
+        targetAudience: 'all'
+      }
+    ];
+    localStorage.setItem('app_events', JSON.stringify(demoEvents));
   }
 };
 

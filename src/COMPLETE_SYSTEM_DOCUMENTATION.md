@@ -115,8 +115,7 @@ A **complete, cloud-based school management platform** that digitizes and automa
 10. 👁️ Class View & Monitoring
 11. 📝 Reports & Approvals
 12. 💬 Communication Module
-13. 👤 User Management
-14. ⚙️ Configuration
+13. ⚙️ Configuration
 
 ---
 
@@ -217,11 +216,7 @@ A **complete, cloud-based school management platform** that digitizes and automa
 
 | Feature | Super Admin | Admin | Teacher | Parent | Student |
 |---------|:-----------:|:-----:|:-------:|:------:|:-------:|
-| **User Management** |
-| Create Organizations | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Create Schools | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Create Users | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Reset Passwords | ✅ | ✅ | ❌ | ❌ | ❌ |
+| View Own Profile | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Admission & Enquiry** |
 | Manage Enquiries | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Process Admissions | ❌ | ✅ | ❌ | ❌ | ❌ |
@@ -686,11 +681,11 @@ A **complete, cloud-based school management platform** that digitizes and automa
 | Dashboard | Total Modules | Key Features |
 |-----------|--------------|--------------|
 | **Super Admin** | 8 | Organizations, Schools, Subscriptions, Configuration, Monitoring |
-| **Admin/Principal** | 14 | Admission, Fees, Students, Teachers, Reports, Communication |
+| **Admin/Principal** | 13 | Admission, Fees, Students, Teachers, Reports, Communication |
 | **Teacher** | 7 | Classes, Lessons, Attendance, Teaching Flow, Performance |
 | **Parent** | 6 | Performance, Attendance, Fees, Communication, Events |
 | **Student** | 9 | Classes, Assignments, Performance, Attendance, Resources |
-| **TOTAL** | 44 | Complete school ecosystem |
+| **TOTAL** | 43 | Complete school ecosystem |
 
 ---
 
