@@ -17,6 +17,7 @@ import {
   Shield,
   BarChart3,
   FileCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
 
@@ -96,23 +97,24 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
       </nav>
 
       {/* User Info */}
-      <div className="p-4 border-t border-purple-700">
+      <div className="p-4 pb-8 border-t border-purple-700">
         <div className="mb-3">
-          <p className="text-purple-200">Logged in as</p>
-          <p>{user?.name}</p>
-          <p className="text-purple-300">{user?.email}</p>
+          <p className="text-purple-200 text-xs uppercase tracking-wider font-bold mb-1">Account Info</p>
+          <p className="text-white font-semibold truncate">{user?.name}</p>
+          <p className="text-purple-300 text-xs truncate">{user?.email}</p>
           {schoolCode && (
-            <div className="mt-1 px-2 py-0.5 bg-yellow-400/20 border border-yellow-400/30 rounded text-xs font-bold text-yellow-300 inline-block">
+            <div className="mt-2 px-2 py-1 bg-yellow-400/20 border border-yellow-400/30 rounded text-xs font-bold text-yellow-300 inline-flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" />
               CODE: {schoolCode}
             </div>
           )}
         </div>
         <button
           onClick={logout}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2 bg-purple-800 hover:bg-purple-700 rounded-lg transition-all hover:shadow-lg active:scale-95"
         >
           <LogOut className="w-4 h-4" />
-          <span>Logout</span>
+          <span className="font-medium">Logout</span>
         </button>
       </div>
     </div>

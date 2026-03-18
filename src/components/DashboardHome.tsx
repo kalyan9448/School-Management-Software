@@ -16,12 +16,19 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     pendingAdmissions: 0,
     feeDues: 0,
     enquiries: 0,
+    // Dynamic computed badges
+    newStudentsThisMonth: 0,
+    revenueGrowthPct: 0,
+    studentsPendingFee: 0,
+    avgAttendancePct: 0,
   });
   const [schoolCode, setSchoolCode] = useState<string>('');
 
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
   const [classPerformance, setClassPerformance] = useState<any[]>([]);
+  const [overdueEnquiries, setOverdueEnquiries] = useState<any[]>([]);
+  const [showOverdueBanner, setShowOverdueBanner] = useState(true);
 
   useEffect(() => {
     // Fetch School Code
@@ -59,6 +66,49 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     const allLedgers = storedLedgers ? JSON.parse(storedLedgers) : [];
     const totalDues = allLedgers.reduce((sum: number, l: any) => sum + (l.dueAmount || 0), 0);
 
+    // 4a. Compute dynamic badges
+    // New students admitted this calendar month
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const newThisMonth = allAdmissions.filter((a: any) => {
+      if (!a.admissionDate && !a.appliedDate) return false;
+      const d = new Date(a.admissionDate || a.appliedDate);
+      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    }).length;
+
+    // Revenue growth %: current month vs previous month
+    const prevMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const prevMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+    const currentMonthRev = allPayments
+      .filter((p: any) => { const d = new Date(p.paymentDate); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
+      .reduce((s: number, p: any) => s + (p.totalAmount || 0), 0);
+    const prevMonthRev = allPayments
+      .filter((p: any) => { const d = new Date(p.paymentDate); return d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear; })
+      .reduce((s: number, p: any) => s + (p.totalAmount || 0), 0);
+    const revGrowthPct = prevMonthRev > 0
+      ? Math.round(((currentMonthRev - prevMonthRev) / prevMonthRev) * 100)
+      : currentMonthRev > 0 ? 100 : 0;
+
+    // Students with pending/partial fee from ledgers
+    const pendingFeeCount = allLedgers.filter((l: any) => (l.dueAmount || 0) > 0).length;
+
+    // Average attendance % from school_attendance_records (written by AttendanceMarking)
+    const attRecordsRaw = localStorage.getItem('school_attendance_records');
+    let avgAtt = 0;
+    if (attRecordsRaw) {
+      const attRecords = JSON.parse(attRecordsRaw);
+      if (attRecords.length > 0) {
+        const presentCount = attRecords.filter((r: any) => r.status === 'present').length;
+        avgAtt = Math.round((presentCount / attRecords.length) * 100);
+      }
+    } else if (totalStudentsCount > 0) {
+      // Fallback: compute from student attendance % field in demo data
+      const allStu = studentService.getAll();
+      const totalStuAtt = allStu.reduce((s: number, st: any) => s + (st.attendance || 0), 0);
+      avgAtt = allStu.length > 0 ? Math.round(totalStuAtt / allStu.length) : 0;
+    }
+
     // Update Stats
     setStats({
       totalStudents: totalStudentsCount,
@@ -67,6 +117,10 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       pendingAdmissions: pendingAdmissionsCount,
       feeDues: totalDues,
       enquiries: allEnquiries.length,
+      newStudentsThisMonth: newThisMonth,
+      revenueGrowthPct: revGrowthPct,
+      studentsPendingFee: pendingFeeCount,
+      avgAttendancePct: avgAtt,
     });
 
     // 5. Map Upcoming Events from central service
@@ -157,6 +211,20 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         { class: 'Class 8-A', attendance: 0, color: 'bg-purple-500' },
       ]);
     }
+
+    // 8. Feature 4: Enquiry overdue follow-up reminders
+    const enquiryRaw = localStorage.getItem('enquiries_demo_data');
+    const allEnquiriesLocal: any[] = enquiryRaw ? JSON.parse(enquiryRaw) : [];
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const overdue = allEnquiriesLocal.filter((e: any) => {
+      if (!e.followUpDate || e.status === 'converted' || e.status === 'closed') return false;
+      const d = new Date(e.followUpDate);
+      d.setHours(0, 0, 0, 0);
+      return d <= todayDate;
+    });
+    setOverdueEnquiries(overdue);
+    setShowOverdueBanner(overdue.length > 0);
   }, []);
 
 
@@ -177,6 +245,40 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         </div>
       </div>
 
+      {/* Feature 4: Overdue Enquiry Follow-up Reminder Banner */}
+      {showOverdueBanner && overdueEnquiries.length > 0 && (
+        <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 rounded-xl p-4 flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-800">
+                {overdueEnquiries.length} Enquir{overdueEnquiries.length === 1 ? 'y' : 'ies'} Require Follow-up
+              </p>
+              <p className="text-amber-700 text-sm">
+                {overdueEnquiries.slice(0, 2).map((e: any) => e.childName || e.parentName).join(', ')}
+                {overdueEnquiries.length > 2 ? ` and ${overdueEnquiries.length - 2} more` : ''} — Follow-up date overdue
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onNavigate?.('enquiry')}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium"
+            >
+              View Enquiries
+            </button>
+            <button
+              onClick={() => setShowOverdueBanner(false)}
+              className="px-3 py-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors text-sm"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Stats Grid - Redesigned with playful cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Total Students - Purple Theme */}
@@ -191,7 +293,9 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                 <Users className="w-7 h-7 text-white" />
               </div>
               <div className="px-3 py-1 bg-purple-100 rounded-full">
-                <span className="text-purple-700">+12</span>
+                <span className="text-purple-700">
+                  {stats.newStudentsThisMonth > 0 ? `+${stats.newStudentsThisMonth}` : 'Enrolled'}
+                </span>
               </div>
             </div>
             <p className="text-gray-500 mb-1">Total Students</p>
@@ -215,7 +319,9 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                 <DollarSign className="w-7 h-7 text-white" />
               </div>
               <div className="px-3 py-1 bg-yellow-100 rounded-full">
-                <span className="text-yellow-700">+8%</span>
+                <span className="text-yellow-700">
+                  {stats.revenueGrowthPct >= 0 ? `+${stats.revenueGrowthPct}%` : `${stats.revenueGrowthPct}%`}
+                </span>
               </div>
             </div>
             <p className="text-gray-500 mb-1">Total Revenue</p>
@@ -316,7 +422,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                 <p className="text-red-700 font-semibold text-sm">Outstanding</p>
               </div>
               <h2 className="text-gray-900 mb-1 font-bold">₹{(stats.feeDues / 1000).toFixed(0)}K</h2>
-              <p className="text-gray-600 font-medium">15 students pending</p>
+              <p className="text-gray-600 font-medium">{stats.studentsPendingFee} student{stats.studentsPendingFee !== 1 ? 's' : ''} pending</p>
             </div>
             <div className="px-3 py-1 bg-white/60 backdrop-blur-sm border border-red-200 rounded-full">
               <span className="text-red-700 text-xs font-bold uppercase tracking-wider">Collect</span>
@@ -338,11 +444,13 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                 </div>
                 <p className="text-teal-700 font-semibold text-sm">Achievement</p>
               </div>
-              <h2 className="text-gray-900 mb-1 font-bold">95.5%</h2>
+              <h2 className="text-gray-900 mb-1 font-bold">{stats.avgAttendancePct > 0 ? `${stats.avgAttendancePct}%` : 'N/A'}</h2>
               <p className="text-gray-600 font-medium">Avg Attendance</p>
             </div>
             <div className="px-3 py-1 bg-white/60 backdrop-blur-sm border border-teal-200 rounded-full">
-              <span className="text-teal-700 text-xs font-bold uppercase tracking-wider">Excellent</span>
+              <span className="text-teal-700 text-xs font-bold uppercase tracking-wider">
+                {stats.avgAttendancePct >= 90 ? 'Excellent' : stats.avgAttendancePct >= 75 ? 'Good' : stats.avgAttendancePct > 0 ? 'Needs Attention' : 'No Data'}
+              </span>
             </div>
           </div>
         </button>

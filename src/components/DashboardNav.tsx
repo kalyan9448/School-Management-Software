@@ -55,7 +55,6 @@ export const teacherNavItems: NavItem[] = [
   { id: 'my-classes', label: 'My Classes', icon: <Users className="w-5 h-5" /> },
   { id: 'attendance', label: 'Attendance', icon: <Calendar className="w-5 h-5" /> },
   { id: 'lesson-log', label: 'Lesson Log', icon: <BookOpen className="w-5 h-5" /> },
-  { id: 'quiz-creation', label: 'Quizzes', icon: <FileText className="w-5 h-5" /> },
   { id: 'student-notes', label: 'Student Notes', icon: <MessageSquare className="w-5 h-5" /> },
   { id: 'performance', label: 'Performance', icon: <Award className="w-5 h-5" /> },
 ];

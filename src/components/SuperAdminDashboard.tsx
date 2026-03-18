@@ -6077,18 +6077,19 @@ export function SuperAdminDashboard() {
         </div >
 
         {/* Navigation */}
-        < nav className="flex-1 p-4" >
+        <nav className="flex-1 p-4 overflow-y-auto custom-scrollbar">
           <div className="space-y-1">
             {menuItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setCurrentView(item.id as ViewType)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === item.id
-                  ? 'bg-purple-700 text-white'
-                  : 'text-purple-100 hover:bg-purple-800'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  currentView === item.id
+                    ? 'bg-purple-700 text-white shadow-inner'
+                    : 'text-purple-100 hover:bg-purple-800'
+                }`}
               >
-                <item.icon className="w-5 h-5" />
+                <item.icon className="w-5 h-5 flex-shrink-0" />
                 <span>{item.label}</span>
                 {currentView === item.id && (
                   <ChevronRight className="w-4 h-4 ml-auto" />
@@ -6096,23 +6097,23 @@ export function SuperAdminDashboard() {
               </button>
             ))}
           </div>
-        </nav >
+        </nav>
 
         {/* User Info */}
-        < div className="p-4 border-t border-purple-700" >
+        <div className="p-4 pb-8 border-t border-purple-700">
           <div className="mb-3">
-            <p className="text-purple-100 mb-1">{user?.name}</p>
-            <p className="text-purple-300 text-sm">{user?.email}</p>
+            <p className="text-purple-100 mb-1 font-semibold">{user?.name}</p>
+            <p className="text-purple-300 text-xs truncate">{user?.email}</p>
           </div>
           <button
             onClick={logout}
-            className="w-full flex items-center gap-2 px-4 py-2 bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-2 bg-purple-800 hover:bg-purple-700 rounded-lg transition-all hover:shadow-lg active:scale-95"
           >
             <LogOut className="w-4 h-4" />
-            <span>Logout</span>
+            <span className="font-medium">Logout</span>
           </button>
-        </div >
-      </div >
+        </div>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 ml-64 overflow-auto">

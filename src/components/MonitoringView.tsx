@@ -30,10 +30,20 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
     // Calculate pending payments (feeStatus is pending or partial)
     const pendingP = allStudents.filter((s: any) => s.feeStatus !== 'paid').length;
 
+    const today = new Date().toISOString().split('T')[0];
     // Average attendance simulation for students present
     const totalS = allStudents.length;
     const avgAttendance = allStudents.reduce((acc: number, s: any) => acc + (s.attendance || 0), 0) / (totalS || 1);
-    const presentToday = Math.round((totalS * avgAttendance) / 100);
+
+    // Try to get today's actual present count from school_attendance_records
+    const attRecordsRaw = localStorage.getItem('school_attendance_records');
+    let presentToday = 0;
+    if (attRecordsRaw) {
+      const attRecords = JSON.parse(attRecordsRaw);
+      presentToday = attRecords.filter((r: any) => r.date === today && r.status === 'present').length;
+    } else {
+      presentToday = Math.round((totalS * avgAttendance) / 100);
+    }
 
     // 3. Fetch Academic Structure for Classes
     const storedYears = localStorage.getItem('school_academic_years');
@@ -48,7 +58,6 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
     const isSchoolHours = now.getHours() >= 8 && now.getHours() <= 16;
     const currentLessons = isSchoolHours ? Math.ceil(activeClasses.length * 0.7) : 0;
 
-    // Update Stats
     setStats({
       activeUsers: activeU,
       studentsPresent: presentToday,
@@ -82,16 +91,54 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
       { id: 'default', type: 'alert', user: 'System', action: 'Monitoring system initialized', time: 'Just now', icon: Activity, color: 'blue' }
     ]);
 
+    // 5. Get timetable for current period lookup
+    const timetableRaw = localStorage.getItem('school_timetable');
+    const allTimetableSlots: any[] = timetableRaw ? JSON.parse(timetableRaw) : [];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = dayNames[now.getDay()];
+    const currentHH = now.getHours();
+    const currentMM = now.getMinutes();
+    const currentMinutes = currentHH * 60 + currentMM;
+
+    const getLessonForClass = (className: string, section: string): string => {
+      if (!isSchoolHours) return 'N/A';
+      const slot = allTimetableSlots.find((s: any) => {
+        if (s.class !== className || s.section !== section || s.day !== currentDay) return false;
+        const [sh, sm] = (s.startTime || '').split(':').map(Number);
+        const [eh, em] = (s.endTime || '').split(':').map(Number);
+        const slotStart = sh * 60 + sm;
+        const slotEnd = eh * 60 + em;
+        return currentMinutes >= slotStart && currentMinutes < slotEnd;
+      });
+      return slot?.subject || 'Free Period';
+    };
+
+    const getAttendanceForClass = (className: string, section: string): string => {
+      if (!attRecordsRaw) {
+        const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
+        const cap = cls?.students || 0;
+        return `${Math.round(cap * (avgAttendance / 100))}/${cap}`;
+      }
+      const attRecords = JSON.parse(attRecordsRaw);
+      const today2 = new Date().toISOString().split('T')[0];
+      const todayClassRecords = attRecords.filter((r: any) => r.date === today2 && r.class === className && r.section === section);
+      const presentCount = todayClassRecords.filter((r: any) => r.status === 'present').length;
+      const totalCount = todayClassRecords.length;
+      const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
+      const capacity = totalCount > 0 ? totalCount : (cls?.students || 0);
+      return `${presentCount}/${capacity}`;
+    };
+
     // 5. Generate Class Activity
     const classData = activeClasses.map((cls: any) => {
-      // Find teacher in unified users
-      const teacher = unifiedUsers.find((u: any) => u.name === cls.classTeacher && u.role === 'Teacher');
+      const currentLesson = getLessonForClass(cls.className, cls.section);
+      const hasLesson = currentLesson !== 'N/A' && currentLesson !== 'Free Period';
       return {
         class: `${cls.className} ${cls.section}`,
         teacher: cls.classTeacher || 'Not Assigned',
-        status: isSchoolHours ? (Math.random() > 0.3 ? 'In Progress' : 'Break') : 'School Closed',
-        attendance: `${Math.round(cls.students * (avgAttendance / 100))}/${cls.students}`,
-        lesson: isSchoolHours ? ['Mathematics', 'Science', 'English', 'Story Time'][Math.floor(Math.random() * 4)] : 'N/A'
+        status: isSchoolHours ? (hasLesson ? 'In Progress' : 'Free Period') : 'School Closed',
+        attendance: getAttendanceForClass(cls.className, cls.section),
+        lesson: currentLesson,
       };
     });
     setClasses(classData);

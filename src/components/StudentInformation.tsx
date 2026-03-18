@@ -5,6 +5,21 @@ import { demoStudents, Student, getStudents, saveStudents } from './StudentInfor
 import { AcademicYear, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 import { AdmissionForm } from './AdmissionForm';
 
+// --- Feature 3: CSV Export Utility ---
+function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 interface AttendanceRecord {
   studentId: string;
   studentName: string;
@@ -627,6 +642,20 @@ export function StudentInformation({
                 >
                   <Plus className="w-5 h-5" />
                   Add Student
+                </button>
+                <button
+                  onClick={() => exportCSV(
+                    'students_list.csv',
+                    ['Admission No', 'Name', 'Class', 'Section', 'Roll No', 'DOB', 'Gender', 'Phone', 'Address'],
+                    filteredStudents.map(s => [
+                      s.admissionNo, s.name, s.class, s.section, s.rollNo || '',
+                      (s as any).dateOfBirth || '', s.gender, s.phone, s.address
+                    ])
+                  )}
+                  className="flex items-center gap-2 px-6 py-3 bg-white text-green-700 rounded-lg hover:bg-green-50 transition-all shadow-md hover:shadow-lg font-semibold"
+                >
+                  <Download className="w-5 h-5" />
+                  Export CSV
                 </button>
               </div>
             </div>
