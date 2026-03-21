@@ -49,6 +49,7 @@ import {
   InsightTrigger, 
   ClassDelta 
 } from '../utils/performanceAnalytics';
+import { TeacherPerformanceAnalytics } from './TeacherPerformanceAnalytics';
 
 type ViewType =
   | 'dashboard'
@@ -1818,229 +1819,30 @@ export function TeacherDashboardNew() {
   };
 
   const renderPerformance = () => {
-    // Calculate performance metrics dynamically
-    const weeklyLessons = lessonService.getByTeacher(user?.email || '').filter(l => {
-      const lessonDate = new Date(l.date);
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      return lessonDate >= weekAgo;
-    });
-
-    const weeklyAttendance = attendanceService.getAll().filter(r => {
-      const recordDate = new Date(r.date);
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      return recordDate >= weekAgo && r.markedBy === user?.email;
-    });
-
-    // Group attendance by date and class to count unique "sessions" marked
-    // Group attendance by date and class to count unique "sessions" marked
-    const uniqueAttendanceSessions = new Set(
-      weeklyAttendance.map(r => `${r.date}-${r.markedBy}`)
-    );
-    const targetSessions = 10;
-    const consistencyScore = Math.min(100, Math.round((uniqueAttendanceSessions.size / targetSessions) * 100));
-
     return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-gray-900">My Performance & Analytics</h2>
+      <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1">
+          <div className="space-y-2">
+            <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight leading-tight">
+              Student Performance <span className="text-purple-600">&</span> Analytics
+            </h2>
+            <p className="text-sm text-gray-400 font-medium max-w-md">
+              Real-time insights and progress tracking for your assigned classes.
+            </p>
+          </div>
           <button
             onClick={() => setCurrentView('dashboard')}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            className="group flex items-center justify-center gap-2 px-6 py-3.5 bg-white text-gray-700 rounded-2xl hover:bg-gray-50 transition-all font-bold border-2 border-gray-100 shadow-sm hover:shadow-md active:scale-95 shrink-0"
           >
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
             Back to Dashboard
           </button>
         </div>
-
-        {/* Performance Metrics */}
-        {/* SaaS Premium Metrics: Class Delta & Smart Insights */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Class Delta Card - Pedagogical Improvement */}
-          <div className="bg-white rounded-xl shadow-lg border-t-4 border-purple-600 p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Pedagogical Progress (Class Delta)</h3>
-                <p className="text-sm text-gray-500">Performance vs Previous Period</p>
-              </div>
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${
-                classDelta?.trend === 'up' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}>
-                {classDelta?.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                {classDelta?.improvementPercentage}% Improve
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-6 mb-6">
-              <div className="text-4xl font-black text-purple-600">{classDelta?.score}%</div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-700 font-medium mb-1">Focus Area:</div>
-                <div className="p-2 bg-purple-50 rounded border border-purple-100 text-xs text-purple-800 italic">
-                  "{classDelta?.focusArea}"
-                </div>
-              </div>
-            </div>
-
-            {/* Simulated Time-Series Trend Sparkline */}
-            <div className="pt-4 border-t border-gray-100">
-              <div className="text-xs text-gray-500 mb-2 font-bold uppercase tracking-wider">6-Month Trend</div>
-              <div className="flex items-end gap-1 h-12">
-                {trends.map((point, i) => (
-                  <div 
-                    key={i} 
-                    className="flex-1 bg-purple-200 hover:bg-purple-400 transition-colors rounded-t cursor-help relative group"
-                    style={{ height: `${point.engagement}%` }}
-                  >
-                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                      {point.month}: {point.engagement}%
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-1 px-1">
-                {trends.map((p, i) => (
-                  <span key={i} className="text-[10px] text-gray-400 font-medium">{p.month}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Smart Insights (Webhook Triggers Simulation) */}
-          <div className="bg-white rounded-xl shadow-lg border-t-4 border-orange-500 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-orange-500" />
-              Real-Time Behavioral Insights
-            </h3>
-            <div className="space-y-4">
-              {insightTriggers.map((trigger) => (
-                <div 
-                  key={trigger.id} 
-                  className={`p-4 rounded-lg border flex items-start gap-4 ${
-                    trigger.type === 'alert' ? 'bg-orange-50 border-orange-200' : 
-                    trigger.type === 'achievement' ? 'bg-green-50 border-green-200' : 
-                    'bg-blue-50 border-blue-200'
-                  }`}
-                >
-                  <div className={`p-2 rounded-full ${
-                    trigger.type === 'alert' ? 'bg-orange-100' : 
-                    trigger.type === 'achievement' ? 'bg-green-100' : 
-                    'bg-blue-100'
-                  }`}>
-                    {trigger.type === 'achievement' ? <Award className="w-5 h-5 text-green-600" /> : 
-                     trigger.type === 'alert' ? <Zap className="w-5 h-5 text-orange-600" /> : 
-                     <Target className="w-5 h-5 text-blue-600" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-semibold mb-1 ${
-                      trigger.type === 'alert' ? 'text-orange-900' : 
-                      trigger.type === 'achievement' ? 'text-green-900' : 
-                      'text-blue-900'
-                    }`}>
-                      {trigger.message}
-                    </p>
-                    {trigger.actionLabel && (
-                      <button className={`text-xs font-bold underline ${
-                        trigger.type === 'alert' ? 'text-orange-600' : 
-                        trigger.type === 'achievement' ? 'text-green-600' : 
-                        'text-blue-600'
-                      }`}>
-                        {trigger.actionLabel}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Existing Performance Sections */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-6 border-b-4 border-purple-500">
-            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-purple-600" />
-              Consistency Score
-            </h3>
-            <div className="text-center">
-              <div className="text-5xl font-bold text-purple-600 mb-2">{consistencyScore}%</div>
-              <p className="text-gray-600">
-                {consistencyScore >= 90 ? 'Excellent' : consistencyScore >= 70 ? 'Good' : 'Needs Improvement'} attendance logging
-              </p>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-6 border-b-4 border-green-500">
-            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-green-600" />
-              Class Engagement
-            </h3>
-            <div className="text-center">
-              <div className="text-5xl font-bold text-green-600 mb-2">92%</div>
-              <p className="text-gray-600">Students active in classroom activities</p>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-6 border-b-4 border-blue-500">
-            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-              Student Improvement
-            </h3>
-            <div className="text-center">
-              <div className="text-5xl font-bold text-blue-600 mb-2">+15%</div>
-              <p className="text-gray-600">Average score increase this month</p>
-            </div>
-          </div>
-        </div>
-
-
-        {/* Insights */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Insights</h3>
-          <div className="space-y-3">
-            {consistencyScore >= 95 ? (
-              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-gray-900 mb-1 font-semibold flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-green-600" />
-                  🎉 Outstanding Consistency!
-                </p>
-                <p className="text-gray-600 text-sm">
-                  You've maintained near-perfect attendance logging records this week.
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-gray-900 mb-1 font-semibold flex items-center gap-2">
-                  <Target className="w-5 h-5 text-blue-600" />
-                  Logging Goal
-                </p>
-                <p className="text-gray-600 text-sm">
-                  Try to mark attendance immediately after each class to reach 100% consistency.
-                </p>
-              </div>
-            )}
-
-            {weeklyLessons.length < 5 ? (
-              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <p className="text-gray-900 mb-1 font-semibold flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-orange-600" />
-                  Lesson Logging
-                </p>
-                <p className="text-gray-600 text-sm">
-                  You've logged {weeklyLessons.length} lessons this week. Keeping this up-to-date helps parent communication.
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-gray-900 mb-1 font-semibold flex items-center gap-2">
-                  <Award className="w-5 h-5 text-green-600" />
-                  High Instructional Output
-                </p>
-                <p className="text-gray-600 text-sm">
-                  Great job keeping your lesson logs detailed and synchronized!
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        
+        <TeacherPerformanceAnalytics 
+          teacherEmail={user?.email || ''} 
+          selectedClass={myClasses[0] ? { class: myClasses[0].class, section: myClasses[0].section, subject: myClasses[0].subject } : undefined}
+        />
       </div>
     );
   };

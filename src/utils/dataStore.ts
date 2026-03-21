@@ -97,11 +97,28 @@ const initializeDemoData = () => {
     { id: '6', name: 'Saanvi Reddy', rollNo: '006', class: 'LKG', section: 'B', parentId: 'parent6' },
     { id: '7', name: 'Ishaan Verma', rollNo: '007', class: 'LKG', section: 'B', parentId: 'parent7' },
     { id: '8', name: 'Aanya Rao', rollNo: '008', class: 'LKG', section: 'B', parentId: 'parent8' },
+    // 8th-A Students
+    { id: 'STU001', name: 'Aarav Patel', rollNo: '801', class: '8th', section: 'A', parentId: 'p1' },
+    { id: 'STU002', name: 'Ananya Iyer', rollNo: '802', class: '8th', section: 'A', parentId: 'p2' },
+    { id: 'STU003', name: 'Ishaan Verma', rollNo: '803', class: '8th', section: 'A', parentId: 'p3' },
+    { id: 'STU004', name: 'Saanvi Reddy', rollNo: '804', class: '8th', section: 'A', parentId: 'p4' },
+    // 8th-B Students
+    { id: 'STU005', name: 'Vivaan Kapoor', rollNo: '805', class: '8th', section: 'B', parentId: 'p5' },
+    { id: 'STU006', name: 'Zoya Khan', rollNo: '806', class: '8th', section: 'B', parentId: 'p6' },
+    { id: 'STU007', name: 'Rohan Deshmukh', rollNo: '807', class: '8th', section: 'B', parentId: 'p7' },
+    { id: 'STU008', name: 'Kavya Nair', rollNo: '808', class: '8th', section: 'B', parentId: 'p8' },
   ];
 
-  if (!localStorage.getItem('demo_students')) {
-    localStorage.setItem('demo_students', JSON.stringify(students));
+  // Merge with existing students if they exist, but ensure our demo ones are there
+  const existingStudentsRaw = localStorage.getItem('demo_students');
+  let studentsToSave = students;
+  if (existingStudentsRaw) {
+    const existing = JSON.parse(existingStudentsRaw);
+    const existingIds = new Set(existing.map((s: any) => s.id));
+    const missing = students.filter(s => !existingIds.has(s.id));
+    studentsToSave = [...existing, ...missing];
   }
+  localStorage.setItem('demo_students', JSON.stringify(studentsToSave));
 
   if (!localStorage.getItem('demo_attendance')) {
     localStorage.setItem('demo_attendance', JSON.stringify([]));
@@ -111,13 +128,49 @@ const initializeDemoData = () => {
     localStorage.setItem('demo_lessons', JSON.stringify([]));
   }
 
-  if (!localStorage.getItem('demo_quizzes')) {
-    localStorage.setItem('demo_quizzes', JSON.stringify([]));
-  }
+  // Always refresh demo quizzes and results to ensure they match our demo students
+  const demoQuizzes: Quiz[] = [
+    {
+      id: 'q1',
+      lessonId: 'L001',
+      classId: 'CLS001',
+      class: '8th',
+      section: 'A',
+      subject: 'Mathematics',
+      topic: 'Linear Equations',
+      questions: [],
+      assignedDate: new Date(Date.now() - 86400000 * 5).toISOString().split('T')[0],
+      dueDate: new Date(Date.now() - 86400000 * 4).toISOString().split('T')[0],
+      assignedBy: 'teacher@school.com'
+    },
+    {
+      id: 'q2',
+      lessonId: 'L002',
+      classId: 'CLS002',
+      class: '8th',
+      section: 'B',
+      subject: 'Science',
+      topic: 'Photosynthesis',
+      questions: [],
+      assignedDate: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0],
+      dueDate: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+      assignedBy: 'teacher@school.com'
+    }
+  ];
+  localStorage.setItem('demo_quizzes', JSON.stringify(demoQuizzes));
 
-  if (!localStorage.getItem('demo_quiz_results')) {
-    localStorage.setItem('demo_quiz_results', JSON.stringify([]));
-  }
+  const demoResults: QuizResult[] = [
+    // Quiz 1 Results (8th-A)
+    { id: 'r1', quizId: 'q1', studentId: 'STU001', score: 9, total: 10, completedDate: new Date(Date.now() - 86400000 * 4).toISOString(), answers: [] },
+    { id: 'r2', quizId: 'q1', studentId: 'STU002', score: 10, total: 10, completedDate: new Date(Date.now() - 86400000 * 4).toISOString(), answers: [] },
+    { id: 'r3', quizId: 'q1', studentId: 'STU003', score: 8, total: 10, completedDate: new Date(Date.now() - 86400000 * 4).toISOString(), answers: [] },
+    
+    // Quiz 2 Results (8th-B)
+    { id: 'r4', quizId: 'q2', studentId: 'STU005', score: 5, total: 10, completedDate: new Date(Date.now() - 86400000 * 2).toISOString(), answers: [] },
+    { id: 'r5', quizId: 'q2', studentId: 'STU006', score: 4, total: 10, completedDate: new Date(Date.now() - 86400000 * 2).toISOString(), answers: [] },
+    { id: 'r6', quizId: 'q2', studentId: 'STU007', score: 2, total: 10, completedDate: new Date(Date.now() - 86400000 * 2).toISOString(), answers: [] },
+  ];
+  localStorage.setItem('demo_quiz_results', JSON.stringify(demoResults));
 
   if (!localStorage.getItem('demo_student_notes')) {
     localStorage.setItem('demo_student_notes', JSON.stringify([]));

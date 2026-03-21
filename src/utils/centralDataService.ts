@@ -351,6 +351,7 @@ const initializeData = () => {
         classes: [
           { class: '8th', section: 'A', subject: 'Mathematics' },
           { class: '8th', section: 'A', subject: 'Science' },
+          { class: '8th', section: 'B', subject: 'Science' },
         ],
         qualification: 'M.Sc Mathematics',
         experience: 5,
@@ -1612,4 +1613,55 @@ export default {
   notification: notificationService,
   timetable: timetableService,
   statistics: statisticsService,
+};
+import { 
+  quizzesStore, 
+  quizResultsStore, 
+  studentsStore 
+} from './dataStore';
+
+export const quizService = {
+  getAllQuizzes: () => quizzesStore.getAll(),
+  getQuizzesByClass: (className: string, section: string) => quizzesStore.getByClass(className, section),
+  getQuizById: (id: string) => quizzesStore.getById(id),
+  
+  getResultsByQuiz: (quizId: string) => quizResultsStore.getAll().filter(r => r.quizId === quizId),
+  getResultsByStudent: (studentId: string) => quizResultsStore.getAll().filter(r => r.studentId === studentId),
+  
+  getTeacherClasses: (teacherEmail: string) => teacherService.getByEmail(teacherEmail)?.classes || [],
+  
+  getClassPerformance: (className: string, section: string, subject?: string) => {
+    const students = studentsStore.getByClass(className, section);
+    let quizzes = quizzesStore.getByClass(className, section);
+    if (subject) {
+      quizzes = quizzes.filter(q => q.subject === subject);
+    }
+    const results = quizResultsStore.getAll();
+    
+    return students.map(student => {
+      const quizIds = quizzes.map(q => q.id);
+      const studentResults = results.filter(r => r.studentId === student.id && quizIds.includes(r.quizId));
+      return {
+        studentId: student.id,
+        name: student.name,
+        rollNo: student.rollNo,
+        totalQuizzes: quizzes.length,
+        completedQuizzes: studentResults.length,
+        averageScore: studentResults.length > 0 
+          ? Math.round(studentResults.reduce((sum, r) => sum + (r.score / r.total) * 100, 0) / studentResults.length)
+          : 0,
+        results: studentResults
+      };
+    });
+  },
+
+  getTeacherLeaderboard: () => {
+    // Mock leaderboard data based on the requirements
+    return [
+      { id: '1', name: 'John Teacher', score: 92, engagement: 95, subject: 'Mathematics' },
+      { id: '2', name: 'Sarah Johnson', score: 88, engagement: 92, subject: 'English' },
+      { id: '3', name: 'Anjali Verma', score: 85, engagement: 88, subject: 'Science' },
+      { id: '4', name: 'Emily Davis', score: 82, engagement: 90, subject: 'History' },
+    ];
+  }
 };
