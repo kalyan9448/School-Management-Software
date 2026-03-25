@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   Calendar,
@@ -52,7 +52,11 @@ export function TimelinePage() {
   const [filterType, setFilterType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [allEvents] = useState(() => TimelineService.getAll());
+  const [allEvents, setAllEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    TimelineService.getAll().then(setAllEvents);
+  }, []);
 
   const filteredEvents = allEvents.filter((event: any) => {
     const matchesType = filterType === "all" || event.type === filterType;

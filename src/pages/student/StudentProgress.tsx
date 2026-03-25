@@ -102,12 +102,29 @@ export function ProgressPage() {
   const [quizRef, quizDims] = useChartDimensions();
   const [skillsRef, skillsDims] = useChartDimensions();
 
-  // Dynamic data from localStorage
-  const [performanceData] = React.useState(() => PerformanceData.getAll());
-  const [subjectPerformance] = React.useState(() => SubjectPerformance.getAll());
-  const [skillsData] = React.useState(() => SkillsData.getAll());
-  const [quizTrends] = React.useState(() => QuizTrends.getAll());
-  const [attendanceData] = React.useState(() => AttendanceService.get());
+  // Dynamic data from Firestore (async)
+  const [performanceData, setPerformanceData] = React.useState<any[]>([]);
+  const [subjectPerformance, setSubjectPerformance] = React.useState<any[]>([]);
+  const [skillsData, setSkillsData] = React.useState<any[]>([]);
+  const [quizTrends, setQuizTrends] = React.useState<any[]>([]);
+  const [attendanceData, setAttendanceData] = React.useState<any>({ present: 0, absent: 0, total: 0, percentage: 0 });
+
+  React.useEffect(() => {
+    (async () => {
+      const [pd, sp, sd, qt, ad] = await Promise.all([
+        PerformanceData.getAll(),
+        SubjectPerformance.getAll(),
+        SkillsData.getAll(),
+        QuizTrends.getAll(),
+        AttendanceService.get(),
+      ]);
+      setPerformanceData(pd);
+      setSubjectPerformance(sp);
+      setSkillsData(sd);
+      setQuizTrends(qt);
+      setAttendanceData(ad);
+    })();
+  }, []);
 
   const fallbackWidth = typeof window !== 'undefined' ? Math.min(window.innerWidth - 300, 1200) : 800;
 

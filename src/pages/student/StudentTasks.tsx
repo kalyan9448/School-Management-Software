@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import {
@@ -82,8 +82,12 @@ export function SchedulePage() {
   const navigate = useNavigate();
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
 
-  // Dynamic data from localStorage
-  const [calendarEvents] = useState<CalendarEvent[]>(() => CalendarService.getAll());
+  // Dynamic data from Firestore (async)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  useEffect(() => {
+    CalendarService.getAll().then(setCalendarEvents);
+  }, []);
 
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [currentDate, setCurrentDate] = useState(today);

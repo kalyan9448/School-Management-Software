@@ -6,7 +6,7 @@ const router = express.Router();
 // GET /api/super-admin/schools
 router.get('/schools', async (req, res) => {
     try {
-        // TODO: const { data } = await supabase.from('schools').select('*');
+        // TODO: fetch schools from database
         res.json({ schools: [], message: 'List all schools' });
     } catch (err) {
         res.status(500).json({ error: err.message });

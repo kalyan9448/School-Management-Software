@@ -1,201 +1,128 @@
 // =============================================================================
-// Student Data Service — localStorage-backed dynamic data layer
-// Seeds mock data on first load, then all mutations persist in localStorage.
-// Pattern matches centralDataService.ts used by other dashboards.
+// Student Data Service — Firestore-backed dynamic data layer
+// All student portal data is stored per-user in Firestore.
+// Collection: student_portal/{userId}/data/{docKey}
+// Each doc stores its payload in a `value` field.
 // =============================================================================
 
+import { db, auth } from "@/services/firebase";
 import {
-  studentData as defaultStudentData,
-  motivationalQuotes as defaultQuotes,
-  todaysClasses as defaultClasses,
-  pendingTasks as defaultPendingTasks,
-  learningGoals as defaultGoals,
-  performanceData as defaultPerformance,
-  subjectPerformance as defaultSubjectPerf,
-  skillsData as defaultSkills,
-  topicMastery as defaultMastery,
-  quizTrends as defaultQuizTrends,
-  attendanceData as defaultAttendance,
-  dailyTasksBySubject as defaultDailyTasks,
-  homeworkTopics as defaultHomeworkTopics,
-  objectiveQuestions as defaultQuestions,
-  flashcardsBySubject as defaultFlashcards,
-  calendarEvents as defaultCalendarEvents,
-  notifications as defaultNotifications,
-  timelineEvents as defaultTimeline,
-  quizQuestions as defaultQuizQuestions,
+  doc,
+  getDoc,
+  setDoc,
+} from "firebase/firestore";
+
+import {
   type HomeworkTopic,
   type ObjectiveQuestion,
   type CalendarEvent,
   type Notification,
 } from "@/data/studentMockData";
 
-// ─── LocalStorage Key Constants ───────────────────────────────────────────────
-const KEYS = {
-  STUDENT_PROFILE:       "student_profile",
-  QUOTES:                "student_quotes",
-  TODAYS_CLASSES:        "student_todays_classes",
-  PENDING_TASKS:         "student_pending_tasks",
-  LEARNING_GOALS:        "student_learning_goals",
-  PERFORMANCE_DATA:      "student_performance_data",
-  SUBJECT_PERFORMANCE:   "student_subject_performance",
-  SKILLS_DATA:           "student_skills_data",
-  TOPIC_MASTERY:         "student_topic_mastery",
-  QUIZ_TRENDS:           "student_quiz_trends",
-  ATTENDANCE:            "student_attendance",
-  DAILY_TASKS:           "student_daily_tasks",
-  HOMEWORK_TOPICS:       "student_homework_topics",
-  OBJECTIVE_QUESTIONS:   "student_objective_questions",
-  FLASHCARDS:            "student_flashcards",
-  CALENDAR_EVENTS:       "student_calendar_events",
-  NOTIFICATIONS:         "student_notifications",
-  TIMELINE:              "student_timeline",
-  QUIZ_QUESTIONS:        "student_quiz_questions",
-  TASK_COMPLETION:       "student_task_completion",
-  QUIZ_RESULTS:          "student_quiz_results",
-  FLASHCARD_PROGRESS:    "student_flashcard_progress",
-  TOPIC_QUIZ_RESULTS:   "student_topic_quiz_results",
-  SETTINGS:             "student_settings",
-  INITIALIZED:           "student_data_initialized",
-} as const;
+// ─── Firestore helpers ────────────────────────────────────────────────────────
 
-// ─── Generic localStorage helpers ─────────────────────────────────────────────
-function getFromStorage<T>(key: string, fallback: T): T {
+function getUid(): string {
+  return auth.currentUser?.uid || "anonymous";
+}
+
+/** Read a student-portal document. Returns fallback when doc doesn't exist. */
+async function getData<T>(key: string, fallback: T): Promise<T> {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    const snap = await getDoc(doc(db, "student_portal", getUid(), "data", key));
+    if (snap.exists()) return snap.data().value as T;
+    return fallback;
   } catch {
     return fallback;
   }
 }
 
-function saveToStorage<T>(key: string, data: T): void {
-  localStorage.setItem(key, JSON.stringify(data));
+/** Write a student-portal document (merge to avoid overwrites). */
+async function saveData<T>(key: string, data: T): Promise<void> {
+  await setDoc(doc(db, "student_portal", getUid(), "data", key), { value: data }, { merge: true });
 }
 
-function seedIfEmpty<T>(key: string, defaultData: T): void {
-  if (!localStorage.getItem(key)) {
-    saveToStorage(key, defaultData);
-  }
-}
-
-// ─── Initialize / Seed ───────────────────────────────────────────────────────
-export function initializeStudentData(force = false): void {
-  if (!force && localStorage.getItem(KEYS.INITIALIZED)) return;
-
-  seedIfEmpty(KEYS.STUDENT_PROFILE, defaultStudentData);
-  seedIfEmpty(KEYS.QUOTES, defaultQuotes);
-  seedIfEmpty(KEYS.TODAYS_CLASSES, defaultClasses);
-  seedIfEmpty(KEYS.PENDING_TASKS, defaultPendingTasks);
-  seedIfEmpty(KEYS.LEARNING_GOALS, defaultGoals);
-  seedIfEmpty(KEYS.PERFORMANCE_DATA, defaultPerformance);
-  seedIfEmpty(KEYS.SUBJECT_PERFORMANCE, defaultSubjectPerf);
-  seedIfEmpty(KEYS.SKILLS_DATA, defaultSkills);
-  seedIfEmpty(KEYS.TOPIC_MASTERY, defaultMastery);
-  seedIfEmpty(KEYS.QUIZ_TRENDS, defaultQuizTrends);
-  seedIfEmpty(KEYS.ATTENDANCE, defaultAttendance);
-  seedIfEmpty(KEYS.DAILY_TASKS, defaultDailyTasks);
-  seedIfEmpty(KEYS.HOMEWORK_TOPICS, defaultHomeworkTopics);
-  seedIfEmpty(KEYS.OBJECTIVE_QUESTIONS, defaultQuestions);
-  seedIfEmpty(KEYS.FLASHCARDS, defaultFlashcards);
-  seedIfEmpty(KEYS.CALENDAR_EVENTS, defaultCalendarEvents);
-  seedIfEmpty(KEYS.SETTINGS, {
-    notifications: {
-      quizReminders: true,
-      assignmentDue: true,
-      weeklyReport: false,
-    },
-    theme: "light",
-    language: "en",
-    soundEnabled: true,
-  });
-  seedIfEmpty(KEYS.NOTIFICATIONS, defaultNotifications);
-  seedIfEmpty(KEYS.TIMELINE, defaultTimeline);
-  seedIfEmpty(KEYS.QUIZ_QUESTIONS, defaultQuizQuestions);
-  seedIfEmpty(KEYS.TASK_COMPLETION, {});
-  seedIfEmpty(KEYS.QUIZ_RESULTS, []);
-  seedIfEmpty(KEYS.FLASHCARD_PROGRESS, {});
-
-  localStorage.setItem(KEYS.INITIALIZED, "true");
+// ─── No-op initialize (Firestore needs no seeding) ──────────────────────────
+export function initializeStudentData(_force = false): void {
+  // Intentional no-op — data is fetched on demand from Firestore
 }
 
 // ─── Student Profile ─────────────────────────────────────────────────────────
 export const StudentProfile = {
-  get: () => getFromStorage(KEYS.STUDENT_PROFILE, defaultStudentData),
-  update: (data: Partial<typeof defaultStudentData>) => {
-    const current = StudentProfile.get();
+  get: async () => getData("student_profile", { name: "", grade: "", avatar: "", email: "" }),
+  update: async (data: Record<string, any>) => {
+    const current = await StudentProfile.get();
     const updated = { ...current, ...data };
-    saveToStorage(KEYS.STUDENT_PROFILE, updated);
+    await saveData("student_profile", updated);
     return updated;
   },
 };
 
 // ─── Motivational Quotes ─────────────────────────────────────────────────────
 export const Quotes = {
-  getAll: () => getFromStorage<string[]>(KEYS.QUOTES, defaultQuotes),
-  getRandom: () => {
-    const quotes = Quotes.getAll();
+  getAll: async () => getData<string[]>("quotes", []),
+  getRandom: async () => {
+    const quotes = await Quotes.getAll();
+    if (quotes.length === 0) return "";
     return quotes[Math.floor(Math.random() * quotes.length)];
   },
 };
 
 // ─── Today's Classes ─────────────────────────────────────────────────────────
 export const TodaysClasses = {
-  getAll: () => getFromStorage(KEYS.TODAYS_CLASSES, defaultClasses),
-  updateStatus: (classId: number, status: string) => {
-    const classes = TodaysClasses.getAll();
+  getAll: async () => getData<any[]>("todays_classes", []),
+  updateStatus: async (classId: number, status: string) => {
+    const classes = await TodaysClasses.getAll();
     const updated = classes.map((c: any) =>
       c.id === classId ? { ...c, status } : c
     );
-    saveToStorage(KEYS.TODAYS_CLASSES, updated);
+    await saveData("todays_classes", updated);
     return updated;
   },
 };
 
 // ─── Pending Tasks ───────────────────────────────────────────────────────────
 export const PendingTasks = {
-  getAll: () => getFromStorage(KEYS.PENDING_TASKS, defaultPendingTasks),
-  complete: (taskId: number) => {
-    const tasks = PendingTasks.getAll();
+  getAll: async () => getData<any[]>("pending_tasks", []),
+  complete: async (taskId: number) => {
+    const tasks = await PendingTasks.getAll();
     const updated = tasks.filter((t: any) => t.id !== taskId);
-    saveToStorage(KEYS.PENDING_TASKS, updated);
-    // Also track completion
-    const completion = getFromStorage<Record<number, boolean>>(KEYS.TASK_COMPLETION, {});
+    await saveData("pending_tasks", updated);
+    const completion = await getData<Record<number, boolean>>("task_completion", {});
     completion[taskId] = true;
-    saveToStorage(KEYS.TASK_COMPLETION, completion);
+    await saveData("task_completion", completion);
     return updated;
   },
-  isCompleted: (taskId: number) => {
-    const completion = getFromStorage<Record<number, boolean>>(KEYS.TASK_COMPLETION, {});
+  isCompleted: async (taskId: number) => {
+    const completion = await getData<Record<number, boolean>>("task_completion", {});
     return !!completion[taskId];
   },
-  add: (task: any) => {
-    const tasks = PendingTasks.getAll();
+  add: async (task: any) => {
+    const tasks = await PendingTasks.getAll();
     const newTask = { ...task, id: Date.now() };
     const updated = [...tasks, newTask];
-    saveToStorage(KEYS.PENDING_TASKS, updated);
+    await saveData("pending_tasks", updated);
     return updated;
   },
 };
 
 // ─── Learning Goals ──────────────────────────────────────────────────────────
 export const LearningGoals = {
-  getAll: () => getFromStorage(KEYS.LEARNING_GOALS, defaultGoals),
-  updateProgress: (subject: string, current: number) => {
-    const goals = LearningGoals.getAll();
+  getAll: async () => getData<any[]>("learning_goals", []),
+  updateProgress: async (subject: string, current: number) => {
+    const goals = await LearningGoals.getAll();
     const updated = goals.map((g: any) =>
       g.subject === subject ? { ...g, current: Math.min(current, g.target) } : g
     );
-    saveToStorage(KEYS.LEARNING_GOALS, updated);
+    await saveData("learning_goals", updated);
     return updated;
   },
 };
 
 // ─── Performance Data (monthly scores chart) ─────────────────────────────────
 export const PerformanceData = {
-  getAll: () => getFromStorage(KEYS.PERFORMANCE_DATA, defaultPerformance),
-  addMonth: (month: string, score: number) => {
-    const data = PerformanceData.getAll();
+  getAll: async () => getData<any[]>("performance_data", []),
+  addMonth: async (month: string, score: number) => {
+    const data = await PerformanceData.getAll();
     const existing = data.findIndex((d: any) => d.month === month);
     let updated;
     if (existing >= 0) {
@@ -205,16 +132,16 @@ export const PerformanceData = {
     } else {
       updated = [...data, { month, score }];
     }
-    saveToStorage(KEYS.PERFORMANCE_DATA, updated);
+    await saveData("performance_data", updated);
     return updated;
   },
 };
 
 // ─── Subject Performance ─────────────────────────────────────────────────────
 export const SubjectPerformance = {
-  getAll: () => getFromStorage(KEYS.SUBJECT_PERFORMANCE, defaultSubjectPerf),
-  updateScore: (subject: string, newScore: number) => {
-    const perfs = SubjectPerformance.getAll();
+  getAll: async () => getData<any[]>("subject_performance", []),
+  updateScore: async (subject: string, newScore: number) => {
+    const perfs = await SubjectPerformance.getAll();
     const updated = perfs.map((p: any) => {
       if (p.subject === subject) {
         const prevScore = p.score;
@@ -224,92 +151,92 @@ export const SubjectPerformance = {
       }
       return p;
     });
-    saveToStorage(KEYS.SUBJECT_PERFORMANCE, updated);
+    await saveData("subject_performance", updated);
     return updated;
   },
 };
 
 // ─── Skills Data (radar chart) ───────────────────────────────────────────────
 export const SkillsData = {
-  getAll: () => getFromStorage(KEYS.SKILLS_DATA, defaultSkills),
-  update: (skill: string, current: number) => {
-    const skills = SkillsData.getAll();
+  getAll: async () => getData<any[]>("skills_data", []),
+  update: async (skill: string, current: number) => {
+    const skills = await SkillsData.getAll();
     const updated = skills.map((s: any) =>
       s.skill === skill ? { ...s, current } : s
     );
-    saveToStorage(KEYS.SKILLS_DATA, updated);
+    await saveData("skills_data", updated);
     return updated;
   },
 };
 
 // ─── Topic Mastery ───────────────────────────────────────────────────────────
 export const TopicMastery = {
-  getAll: () => getFromStorage(KEYS.TOPIC_MASTERY, defaultMastery),
-  updateProgress: (topic: string, progress: number) => {
-    const topics = TopicMastery.getAll();
+  getAll: async () => getData<any[]>("topic_mastery", []),
+  updateProgress: async (topic: string, progress: number) => {
+    const topics = await TopicMastery.getAll();
     const level = progress >= 90 ? "Mastered" : progress >= 60 ? "Advanced" : progress >= 30 ? "Intermediate" : "Beginner";
     const updated = topics.map((t: any) =>
       t.topic === topic ? { ...t, progress, level } : t
     );
-    saveToStorage(KEYS.TOPIC_MASTERY, updated);
+    await saveData("topic_mastery", updated);
     return updated;
   },
 };
 
 // ─── Quiz Trends ─────────────────────────────────────────────────────────────
 export const QuizTrends = {
-  getAll: () => getFromStorage(KEYS.QUIZ_TRENDS, defaultQuizTrends),
-  addWeek: (week: string, average: number, completion: number) => {
-    const trends = QuizTrends.getAll();
+  getAll: async () => getData<any[]>("quiz_trends", []),
+  addWeek: async (week: string, average: number, completion: number) => {
+    const trends = await QuizTrends.getAll();
     const updated = [...trends, { week, average, completion }];
-    saveToStorage(KEYS.QUIZ_TRENDS, updated);
+    await saveData("quiz_trends", updated);
     return updated;
   },
 };
 
 // ─── Attendance ──────────────────────────────────────────────────────────────
 export const AttendanceService = {
-  get: () => getFromStorage(KEYS.ATTENDANCE, defaultAttendance),
-  markPresent: () => {
-    const att = AttendanceService.get();
+  get: async () => getData("attendance", { present: 0, absent: 0, total: 0, percentage: 0 }),
+  markPresent: async () => {
+    const att: any = await AttendanceService.get();
     const updated = {
       ...att,
       present: att.present + 1,
       total: att.total + 1,
       percentage: Math.round(((att.present + 1) / (att.total + 1)) * 100),
     };
-    saveToStorage(KEYS.ATTENDANCE, updated);
+    await saveData("attendance", updated);
     return updated;
   },
-  markAbsent: () => {
-    const att = AttendanceService.get();
+  markAbsent: async () => {
+    const att: any = await AttendanceService.get();
     const updated = {
       ...att,
       absent: att.absent + 1,
       total: att.total + 1,
       percentage: Math.round((att.present / (att.total + 1)) * 100),
     };
-    saveToStorage(KEYS.ATTENDANCE, updated);
+    await saveData("attendance", updated);
     return updated;
   },
 };
 
 // ─── Daily Tasks by Subject ──────────────────────────────────────────────────
 export const DailyTasks = {
-  getAll: () => getFromStorage(KEYS.DAILY_TASKS, defaultDailyTasks),
-  toggleTaskCompletion: (taskId: number) => {
-    const subjects = DailyTasks.getAll();
+  getAll: async () => getData<any[]>("daily_tasks", []),
+  toggleTaskCompletion: async (taskId: number) => {
+    const subjects = await DailyTasks.getAll();
     const updated = subjects.map((s: any) => ({
       ...s,
       tasks: s.tasks.map((t: any) =>
         t.id === taskId ? { ...t, completed: !t.completed } : t
       ),
     }));
-    saveToStorage(KEYS.DAILY_TASKS, updated);
+    await saveData("daily_tasks", updated);
     return updated;
   },
-  getCompletionStats: () => {
-    const subjects = DailyTasks.getAll();
+  getCompletionStats: async () => {
+    const subjects = await DailyTasks.getAll();
     let total = 0, completed = 0;
     subjects.forEach((s: any) => {
       s.tasks.forEach((t: any) => {
@@ -323,20 +250,21 @@ export const DailyTasks = {
 
 // ─── Homework Topics ─────────────────────────────────────────────────────────
 export const HomeworkService = {
-  getAll: (): HomeworkTopic[] => getFromStorage(KEYS.HOMEWORK_TOPICS, defaultHomeworkTopics),
-  getById: (id: number): HomeworkTopic | undefined => {
-    return HomeworkService.getAll().find(t => t.id === id);
+  getAll: async (): Promise<HomeworkTopic[]> => getData<HomeworkTopic[]>("homework_topics", []),
+  getById: async (id: number): Promise<HomeworkTopic | undefined> => {
+    const all = await HomeworkService.getAll();
+    return all.find(t => t.id === id);
   },
-  updateTopic: (id: number, updates: Partial<HomeworkTopic>): HomeworkTopic[] => {
-    const topics = HomeworkService.getAll();
+  updateTopic: async (id: number, updates: Partial<HomeworkTopic>): Promise<HomeworkTopic[]> => {
+    const topics = await HomeworkService.getAll();
     const updated = topics.map(t =>
       t.id === id ? { ...t, ...updates } : t
     );
-    saveToStorage(KEYS.HOMEWORK_TOPICS, updated);
+    await saveData("homework_topics", updated);
     return updated;
   },
-  getRecommendedQuizzes: () => {
-    const topics = HomeworkService.getAll();
+  getRecommendedQuizzes: async () => {
+    const topics = await HomeworkService.getAll();
     return topics.filter(t => t.status !== "completed").map(t => ({
       id: t.id,
       title: `${t.topic} Quiz`,
@@ -349,7 +277,7 @@ export const HomeworkService = {
       questions: t.totalQuestions,
     }));
   },
-  updateFlashcardProgress: (topicId: number, progress: number): HomeworkTopic[] => {
+  updateFlashcardProgress: async (topicId: number, progress: number): Promise<HomeworkTopic[]> => {
     const completed = progress >= 100;
     return HomeworkService.updateTopic(topicId, {
       flashcardProgress: Math.min(progress, 100),
@@ -357,7 +285,7 @@ export const HomeworkService = {
       status: completed ? "in-progress" : "pending",
     });
   },
-  updateQuestionsProgress: (topicId: number, attempted: number, correct: number, total: number): HomeworkTopic[] => {
+  updateQuestionsProgress: async (topicId: number, attempted: number, correct: number, total: number): Promise<HomeworkTopic[]> => {
     const progress = Math.round((attempted / total) * 100);
     const accuracy = attempted > 0 ? Math.round((correct / attempted) * 100) : null;
     const completed = attempted >= total;
@@ -370,17 +298,17 @@ export const HomeworkService = {
       lastAttemptDate: new Date().toISOString(),
     });
   },
-  saveDetailedResults: (topicId: number, results: any) => {
-    const allResults = getFromStorage<Record<number, any>>(KEYS.TOPIC_QUIZ_RESULTS, {});
+  saveDetailedResults: async (topicId: number, results: any) => {
+    const allResults = await getData<Record<number, any>>("topic_quiz_results", {});
     allResults[topicId] = results;
-    saveToStorage(KEYS.TOPIC_QUIZ_RESULTS, allResults);
+    await saveData("topic_quiz_results", allResults);
   },
-  getDetailedResults: (topicId: number) => {
-    const allResults = getFromStorage<Record<number, any>>(KEYS.TOPIC_QUIZ_RESULTS, {});
+  getDetailedResults: async (topicId: number) => {
+    const allResults = await getData<Record<number, any>>("topic_quiz_results", {});
     return allResults[topicId];
   },
-  getStats: () => {
-    const topics = HomeworkService.getAll();
+  getStats: async () => {
+    const topics = await HomeworkService.getAll();
     return {
       total: topics.length,
       completed: topics.filter(t => t.status === "completed").length,
@@ -392,142 +320,134 @@ export const HomeworkService = {
 
 // ─── Objective Questions ─────────────────────────────────────────────────────
 export const ObjectiveQuestions = {
-  getAll: (): ObjectiveQuestion[] => getFromStorage(KEYS.OBJECTIVE_QUESTIONS, defaultQuestions),
-  getByTopicId: (topicId: number): ObjectiveQuestion[] => {
-    return ObjectiveQuestions.getAll().filter(q => q.topicId === topicId);
+  getAll: async (): Promise<ObjectiveQuestion[]> => getData<ObjectiveQuestion[]>("objective_questions", []),
+  getByTopicId: async (topicId: number): Promise<ObjectiveQuestion[]> => {
+    const all = await ObjectiveQuestions.getAll();
+    return all.filter(q => q.topicId === topicId);
   },
 };
 
 // ─── Flashcards ──────────────────────────────────────────────────────────────
 export const Flashcards = {
-  getAll: () => getFromStorage<Record<string, any[]>>(KEYS.FLASHCARDS, defaultFlashcards),
-  getBySubject: (subject: string) => {
-    const all = Flashcards.getAll();
+  getAll: async () => getData<Record<string, any[]>>("flashcards", {}),
+  getBySubject: async (subject: string) => {
+    const all = await Flashcards.getAll();
     return all[subject] || [];
   },
-  getProgress: (subject: string): { viewed: number[]; mastered: number[] } => {
-    const progress = getFromStorage<Record<string, { viewed: number[]; mastered: number[] }>>(
-      KEYS.FLASHCARD_PROGRESS, {}
-    );
+  getProgress: async (subject: string): Promise<{ viewed: number[]; mastered: number[] }> => {
+    const progress = await getData<Record<string, { viewed: number[]; mastered: number[] }>>("flashcard_progress", {});
     return progress[subject] || { viewed: [], mastered: [] };
   },
-  markViewed: (subject: string, cardId: number) => {
-    const progress = getFromStorage<Record<string, { viewed: number[]; mastered: number[] }>>(
-      KEYS.FLASHCARD_PROGRESS, {}
-    );
+  markViewed: async (subject: string, cardId: number) => {
+    const progress = await getData<Record<string, { viewed: number[]; mastered: number[] }>>("flashcard_progress", {});
     if (!progress[subject]) progress[subject] = { viewed: [], mastered: [] };
     if (!progress[subject].viewed.includes(cardId)) {
       progress[subject].viewed.push(cardId);
     }
-    saveToStorage(KEYS.FLASHCARD_PROGRESS, progress);
+    await saveData("flashcard_progress", progress);
     return progress[subject];
   },
-  markMastered: (subject: string, cardId: number) => {
-    const progress = getFromStorage<Record<string, { viewed: number[]; mastered: number[] }>>(
-      KEYS.FLASHCARD_PROGRESS, {}
-    );
+  markMastered: async (subject: string, cardId: number) => {
+    const progress = await getData<Record<string, { viewed: number[]; mastered: number[] }>>("flashcard_progress", {});
     if (!progress[subject]) progress[subject] = { viewed: [], mastered: [] };
     if (!progress[subject].mastered.includes(cardId)) {
       progress[subject].mastered.push(cardId);
     }
-    saveToStorage(KEYS.FLASHCARD_PROGRESS, progress);
+    await saveData("flashcard_progress", progress);
     return progress[subject];
   },
 };
 
 // ─── Calendar Events ─────────────────────────────────────────────────────────
 export const CalendarService = {
-  getAll: (): CalendarEvent[] => getFromStorage(KEYS.CALENDAR_EVENTS, defaultCalendarEvents),
-  getByDate: (date: string): CalendarEvent[] => {
-    return CalendarService.getAll().filter(e => e.date === date);
+  getAll: async (): Promise<CalendarEvent[]> => getData<CalendarEvent[]>("calendar_events", []),
+  getByDate: async (date: string): Promise<CalendarEvent[]> => {
+    const all = await CalendarService.getAll();
+    return all.filter(e => e.date === date);
   },
-  toggleCompleted: (eventId: number): CalendarEvent[] => {
-    const events = CalendarService.getAll();
+  toggleCompleted: async (eventId: number): Promise<CalendarEvent[]> => {
+    const events = await CalendarService.getAll();
     const updated = events.map(e =>
       e.id === eventId ? { ...e, completed: !e.completed } : e
     );
-    saveToStorage(KEYS.CALENDAR_EVENTS, updated);
+    await saveData("calendar_events", updated);
     return updated;
   },
-  add: (event: Omit<CalendarEvent, "id">): CalendarEvent[] => {
-    const events = CalendarService.getAll();
+  add: async (event: Omit<CalendarEvent, "id">): Promise<CalendarEvent[]> => {
+    const events = await CalendarService.getAll();
     const newEvent = { ...event, id: Date.now() };
     const updated = [...events, newEvent];
-    saveToStorage(KEYS.CALENDAR_EVENTS, updated);
+    await saveData("calendar_events", updated);
     return updated;
   },
-  delete: (eventId: number): CalendarEvent[] => {
-    const events = CalendarService.getAll();
+  delete: async (eventId: number): Promise<CalendarEvent[]> => {
+    const events = await CalendarService.getAll();
     const updated = events.filter(e => e.id !== eventId);
-    saveToStorage(KEYS.CALENDAR_EVENTS, updated);
+    await saveData("calendar_events", updated);
     return updated;
   },
 };
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 export const NotificationService = {
-  getAll: (): Notification[] => getFromStorage(KEYS.NOTIFICATIONS, defaultNotifications),
-  getUnread: (): Notification[] => {
-    return NotificationService.getAll().filter(n => !n.read);
+  getAll: async (): Promise<Notification[]> => getData<Notification[]>("notifications", []),
+  getUnread: async (): Promise<Notification[]> => {
+    const all = await NotificationService.getAll();
+    return all.filter(n => !n.read);
   },
-  getUnreadCount: (): number => {
-    return NotificationService.getUnread().length;
+  getUnreadCount: async (): Promise<number> => {
+    const unread = await NotificationService.getUnread();
+    return unread.length;
   },
-  markRead: (notificationId: number): Notification[] => {
-    const notifications = NotificationService.getAll();
+  markRead: async (notificationId: number): Promise<Notification[]> => {
+    const notifications = await NotificationService.getAll();
     const updated = notifications.map(n =>
       n.id === notificationId ? { ...n, read: true } : n
     );
-    saveToStorage(KEYS.NOTIFICATIONS, updated);
+    await saveData("notifications", updated);
     return updated;
   },
-  markAllRead: (): Notification[] => {
-    const notifications = NotificationService.getAll();
+  markAllRead: async (): Promise<Notification[]> => {
+    const notifications = await NotificationService.getAll();
     const updated = notifications.map(n => ({ ...n, read: true }));
-    saveToStorage(KEYS.NOTIFICATIONS, updated);
+    await saveData("notifications", updated);
     return updated;
   },
-  add: (notification: Omit<Notification, "id">): Notification[] => {
-    const notifications = NotificationService.getAll();
+  add: async (notification: Omit<Notification, "id">): Promise<Notification[]> => {
+    const notifications = await NotificationService.getAll();
     const newNotif = { ...notification, id: Date.now() };
     const updated = [newNotif, ...notifications];
-    saveToStorage(KEYS.NOTIFICATIONS, updated);
+    await saveData("notifications", updated);
     return updated;
   },
-  delete: (notificationId: number): Notification[] => {
-    const notifications = NotificationService.getAll();
+  delete: async (notificationId: number): Promise<Notification[]> => {
+    const notifications = await NotificationService.getAll();
     const updated = notifications.filter(n => n.id !== notificationId);
-    saveToStorage(KEYS.NOTIFICATIONS, updated);
+    await saveData("notifications", updated);
     return updated;
   },
-  /**
-   * Simulates an asynchronous fetch of notifications.
-   * Useful for UI components that want to show a loading state.
-   */
   fetchNotifications: async (): Promise<Notification[]> => {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
     return NotificationService.getAll();
-  }
+  },
 };
 
 // ─── Timeline Events ─────────────────────────────────────────────────────────
 export const TimelineService = {
-  getAll: () => getFromStorage(KEYS.TIMELINE, defaultTimeline),
-  add: (event: any) => {
-    const events = TimelineService.getAll();
+  getAll: async () => getData<any[]>("timeline", []),
+  add: async (event: any) => {
+    const events = await TimelineService.getAll();
     const newEvent = { ...event, id: Date.now() };
     const updated = [newEvent, ...events];
-    saveToStorage(KEYS.TIMELINE, updated);
+    await saveData("timeline", updated);
     return updated;
   },
 };
 
 // ─── Quiz Questions ──────────────────────────────────────────────────────────
 export const QuizService = {
-  getAll: () => getFromStorage(KEYS.QUIZ_QUESTIONS, defaultQuizQuestions),
-  getResults: (): any[] => getFromStorage(KEYS.QUIZ_RESULTS, []),
-  saveResult: (result: {
+  getAll: async () => getData<any[]>("quiz_questions", []),
+  getResults: async (): Promise<any[]> => getData<any[]>("quiz_results", []),
+  saveResult: async (result: {
     score: number;
     total: number;
     percentage: number;
@@ -536,19 +456,19 @@ export const QuizService = {
     date: string;
     answers: Record<number, any>;
   }) => {
-    const results = QuizService.getResults();
+    const results = await QuizService.getResults();
     const newResult = { ...result, id: Date.now() };
     const updated = [newResult, ...results];
-    saveToStorage(KEYS.QUIZ_RESULTS, updated);
+    await saveData("quiz_results", updated);
     return updated;
   },
-  getBestScore: (): number => {
-    const results = QuizService.getResults();
+  getBestScore: async (): Promise<number> => {
+    const results = await QuizService.getResults();
     if (results.length === 0) return 0;
     return Math.max(...results.map((r: any) => r.percentage));
   },
-  getAverageScore: (): number => {
-    const results = QuizService.getResults();
+  getAverageScore: async (): Promise<number> => {
+    const results = await QuizService.getResults();
     if (results.length === 0) return 0;
     const sum = results.reduce((acc: number, r: any) => acc + r.percentage, 0);
     return Math.round(sum / results.length);
@@ -557,25 +477,21 @@ export const QuizService = {
 
 // ─── Settings Service ────────────────────────────────────────────────────────
 export const SettingsService = {
-  get: () => getFromStorage(KEYS.SETTINGS, {
+  get: async () => getData("settings", {
     notifications: { quizReminders: true, assignmentDue: true, weeklyReport: false },
     theme: "light",
     language: "en",
     soundEnabled: true,
   }),
-  update: (updates: any) => {
-    const current = SettingsService.get();
+  update: async (updates: any) => {
+    const current = await SettingsService.get();
     const updated = { ...current, ...updates };
-    saveToStorage(KEYS.SETTINGS, updated);
+    await saveData("settings", updated);
     return updated;
   },
 };
 
 // ─── Reset ───────────────────────────────────────────────────────────────────
-export function resetStudentData(): void {
-  Object.values(KEYS).forEach(key => localStorage.removeItem(key));
-  initializeStudentData(true);
+export async function resetStudentData(): Promise<void> {
+  // No-op for Firestore — data is managed per-document
 }
-
-// ─── Export all keys for debugging ───────────────────────────────────────────
-export { KEYS as STUDENT_STORAGE_KEYS };

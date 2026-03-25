@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Clock, Users, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
-import centralDataService, { TimetableSlot, DayOfWeek } from '../utils/centralDataService';
+import { timetableService, subjectService, teacherService, TimetableSlot, DayOfWeek } from '../utils/centralDataService';
 import { getClassSections, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 
 export function TimetableManagement() {
@@ -28,48 +28,49 @@ export function TimetableManagement() {
 
     useEffect(() => {
         if (selectedClass && selectedSection) {
-            loadTimetable();
-            loadMappings();
+            const loadData = async () => {
+                await loadTimetable();
+                await loadMappings();
+            };
+            loadData();
         }
     }, [selectedClass, selectedSection]);
 
-    const loadTimetable = () => {
-        const slots = centralDataService.timetable.getByClass(selectedClass, selectedSection);
+    const loadTimetable = async () => {
+        const slots = await timetableService.getByClass(selectedClass, selectedSection);
         setTimetableSlots(slots);
     };
 
-    const loadMappings = () => {
-        // Fetch subject-teacher mappings for this class from localStorage (matching SubjectMappingView logic)
-        const storedMappings = localStorage.getItem('school_subject_mappings');
-        if (storedMappings) {
-            const allMappings = JSON.parse(storedMappings);
-            const classMapping = allMappings.find((m: any) => m.class === `${selectedClass} ${selectedSection}`);
-            if (classMapping) {
-                // Map to our local available mappings structure
-                // Note: SubjectMappingView stores teacher name, we need to find their email for teacherId
-                const teachers = centralDataService.teacher.getAll();
+    const loadMappings = async () => {
+        // Fetch subject-teacher mappings for this class from Firestore
+        const allSubjects = await subjectService.getAll();
+        const allTeachers = await teacherService.getAll();
 
-                const mapped = classMapping.subjects.map((s: any) => {
-                    const teacherObj = teachers.find(t => t.name === s.teacher);
-                    return {
-                        subject: s.name,
-                        teacher: s.teacher,
-                        teacherEmail: teacherObj?.email || ''
-                    };
+        // Filter teachers assigned to this class and build mappings
+        const classTeachers = allTeachers.filter(t =>
+            t.classes?.some((c: string) => c === `${selectedClass} ${selectedSection}` || c === selectedClass)
+        );
+
+        const mapped: { subject: string; teacher: string; teacherEmail: string }[] = [];
+        for (const teacher of classTeachers) {
+            for (const subjectName of (teacher.subjects || [])) {
+                const subjectObj = allSubjects.find(s => s.name === subjectName || s.code === subjectName);
+                mapped.push({
+                    subject: subjectObj?.name || subjectName,
+                    teacher: teacher.name,
+                    teacherEmail: teacher.email || ''
                 });
-                setAvailableMappings(mapped);
-            } else {
-                setAvailableMappings([]);
             }
         }
+        setAvailableMappings(mapped);
     };
 
-    const handleCellChange = (day: DayOfWeek, startTime: string, endTime: string, mappingIndex: string) => {
+    const handleCellChange = async (day: DayOfWeek, startTime: string, endTime: string, mappingIndex: string) => {
         const mapping = availableMappings[parseInt(mappingIndex)];
         if (!mapping) return;
 
         // Check for teacher conflicts across ALL classes
-        const allSlots = centralDataService.timetable.getAll();
+        const allSlots = await timetableService.getAll();
         const conflict = allSlots.find(s =>
             s.teacherId === mapping.teacherEmail &&
             s.day === day &&
@@ -107,16 +108,17 @@ export function TimetableManagement() {
         setTimetableSlots(prev => prev.filter(s => !(s.day === day && s.startTime === startTime)));
     };
 
-    const saveTimetable = () => {
+    const saveTimetable = async () => {
         setIsSaving(true);
         try {
             // Get all timetable slots NOT belonging to this class/section
-            const otherSlots = centralDataService.timetable.getAll().filter(s =>
+            const allSlots = await timetableService.getAll();
+            const otherSlots = allSlots.filter(s =>
                 !(s.class === selectedClass && s.section === selectedSection)
             );
 
             // Combine with current class slots
-            centralDataService.timetable.save([...otherSlots, ...timetableSlots]);
+            await timetableService.save([...otherSlots, ...timetableSlots]);
 
             setMessage({ type: 'success', text: 'Timetable saved successfully!' });
             setTimeout(() => setMessage(null), 3000);

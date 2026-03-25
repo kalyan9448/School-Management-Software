@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import {
@@ -44,7 +44,11 @@ const statusConfig = {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [topics] = useState<HomeworkTopic[]>(() => HomeworkService.getAll());
+  const [topics, setTopics] = useState<HomeworkTopic[]>([]);
+
+  useEffect(() => {
+    HomeworkService.getAll().then(setTopics);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#FAFBFF] pb-24">

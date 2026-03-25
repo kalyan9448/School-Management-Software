@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AcademicYear, getUniqueClasses } from '../utils/classUtils';
 import { Student, getStudents, saveStudents } from './StudentInformationData';
+import { studentService } from '../utils/centralDataService';
 import { ArrowRight, Save, UserCheck, AlertTriangle } from 'lucide-react';
 
 interface StudentPromotionToolProps {
@@ -28,27 +29,28 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
 
     useEffect(() => {
         if (fromYear && selectedClass) {
-            const allStudents = getStudents();
-            // Filter students who are in the "fromYear" and "selectedClass"
-            const filtered = allStudents.filter(
-                s => s.academicYear === fromYear && s.class === selectedClass
-            );
-            setStudents(filtered);
+            const load = async () => {
+                const allStudents = await studentService.getAll();
+                const filtered = (allStudents as any[]).filter(
+                    s => s.academicYear === fromYear && s.class === selectedClass
+                );
+                setStudents(filtered as Student[]);
 
-            // Initialize default promotion states
-            const initialStates: Record<string, StudentPromotionState> = {};
-            const nextClassIndex = classOrder.indexOf(selectedClass) + 1;
-            const defaultNextClass = nextClassIndex < classOrder.length ? classOrder[nextClassIndex] : 'Alumni/Graduated';
+                const initialStates: Record<string, StudentPromotionState> = {};
+                const nextClassIndex = classOrder.indexOf(selectedClass) + 1;
+                const defaultNextClass = nextClassIndex < classOrder.length ? classOrder[nextClassIndex] : 'Alumni/Graduated';
 
-            filtered.forEach(student => {
-                initialStates[student.id] = {
-                    studentId: student.id,
-                    action: 'promote',
-                    nextClass: defaultNextClass === 'Alumni/Graduated' ? 'Alumni/Graduated' : defaultNextClass.replace('Class ', ''),
-                    nextSection: student.section,
-                };
-            });
-            setPromotionStates(initialStates);
+                filtered.forEach(student => {
+                    initialStates[student.id] = {
+                        studentId: student.id,
+                        action: 'promote',
+                        nextClass: defaultNextClass === 'Alumni/Graduated' ? 'Alumni/Graduated' : defaultNextClass.replace('Class ', ''),
+                        nextSection: student.section,
+                    };
+                });
+                setPromotionStates(initialStates);
+            };
+            load();
         } else {
             setStudents([]);
         }
@@ -80,7 +82,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
         });
     };
 
-    const handleConfirmPromotion = () => {
+    const handleConfirmPromotion = async () => {
         if (!fromYear || !toYear) {
             alert("Please select both source and destination academic years.");
             return;
@@ -92,54 +94,33 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
         }
 
         if (confirm(`Are you sure you want to process promotions for ${students.length} students to the ${toYear} academic year? This action will save historical records.`)) {
-            const allStudents = getStudents();
-
-            const updatedStudents = allStudents.map(student => {
+            for (const student of students) {
                 const promotionUpdate = promotionStates[student.id];
+                if (!promotionUpdate) continue;
 
-                // Only update if this student was part of the targeted promotion batch
-                if (promotionUpdate) {
-                    // Append to history
-                    const updatedHistory = [...(student.academicHistory || [])];
-                    updatedHistory.push({
-                        academicYear: student.academicYear || fromYear,
-                        class: student.class,
-                        section: student.section,
-                        status: promotionUpdate.action === 'promote' ? 'promoted' : promotionUpdate.action === 'repeat' ? 'repeated' : promotionUpdate.action === 'transfer' ? 'transferred' : 'removed'
-                    });
+                const updatedHistory = [...(student.academicHistory || [])];
+                updatedHistory.push({
+                    academicYear: student.academicYear || fromYear,
+                    class: student.class,
+                    section: student.section,
+                    status: promotionUpdate.action === 'promote' ? 'promoted' : promotionUpdate.action === 'repeat' ? 'repeated' : promotionUpdate.action === 'transfer' ? 'transferred' : 'removed'
+                });
 
-                    // Apply changes based on action
-                    if (promotionUpdate.action === 'promote' || promotionUpdate.action === 'repeat') {
-                        return {
-                            ...student,
-                            academicYear: toYear,
-                            class: promotionUpdate.nextClass,
-                            section: promotionUpdate.nextSection,
-                            academicHistory: updatedHistory,
-                            // Optionally reset attendance/fees for new year here
-                            attendance: 0,
-                            presentDays: 0,
-                            totalDays: 0,
-                            paidFee: 0,
-                            dueFee: student.totalFee // Assume same total fee initially
-                        };
-                    } else {
-                        // Transferred or removed - they still belong functionally to the old year or a "inactive" state
-                        // But we might want to flag them as inactive instead of changing year. For simplicity, we just mark history.
-                        return {
-                            ...student,
-                            feeStatus: 'pending' as any, // Reset or keep
-                            academicHistory: updatedHistory
-                        };
-                    }
+                if (promotionUpdate.action === 'promote' || promotionUpdate.action === 'repeat') {
+                    await studentService.update(student.id, {
+                        academicYear: toYear,
+                        class: promotionUpdate.nextClass,
+                        section: promotionUpdate.nextSection,
+                        academicHistory: updatedHistory,
+                    } as any);
+                } else {
+                    await studentService.update(student.id, {
+                        academicHistory: updatedHistory,
+                    } as any);
                 }
-                return student;
-            });
+            }
 
-            saveStudents(updatedStudents);
             alert('Promotions processed successfully!');
-
-            // Refresh list
             setFromYear('');
             setSelectedClass('');
         }

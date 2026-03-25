@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Calendar,
   Book,
@@ -66,14 +66,35 @@ export function Dashboard() {
   const [showDueToday, setShowDueToday] = useState(true);
   const [taskCompletionState, setTaskCompletionState] = useState<Record<number, boolean>>({});
 
-  // ── Dynamic data from localStorage ──
-  const [studentInfo] = useState(() => StudentProfile.get());
-  const [allPendingTasks, setAllPendingTasks] = useState(() => PendingTasks.getAll());
-  const [allClasses] = useState(() => TodaysClasses.getAll());
-  const [goals, setGoals] = useState(() => LearningGoals.getAll());
-  const [dailyTasksBySubject, setDailyTasksBySubject] = useState(() => DailyTasks.getAll());
-  const [hwTopics] = useState(() => HomeworkService.getAll());
-  const [quote] = useState(() => Quotes.getRandom());
+  // ── Dynamic data from Firestore (async) ──
+  const [studentInfo, setStudentInfo] = useState<any>({ name: "" });
+  const [allPendingTasks, setAllPendingTasks] = useState<any[]>([]);
+  const [allClasses, setAllClasses] = useState<any[]>([]);
+  const [goals, setGoals] = useState<any[]>([]);
+  const [dailyTasksBySubject, setDailyTasksBySubject] = useState<any[]>([]);
+  const [hwTopics, setHwTopics] = useState<any[]>([]);
+  const [quote, setQuote] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const [profile, tasks, classes, lg, daily, hw, q] = await Promise.all([
+        StudentProfile.get(),
+        PendingTasks.getAll(),
+        TodaysClasses.getAll(),
+        LearningGoals.getAll(),
+        DailyTasks.getAll(),
+        HomeworkService.getAll(),
+        Quotes.getRandom(),
+      ]);
+      setStudentInfo(profile);
+      setAllPendingTasks(tasks);
+      setAllClasses(classes);
+      setGoals(lg);
+      setDailyTasksBySubject(daily);
+      setHwTopics(hw);
+      setQuote(q);
+    })();
+  }, []);
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",

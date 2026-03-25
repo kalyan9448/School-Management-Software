@@ -34,10 +34,19 @@ interface SettingsSection {
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState(() => SettingsService.get());
+  const [settings, setSettings] = useState<any>({
+    notifications: { quizReminders: true, assignmentDue: true, weeklyReport: false },
+    theme: "light",
+    language: "en",
+    soundEnabled: true,
+  });
 
-  const updateSettings = (updates: any) => {
-    const updated = SettingsService.update(updates);
+  useEffect(() => {
+    SettingsService.get().then(setSettings);
+  }, []);
+
+  const updateSettings = async (updates: any) => {
+    const updated = await SettingsService.update(updates);
     setSettings(updated);
   };
 

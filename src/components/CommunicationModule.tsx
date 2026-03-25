@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Send, MessageSquare, Bell, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, X, Info } from 'lucide-react';
 import { NotificationService } from '../services/student/studentDataService';
+import { announcementService, notificationService } from '../utils/centralDataService';
 
 interface Announcement {
   id: string;
@@ -20,48 +21,18 @@ export function CommunicationModule() {
 
   // Load announcements on mount
   useEffect(() => {
-    const saved = localStorage.getItem('school_announcements');
-    if (saved) {
-      setAnnouncements(JSON.parse(saved));
-    } else {
-      // Initialize with defaults if empty
-      const defaultAnnouncements: Announcement[] = [
-        {
-          id: '1',
-          title: 'Parent-Teacher Meeting',
-          message: 'Parent-teacher meeting scheduled for all classes on February 15th. Please ensure attendance.',
-          date: '2024-01-25',
-          targetRole: 'all',
-          type: 'event',
-        },
-        {
-          id: '2',
-          title: 'Fee Payment Reminder',
-          message: 'Quarterly fee payment is due by January 31st. Please clear dues to avoid late fee.',
-          date: '2024-01-24',
-          targetRole: 'parents',
-          type: 'reminder',
-        },
-        {
-          id: '3',
-          title: 'Republic Day Holiday',
-          message: 'School will remain closed on January 26th for Republic Day. Will reopen on January 27th.',
-          date: '2024-01-23',
-          targetRole: 'all',
-          type: 'holiday',
-        },
-      ];
-      setAnnouncements(defaultAnnouncements);
-      localStorage.setItem('school_announcements', JSON.stringify(defaultAnnouncements));
-    }
+    const loadAnnouncements = async () => {
+      try {
+        const data = await announcementService.getAll();
+        if (data && data.length > 0) {
+          setAnnouncements(data);
+        }
+      } catch (error) {
+        console.error('Failed to load announcements:', error);
+      }
+    };
+    loadAnnouncements();
   }, []);
-
-  // Save announcements when they change
-  useEffect(() => {
-    if (announcements.length > 0) {
-      localStorage.setItem('school_announcements', JSON.stringify(announcements));
-    }
-  }, [announcements]);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -70,23 +41,28 @@ export function CommunicationModule() {
     type: 'announcement' as 'announcement' | 'reminder' | 'event' | 'holiday',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newAnnouncement: Announcement = {
       id: Date.now().toString(),
       ...formData,
       date: new Date().toISOString().split('T')[0],
     };
-    setAnnouncements([newAnnouncement, ...announcements]);
 
-    // Send to student dashboard if applicable
+    try {
+      await announcementService.create(newAnnouncement);
+      setAnnouncements([newAnnouncement, ...announcements]);
+    } catch (error) {
+      console.error('Failed to create announcement:', error);
+    }
+
     // Send to student dashboard if applicable
     if (formData.targetRole === 'students' || formData.targetRole === 'all') {
       const studentNotifType = formData.type === 'announcement' ? 'announcement' : 
                                formData.type === 'reminder' ? 'reminder' : 
                                formData.type === 'event' ? 'reminder' : 'reminder';
       
-      NotificationService.add({
+      await NotificationService.add({
         type: studentNotifType as any,
         title: formData.title,
         message: formData.message,
@@ -99,32 +75,38 @@ export function CommunicationModule() {
 
     // --- Feature 2: Teacher Notification Bridge ---
     if (formData.targetRole === 'teachers' || formData.targetRole === 'all') {
-      const teacherNotifs = JSON.parse(localStorage.getItem('teacher_notifications') || '[]');
-      teacherNotifs.unshift({
-        id: Date.now().toString(),
-        title: formData.title,
-        message: formData.message,
-        type: formData.type,
-        from: 'Admin',
-        date: new Date().toISOString(),
-        read: false,
-      });
-      localStorage.setItem('teacher_notifications', JSON.stringify(teacherNotifs));
+      try {
+        await notificationService.create({
+          id: Date.now().toString(),
+          title: formData.title,
+          message: formData.message,
+          type: formData.type,
+          from: 'Admin',
+          date: new Date().toISOString(),
+          read: false,
+          recipientRole: 'teacher',
+        });
+      } catch (error) {
+        console.error('Failed to create teacher notification:', error);
+      }
     }
 
     // --- Feature 5: Parent Notification Bridge ---
     if (formData.targetRole === 'parents' || formData.targetRole === 'all') {
-      const parentNotifs = JSON.parse(localStorage.getItem('parent_notifications') || '[]');
-      parentNotifs.unshift({
-        id: Date.now().toString(),
-        title: formData.title,
-        message: formData.message,
-        type: formData.type,
-        from: 'Admin',
-        date: new Date().toISOString(),
-        read: false,
-      });
-      localStorage.setItem('parent_notifications', JSON.stringify(parentNotifs));
+      try {
+        await notificationService.create({
+          id: Date.now().toString(),
+          title: formData.title,
+          message: formData.message,
+          type: formData.type,
+          from: 'Admin',
+          date: new Date().toISOString(),
+          read: false,
+          recipientRole: 'parent',
+        });
+      } catch (error) {
+        console.error('Failed to create parent notification:', error);
+      }
     }
 
     setFormData({

@@ -4,7 +4,7 @@ import { StudentPromotionTool } from './StudentPromotionTool.tsx';
 import SubjectMappingView from './SubjectMappingView';
 import { TimetableManagement } from './TimetableManagement';
 import { AcademicYear, ClassSection, DEFAULT_YEARS, DEFAULT_CLASSES } from '../utils/classUtils';
-import { Teacher } from './TeachersData';
+import { Teacher, classService, teacherService } from '../utils/centralDataService';
 
 const CLASS_OPTIONS = [
   'Playgroup', 'Nursery', 'LKG', 'UKG',
@@ -39,32 +39,41 @@ export function AcademicStructureView() {
   const [selectedClassNameForSection, setSelectedClassNameForSection] = useState('');
 
   useEffect(() => {
-    const storedYears = localStorage.getItem('school_academic_years');
-    if (storedYears) {
-      setAcademicYears(JSON.parse(storedYears));
-    } else {
+    const loadData = async () => {
+      // Load academic years (use defaults)
       setAcademicYears(DEFAULT_YEARS);
-      localStorage.setItem('school_academic_years', JSON.stringify(DEFAULT_YEARS));
-    }
 
-    // Default load classes for "active" year on component mount just for the classes tab demo
-    const activeY = DEFAULT_YEARS.find(y => y.status === 'active')?.id || '2024-2025';
-    const storedClasses = localStorage.getItem(`school_class_sections_${activeY}`);
-    if (storedClasses) {
-      setClassSections(JSON.parse(storedClasses));
-    } else {
-      setClassSections(DEFAULT_CLASSES);
-      localStorage.setItem(`school_class_sections_${activeY}`, JSON.stringify(DEFAULT_CLASSES));
-    }
+      // Load classes from Firestore, fall back to defaults
+      try {
+        const firestoreClasses = await classService.getAll();
+        if (firestoreClasses.length > 0) {
+          setClassSections(firestoreClasses.map(c => ({
+            id: c.id,
+            className: c.className,
+            section: c.section,
+            classTeacher: c.classTeacher,
+            students: c.currentStrength ?? 0,
+            capacity: c.capacity ?? 30,
+          })));
+        } else {
+          setClassSections(DEFAULT_CLASSES);
+        }
+      } catch {
+        setClassSections(DEFAULT_CLASSES);
+      }
 
-    // Load Teachers
-    const storedTeachers = localStorage.getItem('school_teachers');
-    if (storedTeachers) {
-      setTeachers(JSON.parse(storedTeachers));
-    }
+      // Load teachers from Firestore
+      try {
+        const firestoreTeachers = await teacherService.getAll();
+        setTeachers(firestoreTeachers);
+      } catch {
+        setTeachers([]);
+      }
+    };
+    loadData();
   }, []);
 
-  const handleAddAcademicYear = () => {
+  const handleAddAcademicYear = async () => {
     if (!newYearName || !newYearStart || !newYearEnd) {
       alert("Please fill all fields.");
       return;
@@ -78,7 +87,6 @@ export function AcademicStructureView() {
           : year
       );
       setAcademicYears(updatedYears);
-      localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
     } else {
       // Create new year
       const newYear: AcademicYear = {
@@ -91,22 +99,22 @@ export function AcademicStructureView() {
 
       const updatedYears = [...academicYears, newYear];
       setAcademicYears(updatedYears);
-      localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
 
       // Duplicate structure if a base year is selected
       if (baseYearId) {
-        // Copy Classes
-        let baseClasses = localStorage.getItem(`school_class_sections_${baseYearId}`);
-        if (!baseClasses && baseYearId === '2024-2025') baseClasses = JSON.stringify(DEFAULT_CLASSES);
-        if (baseClasses) {
-          localStorage.setItem(`school_class_sections_${newYearName}`, baseClasses);
-        }
-
-        // Copy Subject Mappings (handles legacy un-suffixed key if running for first time)
-        let baseSubjects = localStorage.getItem(`school_subject_mappings_${baseYearId}`);
-        if (!baseSubjects) baseSubjects = localStorage.getItem('school_subject_mappings');
-        if (baseSubjects) {
-          localStorage.setItem(`school_subject_mappings_${newYearName}`, baseSubjects);
+        // Clone existing classes into Firestore for the new year
+        const baseClasses = baseYearId === '2024-2025' && classSections.length === 0
+          ? DEFAULT_CLASSES
+          : classSections;
+        for (const cls of baseClasses) {
+          await classService.create({
+            className: cls.className,
+            section: cls.section,
+            classTeacher: cls.classTeacher,
+            capacity: cls.capacity,
+            currentStrength: 0,
+            subjects: [],
+          });
         }
       }
     }
@@ -131,11 +139,6 @@ export function AcademicStructureView() {
     if (window.confirm(`Are you sure you want to delete ${yearToDelete.name}? This will remove all associated data.`)) {
       const updatedYears = academicYears.filter(y => y.id !== id);
       setAcademicYears(updatedYears);
-      localStorage.setItem('school_academic_years', JSON.stringify(updatedYears));
-      
-      // Clean up associated data
-      localStorage.removeItem(`school_class_sections_${id}`);
-      localStorage.removeItem(`school_subject_mappings_${id}`);
     }
   };
 
@@ -147,25 +150,32 @@ export function AcademicStructureView() {
     setShowAddYearModal(true);
   };
 
-  const handleAddClass = () => {
+  const handleAddClass = async () => {
     if (!newClassName || !newSectionName || !newClassTeacher) {
       alert("Please fill all fields.");
       return;
     }
 
+    const capacity = parseInt(newCapacity) || 30;
+    const created = await classService.create({
+      className: newClassName,
+      section: newSectionName,
+      classTeacher: newClassTeacher,
+      capacity,
+      currentStrength: 0,
+      subjects: [],
+    });
+
     const newClassSection: ClassSection = {
-      id: Date.now().toString(),
+      id: created.id,
       className: newClassName,
       section: newSectionName,
       classTeacher: newClassTeacher,
       students: 0,
-      capacity: parseInt(newCapacity) || 30
+      capacity,
     };
 
-    const activeY = academicYears.find(y => y.status === 'active')?.id || '2024-2025';
-    const updatedClasses = [...classSections, newClassSection];
-    setClassSections(updatedClasses);
-    localStorage.setItem(`school_class_sections_${activeY}`, JSON.stringify(updatedClasses));
+    setClassSections(prev => [...prev, newClassSection]);
 
     setShowAddClassModal(false);
     setNewClassName('');
@@ -174,25 +184,32 @@ export function AcademicStructureView() {
     setNewCapacity('30');
   };
 
-  const handleAddSection = () => {
+  const handleAddSection = async () => {
     if (!newSectionName || !newClassTeacher || !selectedClassNameForSection) {
       alert("Please fill all fields.");
       return;
     }
 
+    const capacity = parseInt(newCapacity) || 30;
+    const created = await classService.create({
+      className: selectedClassNameForSection,
+      section: newSectionName,
+      classTeacher: newClassTeacher,
+      capacity,
+      currentStrength: 0,
+      subjects: [],
+    });
+
     const newClassSection: ClassSection = {
-      id: Date.now().toString(),
+      id: created.id,
       className: selectedClassNameForSection,
       section: newSectionName,
       classTeacher: newClassTeacher,
       students: 0,
-      capacity: parseInt(newCapacity) || 30
+      capacity,
     };
 
-    const activeY = academicYears.find(y => y.status === 'active')?.id || '2024-2025';
-    const updatedClasses = [...classSections, newClassSection];
-    setClassSections(updatedClasses);
-    localStorage.setItem(`school_class_sections_${activeY}`, JSON.stringify(updatedClasses));
+    setClassSections(prev => [...prev, newClassSection]);
 
     setShowAddSectionModal(false);
     setNewSectionName('');

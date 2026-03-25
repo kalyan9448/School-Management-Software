@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Save, CheckCircle, XCircle, AlertCircle, Calendar, Users, Filter, Loader2 } from 'lucide-react';
-import { getStudents } from './StudentInformationData';
+import { studentService, attendanceService } from '../utils/centralDataService';
 
 interface Student {
   id: string;
@@ -20,8 +20,6 @@ interface AttendanceMarkingProps {
   onBack: () => void;
 }
 
-const ATTENDANCE_KEY = 'school_attendance_records';
-
 export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps) {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,37 +30,24 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
   const [students, setStudents] = useState<Student[]>([]);
 
   // Load real students for this class/section, and pre-fill any existing attendance for the selected date
-  const loadStudentsForDate = (date: string) => {
+  const loadStudentsForDate = async (date: string) => {
     setLoading(true);
     try {
-      // 1. Load all students from the central store and filter by class/section
-      const allStudents = getStudents();
-      const classStudents = allStudents.filter(
-        (s: any) =>
-          s.class?.toString().trim() === classInfo.class.trim() &&
-          s.section?.toString().trim() === classInfo.section.trim()
-      );
+      // 1. Load students for this class/section from Firestore
+      let sourceStudents = await studentService.getByClass(classInfo.class, classInfo.section);
 
-      // Fallback: if no students found by exact match, try admissions_demo_data
-      let sourceStudents = classStudents;
+      // Fallback: if no students found by class filter, load all and filter
       if (sourceStudents.length === 0) {
-        const admissionsRaw = localStorage.getItem('admissions_demo_data');
-        if (admissionsRaw) {
-          const admissions = JSON.parse(admissionsRaw);
-          sourceStudents = admissions.filter(
-            (a: any) =>
-              (a.classAllotted || a.classApplied || '').toString().trim() === classInfo.class.trim() &&
-              (a.status === 'admitted' || a.status === 'confirmed')
-          );
-        }
+        const allStudents = await studentService.getAll();
+        sourceStudents = allStudents.filter(
+          (s: any) =>
+            s.class?.toString().trim() === classInfo.class.trim() &&
+            s.section?.toString().trim() === classInfo.section.trim()
+        );
       }
 
-      // 2. Load existing attendance records for this date + class/section
-      const allRecordsRaw = localStorage.getItem(ATTENDANCE_KEY);
-      const allRecords: any[] = allRecordsRaw ? JSON.parse(allRecordsRaw) : [];
-      const todayRecords = allRecords.filter(
-        (r: any) => r.date === date && r.class === classInfo.class && r.section === classInfo.section
-      );
+      // 2. Load existing attendance records for this date + class/section from Firestore
+      const todayRecords = await attendanceService.getByClass(classInfo.class, classInfo.section, date);
 
       // 3. Map to component's Student interface with pre-filled attendance
       const mapped: Student[] = sourceStudents.map((s: any, idx: number) => {
@@ -108,7 +93,7 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
     setSaveStatus('idle');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const unmarked = students.filter(s => s.attendance === null);
     if (unmarked.length > 0) {
       if (!confirm(`${unmarked.length} students are unmarked. Do you want to save anyway?`)) {
@@ -119,15 +104,6 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
     setSaveStatus('saving');
 
     try {
-      // Load all existing records
-      const allRecordsRaw = localStorage.getItem(ATTENDANCE_KEY);
-      const allRecords: any[] = allRecordsRaw ? JSON.parse(allRecordsRaw) : [];
-
-      // Remove old records for this date + class + section (to avoid duplicates)
-      const filteredRecords = allRecords.filter(
-        (r: any) => !(r.date === selectedDate && r.class === classInfo.class && r.section === classInfo.section)
-      );
-
       // Build new records for marked students
       const newRecords = students
         .filter(s => s.attendance !== null)
@@ -145,9 +121,8 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
           markedAt: new Date().toISOString(),
         }));
 
-      // Save back
-      const merged = [...filteredRecords, ...newRecords];
-      localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(merged));
+      // Save to Firestore
+      await attendanceService.markAttendance(newRecords);
 
       setSaveStatus('saved');
       setTimeout(() => {
@@ -417,5 +392,4 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
   );
 }
 
-// Re-export the attendance key so DashboardHome/MonitoringView can use it
-export { ATTENDANCE_KEY };
+

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, Upload, X, Image as ImageIcon, FileText, Camera } from 'lucide-react';
 import { ClassMultiSelect } from './ClassMultiSelect';
 import { SubjectMultiSelect } from './SubjectMultiSelect';
-import { Teacher } from './TeachersData';
+import { Teacher } from '../utils/centralDataService';
 
 interface TeacherFormProps {
     teacher: Teacher | null;

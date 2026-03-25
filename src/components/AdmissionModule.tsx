@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Edit, Eye, CheckCircle, Clock, XCircle, UserPlus, Calendar, Phone, Mail, Grid3x3, List, Users } from 'lucide-react';
 import { AdmissionForm } from './AdmissionForm';
-import { admissionAPI } from '../utils/api';
 import { AcademicYear, DEFAULT_YEARS, getActiveAcademicYearId } from '../utils/classUtils';
 import { useAuth } from '../contexts/AuthContext';
-import { userService, studentService } from '../utils/centralDataService';
+import { userService, studentService, schoolService } from '../utils/centralDataService';
 
 interface Student {
   id: string;
@@ -55,19 +54,13 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [usingLocalData, setUsingLocalData] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const { user } = useAuth();
 
   // Load data
   useEffect(() => {
     // Load academic years
-    const storedYears = localStorage.getItem('school_academic_years');
-    if (storedYears) {
-      setAcademicYears(JSON.parse(storedYears));
-    } else {
-      setAcademicYears(DEFAULT_YEARS);
-    }
+    setAcademicYears(DEFAULT_YEARS);
 
     if (view === 'list') {
       loadAdmissions();
@@ -76,120 +69,58 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
 
   // Migration logic to fix missing admission numbers
   useEffect(() => {
-    if (students.length > 0 && usingLocalData) {
+    if (students.length > 0) {
       const hasMissingIds = students.some(s => !s.admissionNo || s.admissionNo.trim() === '');
       if (hasMissingIds) {
-        const currentYear = new Date().getFullYear();
-        const schools = JSON.parse(localStorage.getItem('app_schools') || '[]');
-        const currentSchool = schools.find((s: any) => s.id === user?.school_id);
-        const schoolCode = currentSchool?.schoolCode || (user?.school_id === 'SCHOOL001' ? 'KVC' : 'ADM');
-
-        const updatedStudents = students.map((s, index) => {
-          if (!s.admissionNo || s.admissionNo.trim() === '') {
-            return {
-              ...s,
-              admissionNo: `${schoolCode}-${currentYear}-${(index + 1).toString().padStart(4, '0')}`
-            };
-          }
-          return s;
-        });
-
-        setStudents(updatedStudents);
-        localStorage.setItem('admissions_demo_data', JSON.stringify(updatedStudents));
+        const fixIds = async () => {
+          const currentYear = new Date().getFullYear();
+          const schools = await schoolService.getAll();
+          const currentSchool = schools.find((s: any) => s.id === user?.school_id);
+          const schoolCode = currentSchool?.schoolCode || 'ADM';
+          const updatedStudents = students.map((s, index) => {
+            if (!s.admissionNo || s.admissionNo.trim() === '') {
+              return { ...s, admissionNo: `${schoolCode}-${currentYear}-${(index + 1).toString().padStart(4, '0')}` };
+            }
+            return s;
+          });
+          setStudents(updatedStudents);
+        };
+        fixIds();
       }
     }
-  }, [students, usingLocalData, user?.school_id]);
+  }, [students, user?.school_id]);
 
   const loadAdmissions = async () => {
     try {
       setLoading(true);
       setServerError(null);
-      setUsingLocalData(false);
-
-      const response = await admissionAPI.getAll() as any;
-      console.log('Admissions loaded:', response);
-      setStudents(response.admissions || []);
+      const firestoreStudents = await studentService.getAll();
+      setStudents(firestoreStudents.map((s: any) => ({
+        id: s.id,
+        admissionNo: s.admissionNo || '',
+        name: s.name || '',
+        dob: s.dateOfBirth || s.dob || '',
+        gender: s.gender || '',
+        bloodGroup: s.bloodGroup || '',
+        fatherName: s.fatherName || '',
+        motherName: s.motherName || '',
+        guardianName: s.guardianName || '',
+        parentName: s.fatherName || s.parentName || '',
+        phone: s.parentPhone || s.phone || '',
+        emergencyContactNumber: s.emergencyContactNumber || '',
+        email: s.parentEmail || s.email || '',
+        rollNo: s.rollNo || '',
+        classApplied: s.class || s.classApplied || '',
+        classAllotted: s.class || s.classAllotted || '',
+        status: (s.status as any) || 'admitted',
+        appliedDate: s.admissionDate || s.appliedDate || '',
+        admissionDate: s.admissionDate,
+        academicYear: s.academicYear,
+      })));
     } catch (error: any) {
       console.error('Failed to load admissions:', error);
-
-      // Always use demo data when backend is not available
-      setServerError('⚠️ Backend server is not responding. Using local demo mode.');
-      setUsingLocalData(true);
-
-      // Load demo data
-      const localData = localStorage.getItem('admissions_demo_data');
-      if (localData) {
-        setStudents(JSON.parse(localData));
-      } else {
-        const demoAdmissions: Student[] = [
-          {
-            id: '1',
-            admissionNo: 'ADM2024001',
-            name: 'Aarav Sharma',
-            dob: '2019-05-15',
-            gender: 'Male',
-            bloodGroup: 'A+',
-            parentName: 'Mr. Rajesh Sharma',
-            phone: '+91 98765 43210',
-            email: 'rajesh.sharma@email.com',
-            classApplied: 'Nursery',
-            classAllotted: 'Nursery',
-            status: 'admitted',
-            appliedDate: '2024-01-10',
-          },
-          {
-            id: '2',
-            admissionNo: 'ADM2024002',
-            name: 'Diya Patel',
-            dob: '2018-08-22',
-            gender: 'Female',
-            bloodGroup: 'B+',
-            parentName: 'Mrs. Priya Patel',
-            phone: '+91 98765 43211',
-            email: 'priya.patel@email.com',
-            classApplied: 'LKG',
-            classAllotted: 'LKG',
-            status: 'admitted',
-            appliedDate: '2024-01-12',
-            academicYear: '2024-2025',
-          },
-          {
-            id: '3',
-            admissionNo: 'ADM2024003',
-            name: 'Arjun Kumar',
-            dob: '2020-03-10',
-            gender: 'Male',
-            bloodGroup: 'O+',
-            parentName: 'Mr. Suresh Kumar',
-            phone: '+91 98765 43212',
-            email: 'suresh.kumar@email.com',
-            classApplied: 'Nursery',
-            classAllotted: '',
-            status: 'admitted',
-            appliedDate: '2024-02-01',
-            academicYear: '2024-2025',
-          },
-          {
-            id: '4',
-            admissionNo: 'ADM2023001',
-            name: 'Pooja Shetty',
-            dob: '2009-09-15',
-            gender: 'Female',
-            bloodGroup: 'A-',
-            parentName: 'Krishna Shetty',
-            phone: '+91 98765 43237',
-            email: 'pooja.shetty@email.com',
-            classApplied: 'Class 7',
-            classAllotted: 'Class 7',
-            status: 'admitted',
-            appliedDate: '2023-03-01',
-            academicYear: '2023-2024',
-          },
-        ];
-
-        setStudents(demoAdmissions);
-        localStorage.setItem('admissions_demo_data', JSON.stringify(demoAdmissions));
-      }
+      setServerError('Failed to load admissions from Firestore. Please try again.');
+      setStudents([]);
     } finally {
       setLoading(false);
     }
@@ -227,15 +158,12 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
   });
 
   // Function to auto-generate admission number
-  const generateAdmissionNumber = () => {
+  const generateAdmissionNumber = async () => {
     const currentYear = new Date().getFullYear();
     const admissionCount = students.length + 1;
-    
-    // Get school code
-    const schools = JSON.parse(localStorage.getItem('app_schools') || '[]');
+    const schools = await schoolService.getAll();
     const currentSchool = schools.find((s: any) => s.id === user?.school_id);
     const schoolCode = currentSchool?.schoolCode || 'ADM';
-
     return `${schoolCode}-${currentYear}-${admissionCount.toString().padStart(4, '0')}`;
   };
 
@@ -249,67 +177,50 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
         }}
         onSave={async (studentData) => {
           try {
-            if (usingLocalData) {
-              // Use local storage in demo mode
-              const id = `${Date.now()}`;
-              const year = new Date().getFullYear();
-              const count = students.length + 1;
-              
-              // Get school code
-              const schoolsList = JSON.parse(localStorage.getItem('app_schools') || '[]');
-              const currentSchool = schoolsList.find((s: any) => s.id === user?.school_id);
-              const schoolCode = currentSchool?.schoolCode || 'ADM';
-              
-              const admissionNo = `${schoolCode}-${year}-${count.toString().padStart(4, '0')}`;
+            let savedId: string;
 
-              const newAdmission = {
+            if (selectedStudent) {
+              // Update existing student in Firestore
+              await studentService.update(selectedStudent.id, {
                 ...studentData,
-                id,
-                admissionNo: (studentData.admissionNo && studentData.admissionNo.trim() !== '') 
-                  ? studentData.admissionNo 
-                  : admissionNo,
-                appliedDate: new Date().toISOString().split('T')[0],
-                status: studentData.status || 'enquiry'
-              };
-
-              const updatedStudents = selectedStudent
-                ? students.map(s => s.id === selectedStudent.id ? { ...s, ...studentData, admissionNo: studentData.admissionNo || s.admissionNo } : s)
-                : [...students, newAdmission as Student];
-
-              setStudents(updatedStudents);
-              localStorage.setItem('admissions_demo_data', JSON.stringify(updatedStudents));
-
-              alert(`Admission ${selectedStudent ? 'updated' : 'created'} successfully!\n\n${!selectedStudent ? `Admission Number: ${admissionNo}\n` : ''}Student Name: ${studentData.name}\n\n⚠️ Note: Using local demo mode. Data is saved in browser storage only.`);
-
-              setView('list');
-              setSelectedStudent(null);
+                dateOfBirth: studentData.dob,
+                fatherName: studentData.fatherName || studentData.parentName,
+                parentPhone: studentData.phone,
+                parentEmail: studentData.parentEmail || studentData.email,
+                class: studentData.classAllotted || studentData.classApplied,
+              });
+              savedId = selectedStudent.id;
+              alert('Admission updated successfully!');
             } else {
-              // Use backend API
-              if (selectedStudent) {
-                await admissionAPI.update(selectedStudent.id, studentData);
-                alert('Admission updated successfully!');
-              } else {
-                const dataToSend = {
-                  ...studentData,
-                  appliedDate: new Date().toISOString().split('T')[0],
-                  status: studentData.status || 'enquiry'
-                };
-                const response = await admissionAPI.create(dataToSend) as any;
-                alert(`Admission created successfully!\n\nAdmission Number: ${response.admission.admissionNo}\nStudent Name: ${studentData.name}\n\nPlease note down the admission number for future reference.`);
-              }
-              await loadAdmissions();
-              setView('list');
-              setSelectedStudent(null);
+              // Create new student in Firestore
+              const admissionNo = studentData.admissionNo?.trim() || await generateAdmissionNumber();
+              const created = await studentService.create({
+                ...studentData,
+                admissionNo,
+                dateOfBirth: studentData.dob,
+                fatherName: studentData.fatherName || studentData.parentName,
+                parentPhone: studentData.phone,
+                parentEmail: studentData.parentEmail || studentData.email,
+                class: studentData.classAllotted || studentData.classApplied,
+                appliedDate: new Date().toISOString().split('T')[0],
+                status: studentData.status || 'enquiry',
+              });
+              savedId = created.id;
+              alert(`Admission created successfully!\n\nAdmission Number: ${admissionNo}\nStudent Name: ${studentData.name}`);
             }
+
+            await loadAdmissions();
+            setView('list');
+            setSelectedStudent(null);
 
             // --- PROVISIONING LOGIC ---
             // Only create login accounts if the student is marked as "Admitted"
             if (studentData.status === 'admitted') {
-              const studentId = selectedStudent ? selectedStudent.id : `${Date.now()}`;
+              const studentId = savedId;
               
               // 1. Provision Student Login Account (Only if email is provided)
               if (studentData.email) {
-                userService.create({
+                await userService.create({
                   email: studentData.email,
                   name: studentData.name,
                   role: 'student',
@@ -319,20 +230,20 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
               }
 
               // 2. Provision/Link Parent Login Account
-              const allUsers = userService.getAll();
-              const existingParent = allUsers.find(u => u.email === studentData.parentEmail && u.role === 'parent');
+              const allUsers = await userService.getAll();
+              const existingParent = allUsers.find((u: any) => u.email === studentData.parentEmail && u.role === 'parent');
 
               if (existingParent) {
                 // Link student to existing parent account
                 const currentChildren = existingParent.childrenIds || [];
                 if (!currentChildren.includes(studentId)) {
-                  userService.update(existingParent.id, {
+                  await userService.update(existingParent.id, {
                     childrenIds: [...currentChildren, studentId]
                   });
                 }
               } else {
                 // Create new parent account and link student
-                userService.create({
+                await userService.create({
                   email: studentData.parentEmail,
                   name: studentData.parentName || studentData.guardianName || 'Parent',
                   role: 'parent',
@@ -506,36 +417,12 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     <div className="p-8 bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 min-h-screen">
       {/* Server Error Banner */}
       {serverError && (
-        <div className={`mb-6 p-4 rounded-2xl border-2 ${usingLocalData
-          ? 'bg-yellow-50 border-yellow-300 text-yellow-800'
-          : 'bg-red-50 border-red-300 text-red-800'
-          }`}>
+        <div className="mb-6 p-4 rounded-2xl border-2 bg-red-50 border-red-300 text-red-800">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
-            <div className="flex-1">
-              <p className="font-medium mb-2">{serverError}</p>
-              {usingLocalData && (
-                <div className="text-sm space-y-2">
-                  <p>
-                    You can still create and manage admissions, but data will only be saved in your browser.
-                  </p>
-                  <details className="mt-2">
-                    <summary className="cursor-pointer font-medium hover:underline">
-                      🔧 Troubleshooting Guide
-                    </summary>
-                    <div className="mt-2 pl-4 space-y-1 text-xs">
-                      <p>• The Supabase Edge Function may need to be deployed</p>
-                      <p>• Check browser console for detailed error messages</p>
-                      <p>• Verify Supabase project is active and accessible</p>
-                      <p>• Check network tab for failed requests</p>
-                      <p>• Try refreshing the page after a few moments</p>
-                    </div>
-                  </details>
-                </div>
-              )}
-            </div>
+            <p className="flex-1 font-medium">{serverError}</p>
             <button
               onClick={() => {
                 setServerError(null);
@@ -557,19 +444,13 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
           {loading && (
             <p className="text-blue-600 mt-1">⏳ Loading admissions from server...</p>
           )}
-          {usingLocalData && !loading && (
-            <p className="text-yellow-600 mt-1">📁 Using local demo mode</p>
-          )}
         </div>
         <div className="flex items-center gap-3">
           {/* Connection Status */}
           {!loading && (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${usingLocalData
-              ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-              : 'bg-green-50 border-green-300 text-green-700'
-              }`}>
-              <div className={`w-2 h-2 rounded-full ${usingLocalData ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse`}></div>
-              <span className="text-sm">{usingLocalData ? 'Local Mode' : 'Connected'}</span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 bg-green-50 border-green-300 text-green-700">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-sm">Connected</span>
             </div>
           )}
 
@@ -610,14 +491,9 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
           </div>
 
           <button
-            onClick={() => {
-              const schoolsList = JSON.parse(localStorage.getItem('app_schools') || '[]');
+            onClick={async () => {
+              const schoolsList = await schoolService.getAll();
               let currentSchool = schoolsList.find((s: any) => s.id === user?.school_id);
-              
-              // Robust fallback for demo mode to ensure code is never missing for the main school
-              if (!currentSchool?.schoolCode && (user?.school_id === 'SCHOOL001' || user?.school_id === 'SCH001')) {
-                currentSchool = { ...currentSchool, schoolCode: 'KVC' };
-              }
 
               if (!currentSchool?.schoolCode) {
                 alert('⚠️ School Code not configured. Please contact Super Admin to set one before creating admissions.');

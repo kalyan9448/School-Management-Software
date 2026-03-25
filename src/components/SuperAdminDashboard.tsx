@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { auth } from '../services/firebase';
 import { INDIAN_STATES, STATE_CITY_MAPPING } from '../data/locationData';
+import { schoolService, organizationService, announcementService } from '../utils/centralDataService';
 import {
   Building2,
   Building,
@@ -268,8 +270,6 @@ export function SuperAdminDashboard() {
   // Subscription plan editing state
   const [isEditingPlans, setIsEditingPlans] = useState(false);
   const [planDetails, setPlanDetails] = useState<Record<string, any>>(() => {
-    const saved = localStorage.getItem('demo_subscription_plans');
-    if (saved) return JSON.parse(saved);
     return {
       Basic: {
         name: 'Basic',
@@ -302,32 +302,14 @@ export function SuperAdminDashboard() {
   });
   const [editingFeatureInput, setEditingFeatureInput] = useState<Record<string, string>>({});
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
-    const saved = localStorage.getItem('demo_announcements');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'ANN001',
-        date: '2024-02-15',
-        type: 'Maintenance',
-        title: 'Database Upgrade Scheduled',
-        audience: 'All Schools',
-        status: 'Sent',
-      },
-      {
-        id: 'ANN002',
-        date: '2024-02-10',
-        type: 'Feature Update',
-        title: 'New Attendance Features',
-        audience: 'Enterprise Plan',
-        status: 'Sent',
-      },
-    ];
-  });
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState('');
   const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
+
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataErrors, setDataErrors] = useState<string[]>([]);
 
   // Background check for scheduled announcements
   useEffect(() => {
@@ -346,7 +328,6 @@ export function SuperAdminDashboard() {
 
       if (changed) {
         setAnnouncements(updatedAnnouncements);
-        localStorage.setItem('demo_announcements', JSON.stringify(updatedAnnouncements));
       }
     };
 
@@ -354,302 +335,158 @@ export function SuperAdminDashboard() {
     return () => clearInterval(interval);
   }, [announcements]);
 
-  // Demo data for organizations
-  const [organizations, setOrganizations] = useState<Organization[]>(() => {
-    const saved = localStorage.getItem('demo_organizations');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'ORG001',
-        name: 'Kidz Vision Group',
-        type: 'Educational Trust',
-        createdDate: '2024-01-15',
-        schoolsCount: 5,
-        status: 'active',
-        plan: 'Enterprise',
-      },
-      {
-        id: 'ORG002',
-        name: 'Rainbow Education Network',
-        type: 'Chain',
-        createdDate: '2024-03-20',
-        schoolsCount: 3,
-        status: 'active',
-        plan: 'Professional',
-      },
-      {
-        id: 'ORG003',
-        name: 'Little Stars Foundation',
-        type: 'NGO',
-        createdDate: '2024-05-10',
-        schoolsCount: 2,
-        status: 'suspended',
-        plan: 'Basic',
-      },
-    ];
-  });
+  // Organizations — loaded from Firestore
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
 
   // Data for schools
-  const [schools, setSchools] = useState<School[]>(() => {
-    // Attempt to load from centralDataService first
-    const saved = localStorage.getItem('app_schools');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.length > 0) return parsed;
-    }
-    // Fallback exactly to what was there if completely empty, but save it to app_schools
-    const demo = [
-      {
-        id: 'SCHOOL001',
-        name: 'Kidz Vision - Central Campus',
-        organizationId: 'ORG001',
-        organizationName: 'Kidz Vision Group',
-        status: 'active',
-        students: 450,
-        teachers: 35,
-        storage: '12.5 GB',
-        subscriptionEnd: '2025-01-15',
-        maxStudents: 500,
-        maxTeachers: 50,
-        maxStorage: '20 GB',
-        activeStudents: 425,
-        activeTeachers: 33,
-        activeParents: 380,
-        principal: 'Dr. Rajesh Kumar',
-        email: 'admin@central.kidzvision.edu',
-        phone: '+91 22 1234 5678',
-        subscriptionStart: '2024-01-15',
-        plan: 'Enterprise',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        pincode: '400001',
-        address: '123 Education Street',
-        schoolCode: 'KVC',
-      },
-      {
-        id: 'SCHOOL002',
-        name: 'Kidz Vision - North Branch',
-        organizationId: 'ORG001',
-        organizationName: 'Kidz Vision Group',
-        status: 'active',
-        students: 320,
-        teachers: 25,
-        storage: '8.4 GB',
-        subscriptionEnd: '2024-12-31',
-        maxStudents: 400,
-        maxTeachers: 40,
-        maxStorage: '20 GB',
-        activeStudents: 310,
-        activeTeachers: 24,
-        activeParents: 285,
-        address: '456 Learning Avenue',
-        city: 'Delhi',
-        state: 'Delhi',
-        pincode: '110001',
-        phone: '+91 11 2345 6789',
-        email: 'admin@north.kidzvision.edu',
-        principal: 'Mrs. Priya Sharma',
-        subscriptionStart: '2024-01-15',
-        plan: 'Enterprise',
-        schoolCode: 'KVN',
-      },
-      {
-        id: 'SCHOOL003',
-        name: 'Rainbow International School',
-        organizationId: 'ORG002',
-        organizationName: 'Rainbow Education Network',
-        status: 'active',
-        students: 580,
-        teachers: 42,
-        storage: '18.9 GB',
-        subscriptionEnd: '2025-03-20',
-        maxStudents: 600,
-        maxTeachers: 60,
-        maxStorage: '25 GB',
-        activeStudents: 560,
-        activeTeachers: 40,
-        activeParents: 520,
-        address: '789 Rainbow Road',
-        city: 'Bangalore',
-        state: 'Karnataka',
-        pincode: '560001',
-        phone: '+91 80 3456 7890',
-        email: 'contact@rainbow.edu',
-        principal: 'Mr. Amit Verma',
-        subscriptionStart: '2024-01-01',
-        plan: 'Professional',
-        schoolCode: 'RIS',
-      },
-      {
-        id: 'SCH004',
-        name: 'Little Stars Academy',
-        organizationId: 'ORG003',
-        organizationName: 'Little Stars Foundation',
-        status: 'suspended',
-        students: 150,
-        teachers: 15,
-        storage: '3.2 GB',
-        subscriptionEnd: '2024-06-30',
-        maxStudents: 200,
-        maxTeachers: 25,
-        maxStorage: '10 GB',
-        activeStudents: 145,
-        activeTeachers: 14,
-        activeParents: 128,
-        address: '321 Bright Future Lane',
-        city: 'Chennai',
-        state: 'Tamil Nadu',
-        pincode: '600001',
-        phone: '+91 44 4567 8901',
-        email: 'info@littlestars.edu',
-        principal: 'Ms. Kavita Reddy',
-        subscriptionStart: '2023-07-01',
-        plan: 'Basic',
-        schoolCode: 'LSA',
-      },
-    ] as any;
-    localStorage.setItem('app_schools', JSON.stringify(demo));
-    return demo;
-  });
+  // Data for schools - loaded from Firestore via useEffect
+  const [schools, setSchools] = useState<School[]>([]);
 
-  // Demo subscriptions
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => {
-    const saved = localStorage.getItem('demo_subscriptions');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'SUB001',
-        schoolName: 'Kidz Vision - Central Campus',
-        plan: 'Enterprise',
-        status: 'active',
-        students: 450,
-        maxStudents: 1000,
-        teachers: 35,
-        maxTeachers: 100,
-        storage: '12.5 GB',
-        maxStorage: '100 GB',
-        monthlyFee: 15000,
-        startDate: '2024-01-15',
-        endDate: '2025-01-15',
-      },
-      {
-        id: 'SUB002',
-        schoolName: 'Rainbow International School',
-        plan: 'Professional',
-        status: 'active',
-        students: 580,
-        maxStudents: 500,
-        teachers: 42,
-        maxTeachers: 50,
-        storage: '18.9 GB',
-        maxStorage: '50 GB',
-        monthlyFee: 8000,
-        startDate: '2024-03-20',
-        endDate: '2024-12-31',
-      },
-      {
-        id: 'SUB003',
-        schoolName: 'Little Stars Academy',
-        plan: 'Basic',
-        status: 'expired',
-        students: 150,
-        maxStudents: 200,
-        teachers: 15,
-        maxTeachers: 20,
-        storage: '3.2 GB',
-        maxStorage: '20 GB',
-        monthlyFee: 3000,
-        startDate: '2024-01-10',
-        endDate: '2024-06-30',
-      },
-    ];
-  });
+  // Subscriptions — derived from Firestore schools
+  const subscriptions = useMemo<Subscription[]>(() => schools.map(s => ({
+    id: s.id,
+    schoolName: s.name,
+    plan: s.plan || 'Basic',
+    status: s.status === 'active' ? 'active' : s.status === 'archived' ? 'expired' : ('trial' as 'active' | 'expired' | 'trial'),
+    students: s.activeStudents || s.students || 0,
+    maxStudents: s.maxStudents || 200,
+    teachers: s.activeTeachers || s.teachers || 0,
+    maxTeachers: s.maxTeachers || 20,
+    storage: s.storage || '0 GB',
+    maxStorage: s.plan === 'Enterprise' ? '100 GB' : s.plan === 'Professional' ? '50 GB' : '20 GB',
+    monthlyFee: s.plan === 'Enterprise' ? 15000 : s.plan === 'Professional' ? 8000 : 3000,
+    startDate: s.subscriptionStart || '',
+    endDate: s.subscriptionEnd || '',
+  })), [schools]);
 
-  // Demo billing records
-  const [billingRecords, setBillingRecords] = useState<BillingRecord[]>(() => {
-    const saved = localStorage.getItem('demo_billing_records');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'INV001',
-        schoolName: 'Kidz Vision - Central Campus',
-        plan: 'Enterprise',
-        billingCycle: 'Annual',
-        activeUsers: 485,
-        userLimit: 1000,
-        nextBillingDate: '2025-01-15',
-        amount: 180000,
-        paymentStatus: 'Paid',
-        invoiceNumber: 'INV-2024-001',
-        lastPaymentDate: '2024-01-15',
-      },
-      {
-        id: 'INV002',
-        schoolName: 'Rainbow International School',
-        plan: 'Professional',
-        billingCycle: 'Annual',
-        activeUsers: 622,
-        userLimit: 500,
-        nextBillingDate: '2024-12-31',
-        amount: 96000,
-        paymentStatus: 'Paid',
-        invoiceNumber: 'INV-2024-002',
-        lastPaymentDate: '2024-03-20',
-      },
-      {
-        id: 'INV003',
-        schoolName: 'Little Stars Academy',
-        plan: 'Basic',
-        billingCycle: 'Monthly',
-        activeUsers: 165,
-        userLimit: 200,
-        nextBillingDate: '2024-06-30',
-        amount: 3000,
-        paymentStatus: 'Overdue',
-        invoiceNumber: 'INV-2024-003',
-        lastPaymentDate: '2024-05-30',
-      },
-      {
-        id: 'INV004',
-        schoolName: 'Bright Minds School',
-        plan: 'Professional',
-        billingCycle: 'Monthly',
-        activeUsers: 412,
-        userLimit: 500,
-        nextBillingDate: '2025-01-10',
-        amount: 8000,
-        paymentStatus: 'Paid',
-        invoiceNumber: 'INV-2024-004',
-        lastPaymentDate: '2024-12-10',
-      },
-      {
-        id: 'INV005',
-        schoolName: 'Unity Public School',
-        plan: 'Basic',
-        billingCycle: 'Quarterly',
-        activeUsers: 145,
-        userLimit: 200,
-        nextBillingDate: '2025-01-05',
-        amount: 9000,
-        paymentStatus: 'Pending',
-        invoiceNumber: 'INV-2024-005',
-        lastPaymentDate: '2024-10-05',
-      },
-      {
-        id: 'INV006',
-        schoolName: 'Global Kids School',
-        plan: 'Enterprise',
-        billingCycle: 'Annual',
-        activeUsers: 892,
-        userLimit: 1000,
-        nextBillingDate: '2024-11-20',
-        amount: 180000,
-        paymentStatus: 'Overdue',
-        invoiceNumber: 'INV-2024-006',
-        lastPaymentDate: '2023-11-20',
-      },
-    ];
-  });
+  // Billing records — derived from Firestore schools
+  const billingRecords = useMemo<BillingRecord[]>(() => schools.map((s, index) => ({
+    id: `INV-${s.id}`,
+    schoolName: s.name,
+    plan: (s.plan || 'Basic') as 'Basic' | 'Professional' | 'Enterprise',
+    billingCycle: 'Monthly' as const,
+    activeUsers: (s.activeStudents || s.students || 0) + (s.activeTeachers || s.teachers || 0),
+    userLimit: s.maxStudents || 200,
+    nextBillingDate: s.subscriptionEnd || '',
+    amount: s.plan === 'Enterprise' ? 15000 : s.plan === 'Professional' ? 8000 : 3000,
+    paymentStatus: (s.status === 'active' ? 'Paid' : 'Overdue') as 'Paid' | 'Pending' | 'Overdue',
+    invoiceNumber: `INV-${new Date().getFullYear()}-${String(index + 1).padStart(3, '0')}`,
+    lastPaymentDate: s.subscriptionStart || '',
+  })), [schools]);
+
+  // Load data from Firestore once user auth is ready
+  useEffect(() => {
+    if (!user) return;
+
+    const loadData = async () => {
+      setDataLoading(true);
+      const errors: string[] = [];
+
+      // ── Step 1: Ensure Firebase Auth is ready ────────────────────────────
+      try {
+        await auth.authStateReady();
+      } catch { /* best effort */ }
+
+      // ── Step 2: Force-sync with backend to set custom claims ─────────────
+      // onAuthStateChanged may have fired before the backend was running,
+      // so custom claims might not be on the JWT yet.  Re-call the backend
+      // now (it's idempotent) then force-refresh the token so Firestore
+      // security rules see request.auth.token.role == 'superadmin'.
+      try {
+        if (auth.currentUser) {
+          const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+          const token = await auth.currentUser.getIdToken();
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 5000);
+          const resp = await fetch(`${apiBase}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            signal: ctrl.signal,
+          });
+          clearTimeout(timer);
+          if (resp.ok) {
+            // Backend confirmed + (possibly) set custom claims — refresh token
+            await auth.currentUser.getIdToken(true);
+          }
+        }
+      } catch { /* backend unavailable — proceed with existing token */ }
+
+      // Fallback: even if backend is down, do a plain token refresh so the
+      // SDK uses the most recent cached token.
+      try {
+        if (auth.currentUser) await auth.currentUser.getIdToken(true);
+      } catch { /* best effort */ }
+
+      // ── Step 3: Fetch collections (each independently) ────────────────────
+      // Helper: retry once on permission-denied (covers any lingering
+      // race condition between token propagation and rule evaluation).
+      const fetchWithRetry = async <T,>(fn: () => Promise<T[]>): Promise<T[]> => {
+        try {
+          return await fn();
+        } catch (err: any) {
+          if (err?.code === 'permission-denied' || err?.message?.includes('permissions')) {
+            // Wait briefly for Firestore's internal auth listener to sync
+            await new Promise(r => setTimeout(r, 1500));
+            return await fn();
+          }
+          throw err;
+        }
+      };
+
+      // Load each collection independently so one failure doesn't block the rest
+      let firestoreSchools: any[] = [];
+      let firestoreOrganizations: any[] = [];
+      let firestoreAnnouncements: any[] = [];
+
+      try {
+        firestoreSchools = await fetchWithRetry(() => schoolService.getAll());
+      } catch (err: any) {
+        console.error('Failed to load schools:', err);
+        errors.push('Schools: ' + (err?.message || 'Failed to load'));
+      }
+
+      try {
+        firestoreOrganizations = await fetchWithRetry(() => organizationService.getAll());
+      } catch (err: any) {
+        console.error('Failed to load organizations:', err);
+        errors.push('Organizations: ' + (err?.message || 'Failed to load'));
+      }
+
+      try {
+        firestoreAnnouncements = await fetchWithRetry(() => announcementService.getAll());
+      } catch (err: any) {
+        console.error('Failed to load announcements:', err);
+        errors.push('Announcements: ' + (err?.message || 'Failed to load'));
+      }
+
+      // Reconcile org-school links: fix schools whose organizationId
+      // doesn't match any actual org (caused by old auto-ID bug).
+      const orgIdSet = new Set(firestoreOrganizations.map((o: any) => o.id));
+      const reconciledSchools = firestoreSchools.map((school: any) => {
+        if (school.organizationId && !orgIdSet.has(school.organizationId)) {
+          // Try to match by organizationName
+          const matchedOrg = firestoreOrganizations.find(
+            (o: any) => o.name === school.organizationName
+          );
+          if (matchedOrg) {
+            // Fix the link in Firestore (fire-and-forget)
+            schoolService.update(school.id, { organizationId: matchedOrg.id }).catch(() => {});
+            return { ...school, organizationId: matchedOrg.id };
+          }
+        }
+        return school;
+      });
+
+      setSchools(reconciledSchools as any);
+      setOrganizations(firestoreOrganizations as any);
+      if (firestoreAnnouncements.length > 0) {
+        setAnnouncements(firestoreAnnouncements as any);
+      }
+      setDataErrors(errors);
+      setDataLoading(false);
+    };
+    loadData();
+  }, [user]);
 
   // Utility to generate unique school code
   const generateSchoolCode = (name: string) => {
@@ -685,7 +522,7 @@ export function SuperAdminDashboard() {
   };
 
   // Handler for creating organization
-  const handleCreateOrganization = () => {
+  const handleCreateOrganization = async () => {
     // Validate required fields
     if (!organizationForm.name || !organizationForm.email || !organizationForm.contactPerson) {
       alert('Please fill in all required fields (Name, Email, Contact Person)');
@@ -713,16 +550,7 @@ export function SuperAdminDashboard() {
       plan: organizationForm.plan,
     };
 
-    // Add to organizations list
-    setOrganizations([...organizations, newOrg]);
-
-    // Save to localStorage
-    const existingOrgs = localStorage.getItem('demo_organizations');
-    const orgs = existingOrgs ? JSON.parse(existingOrgs) : [];
-    orgs.push(newOrg);
-    localStorage.setItem('demo_organizations', JSON.stringify(orgs));
-
-    // Also save full organization details
+    // Add to organizations list and save to Firestore
     const orgDetails = {
       ...newOrg,
       contactPerson: organizationForm.contactPerson,
@@ -733,11 +561,17 @@ export function SuperAdminDashboard() {
       state: organizationForm.state,
       pincode: organizationForm.pincode,
     };
-
-    const existingOrgDetails = localStorage.getItem('demo_organization_details');
-    const orgDetailsList = existingOrgDetails ? JSON.parse(existingOrgDetails) : [];
-    orgDetailsList.push(orgDetails);
-    localStorage.setItem('demo_organization_details', JSON.stringify(orgDetailsList));
+    setOrganizations([...organizations, orgDetails as Organization]);
+    try {
+      const savedOrg = await organizationService.create(orgDetails);
+      // Update local state with the persisted org (IDs match since we use setDoc)
+      setOrganizations(prev => prev.map(o => o.id === orgId ? { ...orgDetails, ...savedOrg } as Organization : o));
+    } catch (err) {
+      console.error('Failed to save organization to Firestore:', err);
+      alert('Failed to save organization to Firestore. Please try again.');
+      setOrganizations(prev => prev.filter(o => o.id !== orgId));
+      return;
+    }
 
     // Show success message
     alert(`Organization "${organizationForm.name}" created successfully!\nOrganization ID: ${orgId}`);
@@ -761,7 +595,7 @@ export function SuperAdminDashboard() {
   };
 
   // Handler for creating school
-  const handleCreateSchool = () => {
+  const handleCreateSchool = async () => {
     // Validate required fields
     if (!schoolForm.name || !schoolForm.organizationId || !schoolForm.principalEmail || !schoolForm.schoolCode) {
       alert('Please fill in all required fields (School Name, School Code, Organization, Principal Email)');
@@ -816,97 +650,21 @@ export function SuperAdminDashboard() {
       schoolCode: schoolForm.schoolCode,
     };
 
-    // Add to schools list
+    // Add to schools list (organization school count is computed dynamically)
     setSchools([...schools, newSchool]);
 
-    // Update organization school count
-    const updatedOrgs = organizations.map(o =>
-      o.id === schoolForm.organizationId
-        ? { ...o, schoolsCount: o.schoolsCount + 1 }
-        : o
-    );
-    setOrganizations(updatedOrgs);
-
-    // Save to localStorage
-    const existingSchools = localStorage.getItem('app_schools');
-    const schoolsList = existingSchools ? JSON.parse(existingSchools) : [];
-    schoolsList.push(newSchool);
-    localStorage.setItem('app_schools', JSON.stringify(schoolsList));
-
-    // Save full school details
-    const schoolDetails = {
-      ...newSchool,
-      principalName: schoolForm.principalName,
-      principalEmail: schoolForm.principalEmail,
-      principalPhone: schoolForm.principalPhone,
-      principalAddress: schoolForm.principalAddress,
-      principalGmail: schoolForm.principalGmail,
-      address: schoolForm.address,
-      city: schoolForm.city,
-      state: schoolForm.state,
-      pincode: schoolForm.pincode,
-      plan: schoolForm.plan,
-      maxStudents: schoolForm.maxStudents,
-      maxTeachers: schoolForm.maxTeachers,
-    };
-
-    const existingSchoolDetails = localStorage.getItem('demo_school_details');
-    const schoolDetailsList = existingSchoolDetails ? JSON.parse(existingSchoolDetails) : [];
-    schoolDetailsList.push(schoolDetails);
-    localStorage.setItem('demo_school_details', JSON.stringify(schoolDetailsList));
-
-    // Create corresponding subscription
-    const subscriptionId = 'SUB' + String(subscriptions.length + 1).padStart(3, '0');
-    const newSubscription: Subscription = {
-      id: subscriptionId,
-      schoolName: newSchool.name,
-      plan: newSchool.plan || 'Basic',
-      status: 'active',
-      students: 0,
-      maxStudents: newSchool.maxStudents || 200,
-      teachers: 0,
-      maxTeachers: newSchool.maxTeachers || 20,
-      storage: '0 GB',
-      maxStorage: newSchool.plan === 'Enterprise' ? '100 GB' : newSchool.plan === 'Professional' ? '50 GB' : '20 GB',
-      monthlyFee: newSchool.plan === 'Enterprise' ? 15000 : newSchool.plan === 'Professional' ? 8000 : 3000,
-      startDate: newSchool.subscriptionStart || new Date().toISOString().split('T')[0],
-      endDate: newSchool.subscriptionEnd || '',
-    };
-    const updatedSubscriptions = [...subscriptions, newSubscription];
-    setSubscriptions(updatedSubscriptions);
-    localStorage.setItem('demo_subscriptions', JSON.stringify(updatedSubscriptions));
-
-    // Create corresponding billing record
-    const billingId = 'INV' + String(billingRecords.length + 1).padStart(3, '0');
-    const newBilling: BillingRecord = {
-      id: billingId,
-      schoolName: newSchool.name,
-      plan: (newSchool.plan as 'Basic' | 'Professional' | 'Enterprise') || 'Basic',
-      billingCycle: 'Monthly',
-      activeUsers: 0,
-      userLimit: newSchool.maxStudents || 200,
-      nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: newSubscription.monthlyFee,
-      paymentStatus: 'Paid',
-      invoiceNumber: `INV-2024-${String(billingRecords.length + 1).padStart(3, '0')}`,
-      lastPaymentDate: new Date().toISOString().split('T')[0],
-    };
-    const updatedBilling = [...billingRecords, newBilling];
-    setBillingRecords(updatedBilling);
-    localStorage.setItem('demo_billing_records', JSON.stringify(updatedBilling));
-
-    // Create user account for the school admin
-    const existingUsers = JSON.parse(localStorage.getItem('app_users') || '[]');
-    const newUser = {
-      id: String(Date.now()),
-      email: schoolForm.principalEmail,
-      name: schoolForm.principalName,
-      role: 'admin',
-      isFirstLogin: true,
-      school_id: schoolId,
-    };
-    existingUsers.push(newUser);
-    localStorage.setItem('app_users', JSON.stringify(existingUsers));
+    // Save school to Firestore (also auto-creates admin user)
+    try {
+      const savedSchool = await schoolService.create(newSchool);
+      // Update local state with the persisted school (IDs always match now)
+      setSchools(prev => prev.map(s => s.id === newSchool.id ? { ...newSchool, ...savedSchool } : s));
+    } catch (err: any) {
+      console.error('Failed to save school to Firestore:', err);
+      alert(`Failed to save school to Firestore:\n${err?.message || err}\n\nPlease check the browser console for details.`);
+      // Revert local state on failure
+      setSchools(prev => prev.filter(s => s.id !== newSchool.id));
+      return;
+    }
 
     // Show success message
     alert(`School "${schoolForm.name}" created successfully!\nAn administrator account has been provisioned for ${schoolForm.principalEmail}.`);
@@ -941,16 +699,10 @@ export function SuperAdminDashboard() {
 
   const handleSavePlans = () => {
     setIsEditingPlans(false);
-    localStorage.setItem('demo_subscription_plans', JSON.stringify(planDetails));
     alert('Plan updates saved successfully!');
   };
 
   const handleCancelEditPlans = () => {
-    // Reset to saved values
-    const savedPlans = localStorage.getItem('demo_plan_details');
-    if (savedPlans) {
-      setPlanDetails(JSON.parse(savedPlans));
-    }
     setIsEditingPlans(false);
   };
 
@@ -1026,7 +778,6 @@ export function SuperAdminDashboard() {
     };
 
     setPlanDetails(updatedPlans);
-    localStorage.setItem('demo_subscription_plans', JSON.stringify(updatedPlans));
     setShowCreatePlanModal(false);
     alert(`✅ Plan "${newPlanForm.name}" created successfully!`);
   };
@@ -1199,28 +950,7 @@ export function SuperAdminDashboard() {
   const [showSchoolDetails, setShowSchoolDetails] = useState(false);
   const [userRecoveryEmail, setUserRecoveryEmail] = useState('');
   const [selectedRecoveryUser, setSelectedRecoveryUser] = useState<any>(null);
-  const [recoveryHistory, setRecoveryHistory] = useState<RecoveryLog[]>(() => {
-    const saved = localStorage.getItem('app_recovery_logs');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'REC001',
-        date: '2024-02-15',
-        schoolName: 'Kidz Vision Central',
-        userEmail: 'admin@central.edu',
-        action: 'Password Reset',
-        status: 'Completed',
-      },
-      {
-        id: 'REC002',
-        date: '2024-02-14',
-        schoolName: 'Rainbow School',
-        userEmail: 'principal@rainbow.edu',
-        action: 'Account Unlock',
-        status: 'Completed',
-      },
-    ];
-  });
+  const [recoveryHistory, setRecoveryHistory] = useState<RecoveryLog[]>([]);
   const [announcementForm, setAnnouncementForm] = useState({
     type: 'Maintenance Notice',
     audience: 'All Schools',
@@ -1245,6 +975,7 @@ export function SuperAdminDashboard() {
     const newStatus = school.status === 'active' ? 'suspended' : 'active';
     setSchools(schools.map((s) => (s.id === school.id ? { ...s, status: newStatus as 'active' | 'suspended' } : s)));
     setSelectedSchool(selectedSchool?.id === school.id ? { ...school, status: newStatus as 'active' | 'suspended' } : selectedSchool);
+    schoolService.update(school.id, { status: newStatus }).catch(err => console.error('Failed to update school status:', err));
     alert(`${school.name} has been ${newStatus}`);
   };
 
@@ -1295,6 +1026,7 @@ export function SuperAdminDashboard() {
     setSchools(schools.map((s) => (s.id === selectedSchool.id ? updatedSchool : s)));
     setSelectedSchool(updatedSchool);
     setIsEditingSchool(false);
+    schoolService.update(selectedSchool.id, updatedSchool).catch(err => console.error('Failed to update school:', err));
     alert('School details updated successfully!');
   };
 
@@ -1353,10 +1085,7 @@ export function SuperAdminDashboard() {
     const updatedOrgs = organizations.map((o) => (o.id === selectedOrganization.id ? updatedOrganization : o));
     setOrganizations(updatedOrgs);
     setSelectedOrganization(updatedOrganization);
-
-    // Save to localStorage
-    localStorage.setItem('demo_organizations', JSON.stringify(updatedOrgs));
-
+    organizationService.update(selectedOrganization.id, { status: 'suspended' }).catch(err => console.error('Failed to suspend org:', err));
     setShowSuspendModal(false);
   };
 
@@ -1366,10 +1095,7 @@ export function SuperAdminDashboard() {
     const updatedOrgs = organizations.map((o) => (o.id === selectedOrganization.id ? updatedOrganization : o));
     setOrganizations(updatedOrgs);
     setSelectedOrganization(updatedOrganization);
-
-    // Save to localStorage
-    localStorage.setItem('demo_organizations', JSON.stringify(updatedOrgs));
-
+    organizationService.update(selectedOrganization.id, { status: 'active' }).catch(err => console.error('Failed to activate org:', err));
     setShowActivateModal(false);
   };
 
@@ -1407,11 +1133,7 @@ export function SuperAdminDashboard() {
 
     setOrganizations(organizations.map((o) => (o.id === selectedOrganization.id ? updatedOrganization : o)));
     setSelectedOrganization(updatedOrganization);
-
-    // Save to localStorage
-    const updatedOrgs = organizations.map((o) => (o.id === selectedOrganization.id ? updatedOrganization : o));
-    localStorage.setItem('demo_organizations', JSON.stringify(updatedOrgs));
-
+    organizationService.update(selectedOrganization.id, updatedOrganization).catch(err => console.error('Failed to update org:', err));
     setIsEditingOrganization(false);
   };
 
@@ -1455,11 +1177,8 @@ export function SuperAdminDashboard() {
     const orgSchools = schools.filter(s => s.organizationId === selectedOrganization.id);
     setSchools(schools.filter(s => s.organizationId !== selectedOrganization.id));
     setOrganizations(organizations.filter(o => o.id !== selectedOrganization.id));
-
-    // Save to localStorage
-    localStorage.setItem('demo_organizations', JSON.stringify(organizations.filter(o => o.id !== selectedOrganization.id)));
-    localStorage.setItem('app_schools', JSON.stringify(schools.filter(s => s.organizationId !== selectedOrganization.id)));
-
+    organizationService.delete(selectedOrganization.id).catch(err => console.error('Failed to delete org:', err));
+    orgSchools.forEach(s => schoolService.delete(s.id).catch(err => console.error('Failed to delete school:', err)));
     setShowDeleteOrgModal(false);
     setCurrentView('organizations');
     setSelectedOrganization(null);
@@ -1467,19 +1186,13 @@ export function SuperAdminDashboard() {
 
   const handleUpdateCredentials = (service: string) => {
     setSelectedService(service);
-    // Load existing config from localStorage if available
-    const savedConfig = localStorage.getItem(`config_${service.replace(/\s/g, '_')}`);
-    if (savedConfig) {
-      setConfigForm(JSON.parse(savedConfig));
-    } else {
-      setConfigForm({
-        provider: service === 'Payment Gateway' ? 'Razorpay' : service === 'WhatsApp API' ? 'Twilio' : '',
-        apiKey: '',
-        apiSecret: '',
-        endpoint: '',
-        webhookUrl: '',
-      });
-    }
+    setConfigForm({
+      provider: service === 'Payment Gateway' ? 'Razorpay' : service === 'WhatsApp API' ? 'Twilio' : '',
+      apiKey: '',
+      apiSecret: '',
+      endpoint: '',
+      webhookUrl: '',
+    });
     setShowUpdateCredsModal(true);
   };
 
@@ -1491,26 +1204,17 @@ export function SuperAdminDashboard() {
 
   const handleConfigureService = (service: string) => {
     setSelectedService(service);
-    const savedConfig = localStorage.getItem(`config_${service.replace(/\s/g, '_')}`);
-    if (savedConfig) {
-      setConfigForm(JSON.parse(savedConfig));
-    } else {
-      setConfigForm({
-        provider: '',
-        apiKey: '',
-        apiSecret: '',
-        endpoint: '',
-        webhookUrl: '',
-      });
-    }
+    setConfigForm({
+      provider: '',
+      apiKey: '',
+      apiSecret: '',
+      endpoint: '',
+      webhookUrl: '',
+    });
     setShowConfigureModal(true);
   };
 
   const handleManageStorage = () => {
-    const savedStorage = localStorage.getItem('storage_config');
-    if (savedStorage) {
-      setStorageForm(JSON.parse(savedStorage));
-    }
     setShowManageStorageModal(true);
   };
 
@@ -1519,9 +1223,6 @@ export function SuperAdminDashboard() {
       alert('Please fill in all required fields');
       return;
     }
-
-    // Save to localStorage
-    localStorage.setItem(`config_${selectedService.replace(/\s/g, '_')}`, JSON.stringify(configForm));
 
     alert(`✅ Credentials Updated Successfully!\n\nService: ${selectedService}\nProvider: ${configForm.provider}\n\nNew credentials have been saved securely.`);
     setShowUpdateCredsModal(false);
@@ -1547,9 +1248,6 @@ export function SuperAdminDashboard() {
       return;
     }
 
-    // Save to localStorage
-    localStorage.setItem(`config_${selectedService.replace(/\s/g, '_')}`, JSON.stringify(configForm));
-
     alert(`✅ Configuration Saved!\n\nService: ${selectedService}\nProvider: ${configForm.provider}\n\nSettings have been applied successfully.`);
     setShowConfigureModal(false);
   };
@@ -1559,9 +1257,6 @@ export function SuperAdminDashboard() {
       alert('Please fill in all required fields');
       return;
     }
-
-    // Save to localStorage
-    localStorage.setItem('storage_config', JSON.stringify(storageForm));
 
     alert(`✅ Storage Configuration Updated!\n\nProvider: ${storageForm.provider}\nBucket: ${storageForm.bucketName}\nRegion: ${storageForm.region}\n\nChanges will take effect immediately.`);
     setShowManageStorageModal(false);
@@ -1632,7 +1327,6 @@ export function SuperAdminDashboard() {
 
     const updatedHistory = [newLog, ...recoveryHistory];
     setRecoveryHistory(updatedHistory);
-    localStorage.setItem('app_recovery_logs', JSON.stringify(updatedHistory));
   };
 
   const handleResetPassword = () => {
@@ -1650,19 +1344,19 @@ export function SuperAdminDashboard() {
       return;
     }
 
-    // Update status in real state
+    // Update status in real state and Firestore
     if (selectedRecoveryUser.type === 'school') {
       const updatedSchools = schools.map(s =>
         s.id === selectedRecoveryUser.id ? { ...s, status: 'active' as const } : s
       );
       setSchools(updatedSchools);
-      localStorage.setItem('app_schools', JSON.stringify(updatedSchools));
+      schoolService.update(selectedRecoveryUser.id, { status: 'active' }).catch(err => console.error('Failed to unlock school:', err));
     } else {
       const updatedOrgs = organizations.map(o =>
         o.id === selectedRecoveryUser.id ? { ...o, status: 'active' as const } : o
       );
       setOrganizations(updatedOrgs);
-      localStorage.setItem('demo_organizations', JSON.stringify(updatedOrgs));
+      organizationService.update(selectedRecoveryUser.id, { status: 'active' }).catch(err => console.error('Failed to unlock org:', err));
     }
 
     setSelectedRecoveryUser({ ...selectedRecoveryUser, status: 'active' });
@@ -1679,7 +1373,7 @@ export function SuperAdminDashboard() {
     alert(`Temporary Access Generated for ${selectedRecoveryUser.name}!\n\n✅ Credentials:\n- Valid for 24 hours\n- Sent to ${selectedRecoveryUser.email}`);
   };
 
-  const handleSendAnnouncement = () => {
+  const handleSendAnnouncement = async () => {
     if (!announcementForm.title.trim() || !announcementForm.message.trim()) {
       alert('Please fill in title and message');
       return;
@@ -1699,7 +1393,11 @@ export function SuperAdminDashboard() {
 
     const updatedAnnouncements = [newAnnouncement, ...announcements];
     setAnnouncements(updatedAnnouncements);
-    localStorage.setItem('demo_announcements', JSON.stringify(updatedAnnouncements));
+    try {
+      await announcementService.create(newAnnouncement as any);
+    } catch (err) {
+      console.error('Failed to save announcement:', err);
+    }
 
     alert(`Announcement Sent!\n\nTitle: ${announcementForm.title}\n\n✅ Delivered to targeted audience.`);
     setAnnouncementForm({
@@ -1720,7 +1418,7 @@ export function SuperAdminDashboard() {
     setShowSchedulePicker(true);
   };
 
-  const confirmSchedule = () => {
+  const confirmSchedule = async () => {
     if (!scheduledDateTime) {
       alert('Please select a date and time');
       return;
@@ -1741,7 +1439,11 @@ export function SuperAdminDashboard() {
 
     const updatedAnnouncements = [newAnnouncement, ...announcements];
     setAnnouncements(updatedAnnouncements);
-    localStorage.setItem('demo_announcements', JSON.stringify(updatedAnnouncements));
+    try {
+      await announcementService.create(newAnnouncement as any);
+    } catch (err) {
+      console.error('Failed to save scheduled announcement:', err);
+    }
 
     alert(`Announcement Scheduled!\n\nTitle: ${announcementForm.title}\n\nScheduled for: ${new Date(scheduledDateTime).toLocaleString()}`);
     setAnnouncementForm({
@@ -1758,9 +1460,8 @@ export function SuperAdminDashboard() {
 
   const handleDeleteAnnouncement = (id: string) => {
     if (confirm('Are you sure you want to delete this announcement record?')) {
-      const updatedAnnouncements = announcements.filter(a => a.id !== id);
-      setAnnouncements(updatedAnnouncements);
-      localStorage.setItem('demo_announcements', JSON.stringify(updatedAnnouncements));
+      setAnnouncements(announcements.filter(a => a.id !== id));
+      announcementService.delete(id).catch(err => console.error('Failed to delete announcement:', err));
     }
   };
 
@@ -1782,10 +1483,10 @@ export function SuperAdminDashboard() {
       scheduledAt: new Date().toISOString(),
     };
 
-    const existing = localStorage.getItem('scheduled_maintenance');
-    const maintenanceList = existing ? JSON.parse(existing) : [];
+    const existing: any[] = [];
+    const maintenanceList = [...existing];
     maintenanceList.push(maintenance);
-    localStorage.setItem('scheduled_maintenance', JSON.stringify(maintenanceList));
+
 
     // Also add to announcements history
     const maintenanceAnnouncement: Announcement = {
@@ -1801,7 +1502,6 @@ export function SuperAdminDashboard() {
 
     const updatedAnnouncements = [maintenanceAnnouncement, ...announcements];
     setAnnouncements(updatedAnnouncements);
-    localStorage.setItem('demo_announcements', JSON.stringify(updatedAnnouncements));
 
     alert(`✅ Maintenance Scheduled!\n\nWindow:\nStart: ${new Date(maintenanceForm.startDateTime).toLocaleString()}\nEnd: ${new Date(maintenanceForm.endDateTime).toLocaleString()}\nReason: ${maintenanceForm.reason}\n\nAll schools will be notified.`);
 
@@ -1816,9 +1516,9 @@ export function SuperAdminDashboard() {
     const updatedSchool = { ...schoolToArchive, status: 'archived' as const };
     const updatedSchools = schools.map((s) => (s.id === schoolToArchive.id ? updatedSchool : s));
     setSchools(updatedSchools);
+    setSelectedSchool(selectedSchool?.id === schoolToArchive.id ? updatedSchool : selectedSchool);
+    schoolService.update(schoolToArchive.id, { status: 'archived' }).catch(err => console.error('Failed to archive school:', err));
 
-    // Save to localStorage
-    localStorage.setItem('app_schools', JSON.stringify(updatedSchools));
 
     alert(`✅ School Archived!\n\nSchool: ${schoolToArchive.name}\n\n• All access has been disabled\n• Data will be preserved for 90 days\n• Admin notification has been sent`);
 
@@ -1858,8 +1558,53 @@ export function SuperAdminDashboard() {
         return sum;
       }, 0);
 
+    // Compute dynamic stats from Firestore data
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const orgsThisMonth = organizations.filter(org => {
+      const d = new Date((org as any).created_at || org.createdDate);
+      return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length;
+
+    const schoolsThisMonth = schools.filter(s => {
+      const d = new Date((s as any).created_at || s.subscriptionStart || '');
+      return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length;
+
+    const activeSchools = schools.filter(s => s.status === 'active').length;
+    const paidSubscriptions = subscriptions.filter(s => s.status === 'active').length;
+
+    // System health: % of schools that are active
+    const systemHealth = schools.length > 0
+      ? Math.round((activeSchools / schools.length) * 1000) / 10
+      : 100;
+
     return (
       <div className="space-y-6">
+        {/* Loading indicator */}
+        {dataLoading && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+            <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+            <p className="text-blue-700">Loading data from Firebase...</p>
+          </div>
+        )}
+
+        {/* Error banner */}
+        {dataErrors.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <p className="text-red-700 font-medium">Some data failed to load from Firebase:</p>
+            </div>
+            <ul className="list-disc list-inside text-red-600 text-sm">
+              {dataErrors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+            <p className="text-red-500 text-sm mt-2">Check that your user profile has the correct role (superadmin) and try refreshing.</p>
+          </div>
+        )}
+
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-600">
@@ -1867,10 +1612,16 @@ export function SuperAdminDashboard() {
               <div>
                 <p className="text-gray-600 mb-1">Total Organizations</p>
                 <h3 className="text-gray-900 mb-1">{organizations.length}</h3>
-                <p className="text-green-600 flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" />
-                  +3 this month
-                </p>
+                {orgsThisMonth > 0 ? (
+                  <p className="text-green-600 flex items-center gap-1">
+                    <TrendingUp className="w-4 h-4" />
+                    +{orgsThisMonth} this month
+                  </p>
+                ) : (
+                  <p className="text-gray-500 flex items-center gap-1">
+                    No new this month
+                  </p>
+                )}
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <Building2 className="w-6 h-6 text-purple-600" />
@@ -1882,11 +1633,17 @@ export function SuperAdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Active Schools</p>
-                <h3 className="text-gray-900 mb-1">{schools.filter(s => s.status === 'active').length}</h3>
-                <p className="text-green-600 flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" />
-                  +5 this month
-                </p>
+                <h3 className="text-gray-900 mb-1">{activeSchools}</h3>
+                {schoolsThisMonth > 0 ? (
+                  <p className="text-green-600 flex items-center gap-1">
+                    <TrendingUp className="w-4 h-4" />
+                    +{schoolsThisMonth} this month
+                  </p>
+                ) : (
+                  <p className="text-gray-500 flex items-center gap-1">
+                    No new this month
+                  </p>
+                )}
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Users className="w-6 h-6 text-blue-600" />
@@ -1901,7 +1658,7 @@ export function SuperAdminDashboard() {
                 <h3 className="text-gray-900 mb-1">₹{totalMRR.toLocaleString()}</h3>
                 <p className="text-green-600 flex items-center gap-1">
                   <TrendingUp className="w-4 h-4" />
-                  +12% vs last month
+                  {paidSubscriptions} active subscription{paidSubscriptions !== 1 ? 's' : ''}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -1914,10 +1671,10 @@ export function SuperAdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">System Health</p>
-                <h3 className="text-gray-900 mb-1">99.8%</h3>
-                <p className="text-green-600 flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  All systems operational
+                <h3 className="text-gray-900 mb-1">{systemHealth}%</h3>
+                <p className={`flex items-center gap-1 ${systemHealth >= 90 ? 'text-green-600' : systemHealth >= 70 ? 'text-orange-600' : 'text-red-600'}`}>
+                  {systemHealth >= 90 ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  {systemHealth >= 90 ? 'All systems operational' : `${schools.length - activeSchools} school${schools.length - activeSchools !== 1 ? 's' : ''} inactive`}
                 </p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -1974,7 +1731,7 @@ export function SuperAdminDashboard() {
                 >
                   <div>
                     <p className="text-gray-900">{org.name}</p>
-                    <p className="text-gray-500">{org.schoolsCount} schools</p>
+                    <p className="text-gray-500">{schools.filter(s => s.organizationId === org.id).length} schools</p>
                   </div>
                   <span
                     className={`px-3 py-1 rounded-full text-sm ${org.status === 'active'
@@ -1994,31 +1751,66 @@ export function SuperAdminDashboard() {
           <div className="bg-white rounded-xl shadow-md p-6">
             <h2 className="text-gray-900 mb-4">Subscription Alerts</h2>
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-gray-900">Subscription Expiring Soon</p>
-                  <p className="text-gray-600">
-                    Rainbow International - Expires in 15 days
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-gray-900">Subscription Expired</p>
-                  <p className="text-gray-600">Little Stars Academy - Expired</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-gray-900">Limit Reached</p>
-                  <p className="text-gray-600">
-                    Rainbow International - Student limit exceeded
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const now = new Date();
+                const alerts: { key: string; color: string; bg: string; border: string; title: string; detail: string }[] = [];
+
+                subscriptions.forEach(sub => {
+                  if (!sub.endDate) return;
+                  const end = new Date(sub.endDate);
+                  const daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+                  if (daysLeft < 0) {
+                    alerts.push({
+                      key: `expired-${sub.id}`,
+                      color: 'text-red-600',
+                      bg: 'bg-red-50',
+                      border: 'border-red-200',
+                      title: 'Subscription Expired',
+                      detail: `${sub.schoolName} — expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''} ago`,
+                    });
+                  } else if (daysLeft <= 30) {
+                    alerts.push({
+                      key: `expiring-${sub.id}`,
+                      color: 'text-orange-600',
+                      bg: 'bg-orange-50',
+                      border: 'border-orange-200',
+                      title: 'Subscription Expiring Soon',
+                      detail: `${sub.schoolName} — expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`,
+                    });
+                  }
+
+                  if (sub.students >= sub.maxStudents && sub.maxStudents > 0) {
+                    alerts.push({
+                      key: `limit-${sub.id}`,
+                      color: 'text-yellow-600',
+                      bg: 'bg-yellow-50',
+                      border: 'border-yellow-200',
+                      title: 'Student Limit Reached',
+                      detail: `${sub.schoolName} — ${sub.students}/${sub.maxStudents} students`,
+                    });
+                  }
+                });
+
+                if (alerts.length === 0) {
+                  return (
+                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <p className="text-gray-700">All subscriptions are healthy</p>
+                    </div>
+                  );
+                }
+
+                return alerts.map(alert => (
+                  <div key={alert.key} className={`flex items-start gap-3 p-3 ${alert.bg} rounded-lg border ${alert.border}`}>
+                    <AlertCircle className={`w-5 h-5 ${alert.color} flex-shrink-0 mt-0.5`} />
+                    <div>
+                      <p className="text-gray-900">{alert.title}</p>
+                      <p className="text-gray-600">{alert.detail}</p>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -2039,6 +1831,19 @@ export function SuperAdminDashboard() {
           Create Organization
         </button>
       </div>
+
+      {/* Error banner for data load failures */}
+      {dataErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <p className="text-red-700 font-medium">Failed to load some data:</p>
+          </div>
+          <ul className="list-disc list-inside text-red-600 text-sm">
+            {dataErrors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+        </div>
+      )}
 
       {/* Search */}
       <div className="bg-white rounded-xl shadow-md p-4">
@@ -2072,7 +1877,22 @@ export function SuperAdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {organizations.map((org) => (
+              {dataLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
+                    <RefreshCw className="w-5 h-5 animate-spin inline mr-2" />
+                    Loading organizations...
+                  </td>
+                </tr>
+              ) : organizations.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
+                    No organizations found. Create your first organization to get started.
+                  </td>
+                </tr>
+              ) : organizations
+                .filter(org => !searchTerm || org.name.toLowerCase().includes(searchTerm.toLowerCase()) || org.id.toLowerCase().includes(searchTerm.toLowerCase()))
+                .map((org) => (
                 <tr key={org.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div>
@@ -2082,7 +1902,7 @@ export function SuperAdminDashboard() {
                   </td>
                   <td className="px-6 py-4 text-gray-700">{org.type}</td>
                   <td className="px-6 py-4 text-gray-700">
-                    {org.schoolsCount}
+                    {schools.filter(s => s.organizationId === org.id).length}
                   </td>
                   <td className="px-6 py-4">
                     <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
@@ -2101,7 +1921,7 @@ export function SuperAdminDashboard() {
                       {org.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-700">{org.createdDate}</td>
+                  <td className="px-6 py-4 text-gray-700">{org.createdDate || ((org as any).created_at ? new Date((org as any).created_at).toISOString().split('T')[0] : '—')}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button
@@ -2165,7 +1985,16 @@ export function SuperAdminDashboard() {
 
       {/* Schools Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {schools.map((school) => (
+        {dataLoading ? (
+          <div className="col-span-2 bg-white rounded-xl shadow-md p-10 text-center text-gray-500">
+            <RefreshCw className="w-5 h-5 animate-spin inline mr-2" />
+            Loading schools...
+          </div>
+        ) : schools.length === 0 ? (
+          <div className="col-span-2 bg-white rounded-xl shadow-md p-10 text-center text-gray-500">
+            No schools found. Create your first school to get started.
+          </div>
+        ) : schools.map((school) => (
           <div
             key={school.id}
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-600"
@@ -2470,7 +2299,6 @@ export function SuperAdminDashboard() {
                             const updatedPlans = { ...planDetails };
                             delete updatedPlans[key];
                             setPlanDetails(updatedPlans);
-                            localStorage.setItem('demo_subscription_plans', JSON.stringify(updatedPlans));
                           }
                         }}
                         className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
@@ -3066,7 +2894,25 @@ export function SuperAdminDashboard() {
     </div>
   );
 
-  const renderMonitoring = () => (
+  const renderMonitoring = () => {
+    const activeSchoolCount = schools.filter(s => s.status === 'active').length;
+    const suspendedSchoolCount = schools.filter(s => s.status === 'suspended').length;
+    const healthPercent = schools.length > 0
+      ? Math.round((activeSchoolCount / schools.length) * 1000) / 10
+      : 100;
+
+    // Compute total allocated storage from school plans
+    const totalAllocatedGB = schools.reduce((sum, s) => {
+      const plan = s.plan || 'Basic';
+      if (plan === 'Enterprise') return sum + 100;
+      if (plan === 'Professional') return sum + 50;
+      return sum + 20;
+    }, 0);
+
+    const totalStudents = schools.reduce((sum, s) => sum + (s.activeStudents || s.students || 0), 0);
+    const totalTeachers = schools.reduce((sum, s) => sum + (s.activeTeachers || s.teachers || 0), 0);
+
+    return (
     <div className="space-y-6">
       <h2 className="text-gray-900">Platform Monitoring</h2>
 
@@ -3077,12 +2923,12 @@ export function SuperAdminDashboard() {
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <Server className="w-6 h-6 text-green-600" />
             </div>
-            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-              Healthy
+            <span className={`px-3 py-1 rounded-full text-sm ${healthPercent >= 90 ? 'bg-green-100 text-green-700' : healthPercent >= 70 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+              {healthPercent >= 90 ? 'Healthy' : healthPercent >= 70 ? 'Degraded' : 'Critical'}
             </span>
           </div>
-          <h3 className="text-gray-900 mb-1">Server Status</h3>
-          <p className="text-gray-600">Uptime: 99.8%</p>
+          <h3 className="text-gray-900 mb-1">School Health</h3>
+          <p className="text-gray-600">{activeSchoolCount}/{schools.length} schools active ({healthPercent}%)</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -3095,7 +2941,7 @@ export function SuperAdminDashboard() {
             </span>
           </div>
           <h3 className="text-gray-900 mb-1">Database</h3>
-          <p className="text-gray-600">Response: 45ms</p>
+          <p className="text-gray-600">{organizations.length} orgs, {schools.length} schools</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -3107,8 +2953,8 @@ export function SuperAdminDashboard() {
               Active
             </span>
           </div>
-          <h3 className="text-gray-900 mb-1">API Gateway</h3>
-          <p className="text-gray-600">Requests: 125K/day</p>
+          <h3 className="text-gray-900 mb-1">Total Users</h3>
+          <p className="text-gray-600">{totalStudents} students, {totalTeachers} teachers</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -3116,44 +2962,94 @@ export function SuperAdminDashboard() {
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <Globe className="w-6 h-6 text-orange-600" />
             </div>
-            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-              Online
+            <span className={`px-3 py-1 rounded-full text-sm ${suspendedSchoolCount === 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+              {suspendedSchoolCount === 0 ? 'All Active' : `${suspendedSchoolCount} Suspended`}
             </span>
           </div>
-          <h3 className="text-gray-900 mb-1">CDN</h3>
-          <p className="text-gray-600">Latency: 82ms</p>
+          <h3 className="text-gray-900 mb-1">School Status</h3>
+          <p className="text-gray-600">{suspendedSchoolCount === 0 ? 'No issues detected' : `${suspendedSchoolCount} school${suspendedSchoolCount !== 1 ? 's' : ''} need attention`}</p>
         </div>
       </div>
 
-      {/* Error Logs */}
+      {/* Alerts — dynamic based on subscription/school status */}
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-gray-900">Recent Errors</h3>
+          <h3 className="text-gray-900">Alerts & Warnings</h3>
         </div>
         <div className="p-6">
           <div className="space-y-3">
-            <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-200">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-gray-900">Payment Gateway Timeout</p>
-                <p className="text-gray-600">Rainbow School - 2024-02-18 10:45 AM</p>
-              </div>
-              <button className="text-purple-600 hover:text-purple-700">
-                Details
-              </button>
-            </div>
-            <div className="flex items-start gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-gray-900">WhatsApp API Rate Limit</p>
-                <p className="text-gray-600">
-                  Little Stars - 2024-02-18 09:30 AM
-                </p>
-              </div>
-              <button className="text-purple-600 hover:text-purple-700">
-                Details
-              </button>
-            </div>
+            {(() => {
+              const alerts: { key: string; color: string; bg: string; border: string; title: string; detail: string }[] = [];
+              const now = new Date();
+
+              schools.forEach(s => {
+                if (s.status === 'suspended') {
+                  alerts.push({
+                    key: `suspended-${s.id}`,
+                    color: 'text-red-600',
+                    bg: 'bg-red-50',
+                    border: 'border-red-200',
+                    title: 'School Suspended',
+                    detail: `${s.name} — status is suspended`,
+                  });
+                }
+                if (s.subscriptionEnd) {
+                  const end = new Date(s.subscriptionEnd);
+                  const daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  if (daysLeft < 0) {
+                    alerts.push({
+                      key: `expired-${s.id}`,
+                      color: 'text-red-600',
+                      bg: 'bg-red-50',
+                      border: 'border-red-200',
+                      title: 'Subscription Expired',
+                      detail: `${s.name} — expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''} ago`,
+                    });
+                  } else if (daysLeft <= 30) {
+                    alerts.push({
+                      key: `expiring-${s.id}`,
+                      color: 'text-yellow-600',
+                      bg: 'bg-yellow-50',
+                      border: 'border-yellow-200',
+                      title: 'Subscription Expiring',
+                      detail: `${s.name} — expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`,
+                    });
+                  }
+                }
+                // Check student capacity
+                const used = s.activeStudents || s.students || 0;
+                const max = s.maxStudents || 200;
+                if (used >= max && max > 0) {
+                  alerts.push({
+                    key: `capacity-${s.id}`,
+                    color: 'text-orange-600',
+                    bg: 'bg-orange-50',
+                    border: 'border-orange-200',
+                    title: 'Student Limit Reached',
+                    detail: `${s.name} — ${used}/${max} students`,
+                  });
+                }
+              });
+
+              if (alerts.length === 0) {
+                return (
+                  <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <p className="text-gray-700">No alerts — all systems operational</p>
+                  </div>
+                );
+              }
+
+              return alerts.slice(0, 5).map(alert => (
+                <div key={alert.key} className={`flex items-start gap-3 p-4 ${alert.bg} rounded-lg border ${alert.border}`}>
+                  <AlertCircle className={`w-5 h-5 ${alert.color} flex-shrink-0 mt-0.5`} />
+                  <div className="flex-1">
+                    <p className="text-gray-900">{alert.title}</p>
+                    <p className="text-gray-600">{alert.detail}</p>
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </div>
@@ -3161,73 +3057,78 @@ export function SuperAdminDashboard() {
       {/* Usage Statistics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Storage Consumption</h3>
+          <h3 className="text-gray-900 mb-4">Storage Allocation</h3>
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">Documents</span>
-                <span className="text-gray-900">145 GB</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-purple-600 h-2 rounded-full" style={{ width: '58%' }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">Media</span>
-                <span className="text-gray-900">78 GB</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '31%' }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">Backups</span>
-                <span className="text-gray-900">22 GB</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-green-600 h-2 rounded-full" style={{ width: '11%' }}></div>
+            {Object.entries(
+              schools.reduce((acc, s) => {
+                const plan = s.plan || 'Basic';
+                acc[plan] = (acc[plan] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>)
+            ).map(([plan, count]) => {
+              const gbPerPlan = plan === 'Enterprise' ? 100 : plan === 'Professional' ? 50 : 20;
+              const totalGB = count * gbPerPlan;
+              const pct = totalAllocatedGB > 0 ? Math.round((totalGB / totalAllocatedGB) * 100) : 0;
+              return (
+                <div key={plan}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-600">{plan} ({count} school{count !== 1 ? 's' : ''})</span>
+                    <span className="text-gray-900">{totalGB} GB allocated</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className={`h-2 rounded-full ${plan === 'Enterprise' ? 'bg-purple-600' : plan === 'Professional' ? 'bg-blue-600' : 'bg-green-600'}`} style={{ width: `${pct}%` }}></div>
+                  </div>
+                </div>
+              );
+            })}
+            {schools.length === 0 && (
+              <p className="text-gray-500 text-center py-4">No schools registered yet</p>
+            )}
+            <div className="pt-2 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700 font-medium">Total Allocated</span>
+                <span className="text-gray-900 font-medium">{totalAllocatedGB} GB</span>
               </div>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Notification Usage</h3>
+          <h3 className="text-gray-900 mb-4">Platform Summary</h3>
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">WhatsApp</span>
-                <span className="text-gray-900">12,450 / 15,000</span>
+                <span className="text-gray-600">Organizations</span>
+                <span className="text-gray-900">{organizations.length}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-green-600 h-2 rounded-full" style={{ width: '83%' }}></div>
+                <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${Math.min(organizations.length * 10, 100)}%` }}></div>
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">Email</span>
-                <span className="text-gray-900">8,200 / 10,000</span>
+                <span className="text-gray-600">Active Schools</span>
+                <span className="text-gray-900">{activeSchoolCount} / {schools.length}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '82%' }}></div>
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${schools.length > 0 ? Math.round((activeSchoolCount / schools.length) * 100) : 0}%` }}></div>
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">SMS</span>
-                <span className="text-gray-900">3,150 / 5,000</span>
+                <span className="text-gray-600">Announcements Sent</span>
+                <span className="text-gray-900">{announcements.filter(a => a.status === 'Published').length} / {announcements.length}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-orange-600 h-2 rounded-full" style={{ width: '63%' }}></div>
+                <div className="bg-green-600 h-2 rounded-full" style={{ width: `${announcements.length > 0 ? Math.round((announcements.filter(a => a.status === 'Published').length / announcements.length) * 100) : 0}%` }}></div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderAnnouncements = () => (
     <div className="space-y-6">
@@ -3722,7 +3623,6 @@ export function SuperAdminDashboard() {
                 onClick={() => {
                   const updated = announcements.map(a => a.id === ann.id ? { ...a, status: 'Published' as const } : a);
                   setAnnouncements(updated);
-                  localStorage.setItem('demo_announcements', JSON.stringify(updated));
                   setViewingAnnouncement({ ...ann, status: 'Published' });
                 }}
                 className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"

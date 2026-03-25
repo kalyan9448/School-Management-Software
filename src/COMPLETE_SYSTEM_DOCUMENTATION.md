@@ -761,10 +761,10 @@ All dashboards use shared components:
 - **Routing**: React Router
 
 ### Backend (Integrated)
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **Storage**: Supabase Storage
-- **Real-time**: Supabase Realtime
+- **Database**: PostgreSQL
+- **Authentication**: Firebase Auth
+- **Storage**: Firebase Storage
+- **API**: Node.js/Express
 
 ### Integrations
 - Payment: Razorpay, PayU, Stripe

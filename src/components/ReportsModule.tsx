@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Download, FileText, TrendingUp, Users, DollarSign, Calendar, BarChart3, PieChart, Award, Sparkles } from 'lucide-react';
+import { studentService, attendanceService, feeService, enquiryService } from '../utils/centralDataService';
 
 export function ReportsModule() {
   const reports = [
@@ -95,6 +96,49 @@ export function ReportsModule() {
 
   const categories = ['All', 'Finance', 'Attendance', 'Admission'];
   const [selectedCategory, setSelectedCategory] = React.useState('All');
+
+  // Fetch dynamic data from Firestore
+  const [students, setStudents] = useState<any[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [feePayments, setFeePayments] = useState<any[]>([]);
+  const [enquiries, setEnquiries] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [s, a, f, e] = await Promise.all([
+          studentService.getAll(),
+          attendanceService.getAll(),
+          feeService.getAllPayments(),
+          enquiryService.getAll(),
+        ]);
+        setStudents(s);
+        setAttendanceRecords(a);
+        setFeePayments(f);
+        setEnquiries(e);
+      } catch (err) {
+        console.error('Failed to load report data:', err);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Compute dynamic analytics
+  const totalFeeCollected = feePayments
+    .filter((p: any) => p.status === 'paid')
+    .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+
+  const totalStudents = students.length;
+  const presentCount = attendanceRecords.filter((a: any) => a.status === 'present').length;
+  const totalAttendanceRecords = attendanceRecords.length;
+  const overallAttendance = totalAttendanceRecords > 0
+    ? Math.round((presentCount / totalAttendanceRecords) * 100)
+    : 0;
+
+  const enquiriesTotal = enquiries.length;
+  const confirmedEnquiries = enquiries.filter((e: any) => e.status === 'converted' || e.status === 'admitted').length;
+  const inProcessEnquiries = enquiries.filter((e: any) => e.status === 'in_progress' || e.status === 'contacted' || e.status === 'follow_up').length;
+  const pendingEnquiries = enquiriesTotal - confirmedEnquiries - inProcessEnquiries;
 
   const filteredReports = selectedCategory === 'All' 
     ? reports 
@@ -210,20 +254,38 @@ export function ReportsModule() {
             </div>
             
             <div className="space-y-4 relative">
-              {['January', 'February', 'March', 'April'].map((month, index) => {
-                const amount = [125000, 138000, 142000, 135000][index];
-                const percentage = (amount / 150000) * 100;
-                return (
-                  <div key={month} className="p-4 bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 rounded-2xl border border-emerald-100 hover:border-emerald-300 transition-colors">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-gray-700">{month}</span>
-                      <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-emerald-200">₹{(amount / 1000).toFixed(0)}K</span>
+              {(() => {
+                // Group fee payments by month
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                const monthlyTotals: Record<string, number> = {};
+                feePayments.filter((p: any) => p.status === 'paid').forEach((p: any) => {
+                  const d = new Date(p.date || p.created_at || '');
+                  if (!isNaN(d.getTime())) {
+                    const key = monthNames[d.getMonth()];
+                    monthlyTotals[key] = (monthlyTotals[key] || 0) + (p.amount || 0);
+                  }
+                });
+                const entries = Object.entries(monthlyTotals).slice(-4);
+                const maxAmount = Math.max(...entries.map(([, v]) => v), 1);
+                if (entries.length === 0) return <p className="text-gray-500 text-center py-4">No fee data yet</p>;
+                return entries.map(([month, amount]) => {
+                  const percentage = (amount / maxAmount) * 100;
+                  return (
+                    <div key={month} className="p-4 bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 rounded-2xl border border-emerald-100 hover:border-emerald-300 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-700">{month}</span>
+                        <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-emerald-200">₹{amount >= 1000 ? (amount / 1000).toFixed(0) + 'K' : amount}</span>
+                      </div>
+                      <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-green-600 rounded-full shadow-lg transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-green-600 rounded-full shadow-lg transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
-                      />
+                  );
+                });
+              })()}
                     </div>
                   </div>
                 );
@@ -243,19 +305,43 @@ export function ReportsModule() {
             </div>
             
             <div className="space-y-4 relative">
-              {['Class 1-2', 'Class 3-5', 'Class 6-8', 'Class 9-10'].map((cls, index) => {
-                const percentage = [95, 92, 88, 90][index];
-                return (
-                  <div key={cls} className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-2xl border border-blue-100 hover:border-blue-300 transition-colors">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-gray-700">{cls}</span>
-                      <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-blue-200">{percentage}%</span>
+              {(() => {
+                // Group attendance by class ranges
+                const classGroups: Record<string, { present: number; total: number }> = {};
+                attendanceRecords.forEach((a: any) => {
+                  const cls = parseInt(a.class || '0');
+                  let group = '';
+                  if (cls >= 1 && cls <= 2) group = 'Class 1-2';
+                  else if (cls >= 3 && cls <= 5) group = 'Class 3-5';
+                  else if (cls >= 6 && cls <= 8) group = 'Class 6-8';
+                  else if (cls >= 9 && cls <= 10) group = 'Class 9-10';
+                  else group = `Class ${a.class || 'Other'}`;
+                  if (!classGroups[group]) classGroups[group] = { present: 0, total: 0 };
+                  classGroups[group].total++;
+                  if (a.status === 'present') classGroups[group].present++;
+                });
+                const entries = Object.entries(classGroups);
+                if (entries.length === 0) {
+                  return <p className="text-gray-500 text-center py-4">Overall: {overallAttendance}% ({totalStudents} students)</p>;
+                }
+                return entries.map(([cls, data]) => {
+                  const pct = data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
+                  return (
+                    <div key={cls} className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-2xl border border-blue-100 hover:border-blue-300 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-700">{cls}</span>
+                        <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-blue-200">{pct}%</span>
+                      </div>
+                      <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full shadow-lg transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full shadow-lg transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
-                      />
+                  );
+                });
+              })()}
                     </div>
                   </div>
                 );
@@ -278,7 +364,7 @@ export function ReportsModule() {
               <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-gray-700">📧 Enquiries</span>
-                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-blue-200">45</span>
+                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-blue-200">{enquiriesTotal}</span>
                 </div>
                 <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full shadow-lg" style={{ width: '100%' }} />
@@ -288,20 +374,20 @@ export function ReportsModule() {
               <div className="p-4 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border border-yellow-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-gray-700">⏳ In Process</span>
-                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-yellow-200">28</span>
+                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-yellow-200">{inProcessEnquiries}</span>
                 </div>
                 <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-500 to-amber-600 rounded-full shadow-lg" style={{ width: '62%' }} />
+                  <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-500 to-amber-600 rounded-full shadow-lg" style={{ width: `${enquiriesTotal > 0 ? Math.round((inProcessEnquiries / enquiriesTotal) * 100) : 0}%` }} />
                 </div>
               </div>
 
               <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border border-green-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-gray-700">✅ Confirmed</span>
-                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-green-200">18</span>
+                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border border-green-200">{confirmedEnquiries}</span>
                 </div>
                 <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full shadow-lg" style={{ width: '40%' }} />
+                  <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full shadow-lg" style={{ width: `${enquiriesTotal > 0 ? Math.round((confirmedEnquiries / enquiriesTotal) * 100) : 0}%` }} />
                 </div>
               </div>
             </div>

@@ -24,12 +24,11 @@ class PerformanceAnalyticsService {
   /**
    * Simulates a Time-Series Database call to fetch historical performance trends
    */
-  getMonthlyTrends(teacherEmail: string): TimeSeriesPoint[] {
-    const allLogs = lessonService.getAll().filter(l => l.teacherId === teacherEmail);
+  async getMonthlyTrends(teacherEmail: string): Promise<TimeSeriesPoint[]> {
+    const allLogs = (await lessonService.getAll()).filter(l => l.teacherId === teacherEmail);
     const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
     
     return months.map(m => {
-      // For demo, we still randomize but weight it by actual log counts if any exist
       const monthLogs = allLogs.filter(l => {
         const date = new Date(l.date);
         return date.toLocaleString('default', { month: 'short' }) === m;
@@ -45,17 +44,13 @@ class PerformanceAnalyticsService {
 
   /**
    * Analytics Service Core: Calculates "Class Delta" (Pedagogical Improvement)
-   * This compares current performance with a baseline period.
    */
-  calculateClassDelta(classId: string): ClassDelta {
-    // Derived from real lesson counts for this class
-    // classId format is "Class 6-A-Math-0"
+  async calculateClassDelta(classId: string): Promise<ClassDelta> {
     const [className, section] = classId.split('-');
-    const allLessons = lessonService.getAll();
+    const allLessons = await lessonService.getAll();
     const classLessons = allLessons.filter(l => l.class === className && l.section === section);
     const lessonCount = classLessons.length || 0;
     
-    // Simulate improvement based on lesson consistency
     const currentScore = Math.min(100, 75 + (lessonCount * 2));
     const improvement = 5 + (lessonCount * 0.5);
 
@@ -70,11 +65,10 @@ class PerformanceAnalyticsService {
   /**
    * Insight Webhooks Simulation: Triggers notifications based on behavioral patterns
    */
-  getInsightTriggers(teacherEmail: string): InsightTrigger[] {
+  async getInsightTriggers(teacherEmail: string): Promise<InsightTrigger[]> {
     const triggers: InsightTrigger[] = [];
     
-    // Logic 1: Burnout/Break Alert (if logged high volume today)
-    const allLessons = lessonService.getAll();
+    const allLessons = await lessonService.getAll();
     const today = new Date().toISOString().split('T')[0];
     const teacherLessonsToday = allLessons.filter(l => l.teacherId === teacherEmail && l.date === today);
 
@@ -87,8 +81,7 @@ class PerformanceAnalyticsService {
       });
     }
 
-    // Logic 2: Engagement Achievement
-    const attendance = attendanceService.getByDate(today);
+    const attendance = await attendanceService.getByDate(today);
     const averageAttendance = attendance.length > 0 
       ? (attendance.filter(a => a.status === 'present').length / attendance.length) * 100 
       : 0;
@@ -102,7 +95,6 @@ class PerformanceAnalyticsService {
       });
     }
 
-    // Default recommendation if no alerts
     if (triggers.length === 0) {
       triggers.push({
         id: 'standard-rec',

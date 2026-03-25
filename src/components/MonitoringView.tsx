@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
+import { studentService, attendanceService, classService, timetableService, userService } from '../utils/centralDataService';
+import { DEFAULT_YEARS } from '../utils/classUtils';
 
 interface MonitoringViewProps {
   onNavigate?: (view: string, options?: any) => void;
@@ -18,131 +20,130 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
   const [classes, setClasses] = useState<any[]>([]);
 
   useEffect(() => {
-    // 1. Fetch Unified Users for Active Count & Feed
-    const storedUsers = localStorage.getItem('school_unified_users');
-    const unifiedUsers = storedUsers ? JSON.parse(storedUsers) : [];
-    const activeU = unifiedUsers.filter((u: any) => u.status === 'Active').length;
+    const loadData = async () => {
+      try {
+        // 1. Fetch Unified Users for Active Count & Feed
+        const unifiedUsers = await userService.getAll();
+        const activeU = unifiedUsers.filter((u: any) => u.status === 'Active').length;
 
-    // 2. Fetch Students for Attendance & Payments
-    const storedStudents = localStorage.getItem('school_students');
-    const allStudents = storedStudents ? JSON.parse(storedStudents) : [];
+        // 2. Fetch Students for Attendance & Payments
+        const allStudents = await studentService.getAll();
 
-    // Calculate pending payments (feeStatus is pending or partial)
-    const pendingP = allStudents.filter((s: any) => s.feeStatus !== 'paid').length;
+        // Calculate pending payments (feeStatus is pending or partial)
+        const pendingP = allStudents.filter((s: any) => s.feeStatus !== 'paid').length;
 
-    const today = new Date().toISOString().split('T')[0];
-    // Average attendance simulation for students present
-    const totalS = allStudents.length;
-    const avgAttendance = allStudents.reduce((acc: number, s: any) => acc + (s.attendance || 0), 0) / (totalS || 1);
+        const today = new Date().toISOString().split('T')[0];
+        // Average attendance simulation for students present
+        const totalS = allStudents.length;
+        const avgAttendance = allStudents.reduce((acc: number, s: any) => acc + (s.attendance || 0), 0) / (totalS || 1);
 
-    // Try to get today's actual present count from school_attendance_records
-    const attRecordsRaw = localStorage.getItem('school_attendance_records');
-    let presentToday = 0;
-    if (attRecordsRaw) {
-      const attRecords = JSON.parse(attRecordsRaw);
-      presentToday = attRecords.filter((r: any) => r.date === today && r.status === 'present').length;
-    } else {
-      presentToday = Math.round((totalS * avgAttendance) / 100);
-    }
+        // Try to get today's actual present count from attendance records
+        const attRecords = await attendanceService.getAll();
+        let presentToday = 0;
+        if (attRecords.length > 0) {
+          presentToday = attRecords.filter((r: any) => r.date === today && r.status === 'present').length;
+        } else {
+          presentToday = Math.round((totalS * avgAttendance) / 100);
+        }
 
-    // 3. Fetch Academic Structure for Classes
-    const storedYears = localStorage.getItem('school_academic_years');
-    const academicYears = storedYears ? JSON.parse(storedYears) : [];
-    const activeYearId = academicYears.find((y: any) => y.status === 'active')?.id || '2024-2025';
+        // 3. Fetch Academic Structure for Classes
+        const academicYears = DEFAULT_YEARS;
+        const activeYearId = academicYears.find((y: any) => y.status === 'active')?.id || '2024-2025';
 
-    const storedClasses = localStorage.getItem(`school_class_sections_${activeYearId}`);
-    const activeClasses = storedClasses ? JSON.parse(storedClasses) : [];
+        const activeClasses = await classService.getAll();
 
-    // Lessons in progress simulation (based on current hour/day)
-    const now = new Date();
-    const isSchoolHours = now.getHours() >= 8 && now.getHours() <= 16;
-    const currentLessons = isSchoolHours ? Math.ceil(activeClasses.length * 0.7) : 0;
+        // Lessons in progress simulation (based on current hour/day)
+        const now = new Date();
+        const isSchoolHours = now.getHours() >= 8 && now.getHours() <= 16;
+        const currentLessons = isSchoolHours ? Math.ceil(activeClasses.length * 0.7) : 0;
 
-    setStats({
-      activeUsers: activeU,
-      studentsPresent: presentToday,
-      totalStudentsCount: totalS,
-      lessonsInProgress: currentLessons,
-      pendingPayments: pendingP,
-    });
+        setStats({
+          activeUsers: activeU,
+          studentsPresent: presentToday,
+          totalStudentsCount: totalS,
+          lessonsInProgress: currentLessons,
+          pendingPayments: pendingP,
+        });
 
-    // 4. Generate Dynamic Activity Feed
-    const feed = [
-      ...unifiedUsers.slice(-2).map((u: any) => ({
-        id: `u-${u.id}`,
-        type: 'user',
-        user: u.name,
-        action: `assigned as ${u.role}`,
-        time: u.lastActive || 'Recently',
-        icon: Users,
-        color: 'purple'
-      })),
-      ...allStudents.slice(-3).map((s: any) => ({
-        id: `s-${s.id}`,
-        type: 'admission',
-        user: 'Admin',
-        action: `admitted new student ${s.name} to Class ${s.class}`,
-        time: 'Today',
-        icon: GraduationCap,
-        color: 'yellow'
-      }))
-    ];
-    setActivities(feed.length > 0 ? feed : [
-      { id: 'default', type: 'alert', user: 'System', action: 'Monitoring system initialized', time: 'Just now', icon: Activity, color: 'blue' }
-    ]);
+        // 4. Generate Dynamic Activity Feed
+        const feed = [
+          ...unifiedUsers.slice(-2).map((u: any) => ({
+            id: `u-${u.id}`,
+            type: 'user',
+            user: u.name,
+            action: `assigned as ${u.role}`,
+            time: u.lastActive || 'Recently',
+            icon: Users,
+            color: 'purple'
+          })),
+          ...allStudents.slice(-3).map((s: any) => ({
+            id: `s-${s.id}`,
+            type: 'admission',
+            user: 'Admin',
+            action: `admitted new student ${s.name} to Class ${s.class}`,
+            time: 'Today',
+            icon: GraduationCap,
+            color: 'yellow'
+          }))
+        ];
+        setActivities(feed.length > 0 ? feed : [
+          { id: 'default', type: 'alert', user: 'System', action: 'Monitoring system initialized', time: 'Just now', icon: Activity, color: 'blue' }
+        ]);
 
-    // 5. Get timetable for current period lookup
-    const timetableRaw = localStorage.getItem('school_timetable');
-    const allTimetableSlots: any[] = timetableRaw ? JSON.parse(timetableRaw) : [];
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const currentDay = dayNames[now.getDay()];
-    const currentHH = now.getHours();
-    const currentMM = now.getMinutes();
-    const currentMinutes = currentHH * 60 + currentMM;
+        // 5. Get timetable for current period lookup
+        const allTimetableSlots: any[] = await timetableService.getAll();
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const currentDay = dayNames[now.getDay()];
+        const currentHH = now.getHours();
+        const currentMM = now.getMinutes();
+        const currentMinutes = currentHH * 60 + currentMM;
 
-    const getLessonForClass = (className: string, section: string): string => {
-      if (!isSchoolHours) return 'N/A';
-      const slot = allTimetableSlots.find((s: any) => {
-        if (s.class !== className || s.section !== section || s.day !== currentDay) return false;
-        const [sh, sm] = (s.startTime || '').split(':').map(Number);
-        const [eh, em] = (s.endTime || '').split(':').map(Number);
-        const slotStart = sh * 60 + sm;
-        const slotEnd = eh * 60 + em;
-        return currentMinutes >= slotStart && currentMinutes < slotEnd;
-      });
-      return slot?.subject || 'Free Period';
-    };
+        const getLessonForClass = (className: string, section: string): string => {
+          if (!isSchoolHours) return 'N/A';
+          const slot = allTimetableSlots.find((s: any) => {
+            if (s.class !== className || s.section !== section || s.day !== currentDay) return false;
+            const [sh, sm] = (s.startTime || '').split(':').map(Number);
+            const [eh, em] = (s.endTime || '').split(':').map(Number);
+            const slotStart = sh * 60 + sm;
+            const slotEnd = eh * 60 + em;
+            return currentMinutes >= slotStart && currentMinutes < slotEnd;
+          });
+          return slot?.subject || 'Free Period';
+        };
 
-    const getAttendanceForClass = (className: string, section: string): string => {
-      if (!attRecordsRaw) {
-        const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
-        const cap = cls?.students || 0;
-        return `${Math.round(cap * (avgAttendance / 100))}/${cap}`;
+        const getAttendanceForClass = (className: string, section: string): string => {
+          if (attRecords.length === 0) {
+            const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
+            const cap = cls?.students || 0;
+            return `${Math.round(cap * (avgAttendance / 100))}/${cap}`;
+          }
+          const today2 = new Date().toISOString().split('T')[0];
+          const todayClassRecords = attRecords.filter((r: any) => r.date === today2 && r.class === className && r.section === section);
+          const presentCount = todayClassRecords.filter((r: any) => r.status === 'present').length;
+          const totalCount = todayClassRecords.length;
+          const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
+          const capacity = totalCount > 0 ? totalCount : (cls?.students || 0);
+          return `${presentCount}/${capacity}`;
+        };
+
+        // 6. Generate Class Activity
+        const classData = activeClasses.map((cls: any) => {
+          const currentLesson = getLessonForClass(cls.className, cls.section);
+          const hasLesson = currentLesson !== 'N/A' && currentLesson !== 'Free Period';
+          return {
+            class: `${cls.className} ${cls.section}`,
+            teacher: cls.classTeacher || 'Not Assigned',
+            status: isSchoolHours ? (hasLesson ? 'In Progress' : 'Free Period') : 'School Closed',
+            attendance: getAttendanceForClass(cls.className, cls.section),
+            lesson: currentLesson,
+          };
+        });
+        setClasses(classData);
+      } catch (err) {
+        console.error('MonitoringView load error:', err);
       }
-      const attRecords = JSON.parse(attRecordsRaw);
-      const today2 = new Date().toISOString().split('T')[0];
-      const todayClassRecords = attRecords.filter((r: any) => r.date === today2 && r.class === className && r.section === section);
-      const presentCount = todayClassRecords.filter((r: any) => r.status === 'present').length;
-      const totalCount = todayClassRecords.length;
-      const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
-      const capacity = totalCount > 0 ? totalCount : (cls?.students || 0);
-      return `${presentCount}/${capacity}`;
     };
-
-    // 5. Generate Class Activity
-    const classData = activeClasses.map((cls: any) => {
-      const currentLesson = getLessonForClass(cls.className, cls.section);
-      const hasLesson = currentLesson !== 'N/A' && currentLesson !== 'Free Period';
-      return {
-        class: `${cls.className} ${cls.section}`,
-        teacher: cls.classTeacher || 'Not Assigned',
-        status: isSchoolHours ? (hasLesson ? 'In Progress' : 'Free Period') : 'School Closed',
-        attendance: getAttendanceForClass(cls.className, cls.section),
-        lesson: currentLesson,
-      };
-    });
-    setClasses(classData);
-
+    loadData();
   }, []);
 
   return (

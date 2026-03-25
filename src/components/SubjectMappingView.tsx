@@ -1,6 +1,7 @@
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { SubjectMappingForm, ClassData, SubjectMapping } from './SubjectMappingForm';
+import { subjectService } from '../utils/centralDataService';
 
 export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [view, setView] = useState<'list' | 'form'>('list');
@@ -8,23 +9,24 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
 
   const [classDataList, setClassDataList] = useState<ClassData[]>([]);
 
-  // Load mappings from localStorage or initialize empty
+  // Load mappings from Firestore
   useEffect(() => {
-    const storedMappings = localStorage.getItem('school_subject_mappings');
-    if (storedMappings) {
-      setClassDataList(JSON.parse(storedMappings));
-    }
+    const loadMappings = async () => {
+      try {
+        const subjects = await subjectService.getAll();
+        // subjectService returns Subject[], map to ClassData[] if possible
+        // For now, initialize empty until subject mapping service is available
+        if (subjects.length === 0) {
+          setClassDataList([]);
+        }
+      } catch (err) {
+        console.error('Failed to load subject mappings:', err);
+      }
+    };
+    loadMappings();
   }, []);
 
-  // Save to localStorage whenever classDataList changes
-  useEffect(() => {
-    // Only save if we actually have data, or if we legitimately deleted the last one.
-    // A better approach is to always sync, but wait until initial load completes.
-    // Since we handle initial load in a separate effect, standard reactive sync is fine.
-    if (classDataList.length >= 0) {
-      localStorage.setItem('school_subject_mappings', JSON.stringify(classDataList));
-    }
-  }, [classDataList]);
+  // TODO: Persist classDataList changes to Firestore when a subject mapping service is available
 
   const handleSaveMapping = (data: { class: string; section: string; subject: string; teacher: string; periods: number }, originalSubject?: string) => {
     const className = `${data.class} ${data.section}`;

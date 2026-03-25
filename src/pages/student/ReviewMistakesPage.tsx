@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useParams, useNavigate, useLocation } from "react-router";
 import {
@@ -38,8 +39,44 @@ export function ReviewMistakesPage() {
   const location = useLocation();
   const { topicId } = useParams<{ topicId: string }>();
 
-  // Get quiz data from our centralized service
-  const quizData = HomeworkService.getDetailedResults(Number(topicId)) as QuizData | undefined;
+  const [quizData, setQuizData] = useState<QuizData | undefined>(undefined);
+  const [topic, setTopic] = useState<any>(undefined);
+  const [wrongAnswers, setWrongAnswers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const [results, allTopics] = await Promise.all([
+        HomeworkService.getDetailedResults(Number(topicId)),
+        HomeworkService.getAll(),
+      ]);
+      const qd = results as QuizData | undefined;
+      setQuizData(qd);
+      setTopic(allTopics.find((t) => t.id === Number(topicId)));
+
+      if (qd) {
+        const savedAnswers = qd.answers || [];
+        const savedQuestions = qd.questions || [];
+        const wrong = savedAnswers
+          .filter(ans => !ans.isCorrect)
+          .map(ans => ({
+            question: savedQuestions.find(q => q.id === ans.questionId),
+            savedAnswer: ans,
+          }))
+          .filter(item => item.question !== undefined);
+        setWrongAnswers(wrong);
+      }
+      setLoading(false);
+    })();
+  }, [topicId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF] flex items-center justify-center p-4">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
   
   if (!quizData) {
     return (
@@ -60,28 +97,6 @@ export function ReviewMistakesPage() {
       </div>
     );
   }
-
-  // Find the target topic
-  const allHomeworkTopics = HomeworkService.getAll();
-  const topic = allHomeworkTopics.find((t) => t.id === Number(topicId));
-  
-  // Get the actual question objects
-  const allObjectiveQuestions = ObjectiveQuestions.getAll();
-  const savedAnswers = quizData.answers || [];
-  const savedQuestions = quizData.questions || [];
-  
-  const wrongAnswers = savedAnswers
-    .filter(ans => !ans.isCorrect)
-    .map(ans => {
-      // Look in saved questions first, then fallback to global questions
-      const questionFound = savedQuestions.find(q => q.id === ans.questionId) || 
-                           allObjectiveQuestions.find(q => q.id === ans.questionId);
-      return {
-        question: questionFound,
-        savedAnswer: ans
-      };
-    })
-    .filter(item => item.question !== undefined);
 
   const wrongCount = wrongAnswers.length;
   const correctCount = quizData.correctAnswers;

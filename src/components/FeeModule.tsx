@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { notificationService } from '../utils/centralDataService';
+import { notificationService, feeService, studentService } from '../utils/centralDataService';
 import { getUniqueClasses } from '../utils/classUtils';
 
 // --- Feature 3: CSV Export Utility ---
@@ -81,32 +81,7 @@ export function FeeModule() {
   const [isEditMode, setIsEditMode] = useState(false);
 
   // Fee Structure State
-  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([
-    {
-      id: '1',
-      class: '1',
-      admissionFee: 5000,
-      annualFee: 50000,
-      monthlyFee: 4500,
-      quarterlyFee: 13000,
-      transportFee: 2000,
-      daycareFee: 3000,
-      activityFee: 1500,
-      customCategories: [],
-    },
-    {
-      id: '2',
-      class: '6',
-      admissionFee: 5000,
-      annualFee: 60000,
-      monthlyFee: 5500,
-      quarterlyFee: 16000,
-      transportFee: 2000,
-      daycareFee: 3000,
-      activityFee: 2000,
-      customCategories: [],
-    },
-  ]);
+  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
 
   const [structureForm, setStructureForm] = useState({
     class: '',
@@ -127,38 +102,7 @@ export function FeeModule() {
   });
 
   // Fee Collection State
-  const [payments, setPayments] = useState<Payment[]>([
-    {
-      id: '1',
-      studentName: 'Rahul Kumar',
-      admissionNo: 'ADM2024001',
-      class: '6',
-      amount: 16000,
-      paymentMode: 'upi',
-      paymentDate: '2024-01-15',
-      receiptNo: 'RCP001',
-      feeType: 'Quarterly Fee',
-      discount: 0,
-      lateFee: 0,
-      totalAmount: 16000,
-      status: 'paid',
-    },
-    {
-      id: '2',
-      studentName: 'Priya Sharma',
-      admissionNo: 'ADM2024002',
-      class: '3',
-      amount: 13000,
-      paymentMode: 'cash',
-      paymentDate: '2024-01-20',
-      receiptNo: 'RCP002',
-      feeType: 'Quarterly Fee',
-      discount: 500,
-      lateFee: 0,
-      totalAmount: 12500,
-      status: 'paid',
-    },
-  ]);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
   const [collectionForm, setCollectionForm] = useState({
     studentName: '',
@@ -176,62 +120,52 @@ export function FeeModule() {
   const [selectedClass, setSelectedClass] = useState('all');
 
   // Student Ledgers
-  const [studentLedgers, setStudentLedgers] = useState<StudentLedger[]>([
-    {
-      studentName: 'Rahul Kumar',
-      admissionNo: 'ADM2024001',
-      class: '6',
-      totalFee: 60000,
-      paidAmount: 16000,
-      dueAmount: 44000,
-      lastPaymentDate: '2024-01-15',
-      parentPhone: '+91 9876543210',
-      parentId: '5',
-    },
-    {
-      studentName: 'Priya Sharma',
-      admissionNo: 'ADM2024002',
-      class: '3',
-      totalFee: 50000,
-      paidAmount: 12500,
-      dueAmount: 37500,
-      lastPaymentDate: '2024-01-20',
-      parentPhone: '+91 9876543211',
-    },
-    {
-      studentName: 'Arjun Singh',
-      admissionNo: 'ADM2024003',
-      class: '8',
-      totalFee: 65000,
-      paidAmount: 0,
-      dueAmount: 65000,
-      lastPaymentDate: '-',
-      parentPhone: '+91 9876543212',
-    },
-  ]);
+  const [studentLedgers, setStudentLedgers] = useState<StudentLedger[]>([]);
 
-  // Load data from localStorage on mount
+  // Load data from Firestore on mount
   useEffect(() => {
-    const savedStructures = localStorage.getItem('fee_structures_demo');
-    if (savedStructures) {
-      setFeeStructures(JSON.parse(savedStructures));
-    }
+    const loadData = async () => {
+      try {
+        const allFees = await feeService.getAll();
 
-    const savedPayments = localStorage.getItem('fee_payments_demo');
-    if (savedPayments) {
-      setPayments(JSON.parse(savedPayments));
-    }
+        // Separate structures from payments based on data shape
+        const structures = allFees.filter((f: any) => f.type === 'structure');
+        const paymentRecords = allFees.filter((f: any) => f.type === 'payment');
 
-    const savedLedgers = localStorage.getItem('student_ledgers_demo');
-    if (savedLedgers) {
-      setStudentLedgers(JSON.parse(savedLedgers));
-    }
+        if (structures.length > 0) setFeeStructures(structures);
+        if (paymentRecords.length > 0) setPayments(paymentRecords);
+
+        // Derive ledgers from students + payment data
+        const students = await studentService.getAll();
+        if (students.length > 0) {
+          const ledgers: StudentLedger[] = students.map((s: any) => {
+            const studentPayments = paymentRecords.filter(
+              (p: any) => p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase()
+            );
+            const paidAmount = studentPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || 0), 0);
+            const totalFee = s.totalFee || 0;
+            return {
+              studentName: s.name || s.studentName || '',
+              admissionNo: s.admissionNo || '',
+              class: s.class || '',
+              totalFee,
+              paidAmount,
+              dueAmount: Math.max(0, totalFee - paidAmount),
+              lastPaymentDate: studentPayments.length > 0
+                ? studentPayments[studentPayments.length - 1].paymentDate
+                : '-',
+              parentPhone: s.parentPhone || '',
+              parentId: s.parentId,
+            };
+          });
+          setStudentLedgers(ledgers);
+        }
+      } catch (err) {
+        console.error('Failed to load fee data:', err);
+      }
+    };
+    loadData();
   }, []);
-
-  // Helper to persist data
-  const persistData = (key: string, data: any) => {
-    localStorage.setItem(key, JSON.stringify(data));
-  };
 
   // Generate Receipt Number
   const generateReceiptNo = () => {
@@ -335,9 +269,9 @@ export function FeeModule() {
     window.location.href = `tel:${phone}`;
   };
 
-  const handleSendNotification = (student: StudentLedger) => {
+  const handleSendNotification = async (student: StudentLedger) => {
     if (student.parentId) {
-      notificationService.create({
+      await notificationService.create({
         userId: student.parentId,
         type: 'fee',
         title: 'Fee Payment Reminder',
@@ -346,13 +280,12 @@ export function FeeModule() {
       });
       alert(`Notification sent successfully to ${student.studentName}'s parent!`);
     } else {
-      // For demo students without real parent IDs, just show the alert
       alert(`Demo Alert: Notification message sent to ${student.studentName}'s parent.`);
     }
   };
 
   // Handle Fee Structure Submit
-  const handleStructureSubmit = (e: React.FormEvent) => {
+  const handleStructureSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (isEditMode && editingStructure) {
@@ -369,11 +302,11 @@ export function FeeModule() {
         activityFee: parseFloat(structureForm.activityFee) || 0,
       };
 
+      await feeService.create({ ...updatedStructure, type: 'structure' });
       const updatedStructures = feeStructures.map(s =>
         s.id === editingStructure.id ? updatedStructure : s
       );
       setFeeStructures(updatedStructures);
-      persistData('fee_structures_demo', updatedStructures);
 
       alert(`Fee structure for Class ${structureForm.class} has been updated successfully!`);
       setIsEditMode(false);
@@ -392,9 +325,9 @@ export function FeeModule() {
         activityFee: parseFloat(structureForm.activityFee) || 0,
         customCategories: [],
       };
+      await feeService.create({ ...newStructure, type: 'structure' });
       const updatedStructures = [...feeStructures, newStructure];
       setFeeStructures(updatedStructures);
-      persistData('fee_structures_demo', updatedStructures);
       alert(`Fee structure for Class ${structureForm.class} has been added successfully!`);
     }
 
@@ -433,13 +366,12 @@ export function FeeModule() {
     if (confirm(`Are you sure you want to delete fee structure for Class ${structure.class}?`)) {
       const updatedStructures = feeStructures.filter(s => s.id !== structure.id);
       setFeeStructures(updatedStructures);
-      persistData('fee_structures_demo', updatedStructures);
       alert(`Fee structure for Class ${structure.class} has been deleted successfully!`);
     }
   };
 
   // Handle Payment Collection Submit
-  const handleCollectionSubmit = (e: React.FormEvent) => {
+  const handleCollectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const receiptNo = generateReceiptNo();
     const totalAmount = calculateTotalAmount();
@@ -460,9 +392,9 @@ export function FeeModule() {
       status: 'paid',
     };
 
+    await feeService.recordPayment({ ...newPayment, type: 'payment' });
     const newPayments = [newPayment, ...payments];
     setPayments(newPayments);
-    persistData('fee_payments_demo', newPayments);
 
     // Update Student Ledger dynamically
     const updatedLedgers = studentLedgers.map(s => {
@@ -479,10 +411,7 @@ export function FeeModule() {
       return s;
     });
 
-    // If student doesn't exist in ledger, we could add them, but for now we'll just update existing ones
-    // in a real app, ledgers would be created upon admission
     setStudentLedgers(updatedLedgers);
-    persistData('student_ledgers_demo', updatedLedgers);
 
     // Generate PDF and show success
     alert(`Payment Successful!\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${totalAmount.toLocaleString()}\n\nReceipt PDF generated automatically.`);

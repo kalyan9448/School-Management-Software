@@ -37,9 +37,6 @@ import {
   notificationService,
   Notification,
 } from '../utils/centralDataService';
-import {
-  studentNotesStore,
-} from '../utils/dataStore';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
 import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
@@ -124,12 +121,18 @@ export function TeacherDashboardNew() {
   const [insightTriggers, setInsightTriggers] = useState<InsightTrigger[]>([]);
   const [classDelta, setClassDelta] = useState<ClassDelta | null>(null);
 
+  // Dashboard stats state
+  const [dashboardPresentCount, setDashboardPresentCount] = useState(0);
+  const [dashboardWeekLessons, setDashboardWeekLessons] = useState<any[]>([]);
+  const [lessonLogs, setLessonLogs] = useState<any[]>([]);
+  const [lessonsLoading, setLessonsLoading] = useState(false);
+
   useEffect(() => {
     if (user?.email) {
-      const loadNotifications = () => {
-        const userNotifications = notificationService.getByUser(user.email);
+      const loadNotifications = async () => {
+        const userNotifications = await notificationService.getByUser(user.email);
         setNotifications(userNotifications);
-        setUnreadCount(notificationService.getUnreadCount(user.email));
+        setUnreadCount(await notificationService.getUnreadCount(user.email));
       };
 
       loadNotifications();
@@ -140,97 +143,141 @@ export function TeacherDashboardNew() {
     }
   }, [user]);
 
-  const handleMarkAsRead = (id: string) => {
-    notificationService.markAsRead(id);
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLessonLogs = async () => {
+      if (!user?.email) {
+        if (isMounted) {
+          setLessonLogs([]);
+          setLessonsLoading(false);
+        }
+        return;
+      }
+
+      setLessonsLoading(true);
+      try {
+        const teacherLessons = await lessonService.getByTeacher(user.email);
+        if (isMounted) {
+          setLessonLogs(teacherLessons);
+        }
+      } catch (error) {
+        console.error('Error loading lesson logs:', error);
+        if (isMounted) {
+          setLessonLogs([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLessonsLoading(false);
+        }
+      }
+    };
+
+    loadLessonLogs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.email]);
+
+  const handleMarkAsRead = async (id: string) => {
+    await notificationService.markAsRead(id);
     if (user?.email) {
-      setNotifications(notificationService.getByUser(user.email));
-      setUnreadCount(notificationService.getUnreadCount(user.email));
+      setNotifications(await notificationService.getByUser(user.email));
+      setUnreadCount(await notificationService.getUnreadCount(user.email));
     }
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
     if (user?.email) {
-      notificationService.markAllAsRead(user.email);
-      setNotifications(notificationService.getByUser(user.email));
-      setUnreadCount(notificationService.getUnreadCount(user.email));
+      await notificationService.markAllAsRead(user.email);
+      setNotifications(await notificationService.getByUser(user.email));
+      setUnreadCount(await notificationService.getUnreadCount(user.email));
     }
   };
 
   useEffect(() => {
-    if (user?.email) {
-      let teacher = teacherService.getByEmail(user.email);
-      if (!teacher) {
-        // Fallback for demo teacher if not found by email but is a teacher role
-        if (user.role === 'teacher') {
-          const allTeachers = teacherService.getAll();
-          if (allTeachers.length > 0) teacher = allTeachers[0];
+    async function loadData() {
+      try {
+        if (!user?.email) return;
+
+        let teacher = await teacherService.getByEmail(user.email);
+        if (!teacher) {
+          // Fallback for demo teacher if not found by email but is a teacher role
+          if (user.role === 'teacher') {
+            const allTeachers = await teacherService.getAll();
+            if (allTeachers.length > 0) teacher = allTeachers[0];
+          }
         }
-      }
 
-      if (teacher) {
-        // Populate myClasses dynamically
-        const classesInfo: ClassInfo[] = teacher.classes.map((c: any, i: number) => {
-          const studentsInClass = studentService.getByClass(c.class, c.section);
-          return {
-            id: `${c.class}-${c.section}-${c.subject}-${i}`,
-            class: c.class,
-            section: c.section,
-            subject: c.subject,
-            students: studentsInClass.length,
-            time: '09:00 AM - 10:00 AM', // Placeholder times as we don't have timetable yet
-          };
-        });
-        setMyClasses(classesInfo);
-
-        // Populate todaySchedule dynamically based on real timetable data
-        const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-        const teacherSlots = timetableService.getByTeacher(user.email);
-        const todaySlots = teacherSlots.filter(s => s.day === today);
-
-        if (todaySlots.length > 0) {
-          const schedules = todaySlots.map(slot => ({
-            time: slot.startTime,
-            class: `${slot.class}-${slot.section}`,
-            subject: slot.subject,
-            status: 'upcoming'
+        if (teacher) {
+          // Populate myClasses dynamically
+          const classesInfo: ClassInfo[] = await Promise.all(teacher.classes.map(async (c: any, i: number) => {
+            const studentsInClass = await studentService.getByClass(c.class, c.section);
+            return {
+              id: `${c.class}-${c.section}-${c.subject}-${i}`,
+              class: c.class,
+              section: c.section,
+              subject: c.subject,
+              students: studentsInClass.length,
+              time: '09:00 AM - 10:00 AM', // Placeholder times as we don't have timetable yet
+            };
           }));
-          setTodaySchedule(schedules);
-        } else {
-          // Fallback or empty state if no slots for today
-          setTodaySchedule([]);
+          setMyClasses(classesInfo);
+
+          // Populate todaySchedule dynamically based on real timetable data
+          const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+          const teacherSlots = await timetableService.getByTeacher(user.email);
+          const todaySlots = teacherSlots.filter(s => s.day === today);
+
+          if (todaySlots.length > 0) {
+            const schedules = todaySlots.map(slot => ({
+              time: slot.startTime,
+              class: `${slot.class}-${slot.section}`,
+              subject: slot.subject,
+              status: 'upcoming'
+            }));
+            setTodaySchedule(schedules);
+          } else {
+            // Fallback or empty state if no slots for today
+            setTodaySchedule([]);
+          }
+
+          // Populate allStudents dynamically
+          let allStds: LocalStudent[] = [];
+          // Use a set to avoid duplicate students if they take multiple subjects from same teacher
+          const studentIds = new Set();
+
+          for (const c of teacher.classes) {
+            const stds = await studentService.getByClass(c.class, c.section);
+            stds.forEach((s: any) => {
+              if (!studentIds.has(s.id)) {
+                studentIds.add(s.id);
+                allStds.push({
+                  id: s.id,
+                  name: s.name,
+                  rollNo: s.rollNo,
+                  attendance: null,
+                  class: s.class,
+                  section: s.section
+                });
+              }
+            });
+          }
+          setAllStudents(allStds);
         }
 
-        // Populate allStudents dynamically
-        let allStds: LocalStudent[] = [];
-        // Use a set to avoid duplicate students if they take multiple subjects from same teacher
-        const studentIds = new Set();
-
-        teacher.classes.forEach((c: any) => {
-          const stds = studentService.getByClass(c.class, c.section);
-          stds.forEach((s: any) => {
-            if (!studentIds.has(s.id)) {
-              studentIds.add(s.id);
-              allStds.push({
-                id: s.id,
-                name: s.name,
-                rollNo: s.rollNo,
-                attendance: null,
-                class: s.class,
-                section: s.section
-              });
-            }
-          });
-        });
-        setAllStudents(allStds);
-      }
-      
-      // Load SaaS Performance Data
-      setTrends(performanceAnalyticsService.getMonthlyTrends(user.email));
-      setInsightTriggers(performanceAnalyticsService.getInsightTriggers(user.email));
-      if (selectedClass) {
-        setClassDelta(performanceAnalyticsService.calculateClassDelta(selectedClass.id));
+        // Load SaaS Performance Data
+        setTrends(await performanceAnalyticsService.getMonthlyTrends(user.email));
+        setInsightTriggers(await performanceAnalyticsService.getInsightTriggers(user.email));
+        if (selectedClass) {
+          setClassDelta(await performanceAnalyticsService.calculateClassDelta(selectedClass.id));
+        }
+      } catch (err) {
+        console.error('Error loading teacher data:', err);
       }
     }
+    loadData();
   }, [user, selectedClass]);
 
   const [lessonForm, setLessonForm] = useState({
@@ -247,23 +294,30 @@ export function TeacherDashboardNew() {
   const [showLessonForm, setShowLessonForm] = useState(false);
 
   useEffect(() => {
-    if (attendanceClassFilter && attendanceSectionFilter && attendanceDate) {
-      // ... existing attendance logic ...
-      const classStudents = allStudents.filter(
-        student =>
-          student.class === attendanceClassFilter &&
-          student.section === attendanceSectionFilter
-      );
-      const previouslyMarked = attendanceService.getByDate(attendanceDate);
-      const studentsWithAttendance: LocalStudent[] = classStudents.map(student => {
-        const existingRecord = previouslyMarked.find((r: any) => r.studentId === student.id);
-        return {
-          ...student,
-          attendance: (existingRecord ? existingRecord.status : null) as any,
-        };
-      });
-      setStudents(studentsWithAttendance);
+    async function loadAttendance() {
+      try {
+        if (attendanceClassFilter && attendanceSectionFilter && attendanceDate) {
+          // ... existing attendance logic ...
+          const classStudents = allStudents.filter(
+            student =>
+              student.class === attendanceClassFilter &&
+              student.section === attendanceSectionFilter
+          );
+          const previouslyMarked = await attendanceService.getByDate(attendanceDate);
+          const studentsWithAttendance: LocalStudent[] = classStudents.map(student => {
+            const existingRecord = previouslyMarked.find((r: any) => r.studentId === student.id);
+            return {
+              ...student,
+              attendance: (existingRecord ? existingRecord.status : null) as any,
+            };
+          });
+          setStudents(studentsWithAttendance);
+        }
+      } catch (err) {
+        console.error('Error loading attendance:', err);
+      }
     }
+    loadAttendance();
   }, [attendanceDate, attendanceClassFilter, attendanceSectionFilter]);
 
   // Reset objectives when subject changes to avoid cross-subject leftovers
@@ -399,7 +453,7 @@ export function TeacherDashboardNew() {
     );
   };
 
-  const handleSaveAttendance = () => {
+  const handleSaveAttendance = async () => {
     if (!attendanceClassFilter || !attendanceSectionFilter) {
       alert('Please select class and section');
       return;
@@ -431,7 +485,7 @@ export function TeacherDashboardNew() {
     }
 
     // Save to data store
-    attendanceService.markAttendance(attendanceRecords as any);
+    await attendanceService.markAttendance(attendanceRecords as any);
 
     alert(`✅ Attendance saved successfully!\n${attendanceRecords.length} students marked for ${attendanceClassFilter} - Section ${attendanceSectionFilter}`);
 
@@ -453,65 +507,31 @@ export function TeacherDashboardNew() {
     setCurrentView('dashboard');
   };
 
-  const handleSaveLessonLog = () => {
-    if (!selectedClass) return;
+  // Load dashboard stats asynchronously
+  useEffect(() => {
+    async function loadDashboardStats() {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const todayAttendance = await attendanceService.getByDate(today);
+        setDashboardPresentCount(todayAttendance.filter((a) => a.status === 'present').length);
 
-    // Save lesson to data store
-    const lesson = lessonService.create({
-      date: new Date().toISOString().split('T')[0],
-      classId: selectedClass.id,
-      class: selectedClass.class,
-      section: selectedClass.section,
-      subject: lessonForm.topic.split('-')[0] || 'General',
-      topic: lessonForm.topic,
-      objectives: lessonForm.objectives,
-      studentsNeedingAttention: lessonForm.studentsNeedingAttention,
-      notes: lessonForm.notes,
-      teacherId: user?.email || 'teacher',
-      teacherName: user?.name || 'Teacher',
-    });
-
-    alert('Lesson logged successfully!');
-
-    // Reset form
-    setLessonForm({
-      topic: '',
-      objectives: [],
-      studentsNeedingAttention: [],
-      notes: '',
-      teachingDepth: 'Moderate',
-      aiSuggestions: [],
-    });
-
-    setCurrentView('dashboard');
-  };
+        // Get lessons logged TODAY by this teacher
+        const allLessons = await lessonService.getAll();
+        const teacherEmail = user?.email || 'teacher';
+        const todayLessons = allLessons.filter((lesson: any) => {
+          return lesson.date === today && lesson.teacherId === teacherEmail;
+        });
+        setDashboardWeekLessons(todayLessons);
+      } catch (error) {
+        console.error('Error loading dashboard stats:', error);
+      }
+    }
+    loadDashboardStats();
+  }, [user]);
 
   const renderDashboard = () => {
-    // Calculate real stats from dataStore with safe defaults
-    let presentCount = 0;
-    let weekLessons: any[] = [];
-
-
-    try {
-      const todayString = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-      const today = new Date().toISOString().split('T')[0];
-      const todayAttendance = attendanceService.getByDate(today);
-      presentCount = todayAttendance.filter((a) => a.status === 'present').length;
-
-      // Get lessons logged TODAY by this teacher
-      const allLessons = lessonService.getAll();
-      const teacherEmail = user?.email || 'teacher';
-
-      const todayLessons = allLessons.filter((lesson: any) => {
-        return lesson.date === today && lesson.teacherId === teacherEmail;
-      });
-      presentCount = todayAttendance.filter((a) => a.status === 'present').length;
-
-      weekLessons = todayLessons; // Re-purposing weekLessons variable to todayLessons for stats
-    } catch (error) {
-      console.error('Error loading dashboard stats:', error);
-      // Continue with default values
-    }
+    const presentCount = dashboardPresentCount;
+    const weekLessons = dashboardWeekLessons;
 
     return (
       <div className="space-y-6">
@@ -1144,7 +1164,7 @@ export function TeacherDashboardNew() {
   };
 
   // Save lesson function
-  const saveLessonLog = () => {
+  const saveLessonLog = async () => {
     if (!selectedLessonClass) {
       alert('Please select a class');
       return;
@@ -1158,54 +1178,54 @@ export function TeacherDashboardNew() {
       return;
     }
 
-    // Save lesson to data store
-    const lesson = lessonService.create({
-      date: lessonDate,
-      classId: selectedLessonClass.id,
-      class: selectedLessonClass.class,
-      section: selectedLessonClass.section,
-      subject: selectedSubject,
-      topic: lessonForm.topic,
-      objectives: lessonForm.objectives,
-      studentsNeedingAttention: lessonForm.studentsNeedingAttention,
-      notes: lessonForm.notes,
-      teacherId: user?.email || 'teacher',
-      teacherName: user?.name || 'Teacher',
-    });
+    try {
+      const lesson = await lessonService.create({
+        date: lessonDate,
+        classId: selectedLessonClass.id,
+        class: selectedLessonClass.class,
+        section: selectedLessonClass.section,
+        subject: selectedSubject,
+        topic: lessonForm.topic,
+        objectives: lessonForm.objectives,
+        studentsNeedingAttention: lessonForm.studentsNeedingAttention,
+        notes: lessonForm.notes,
+        teacherId: user?.email || 'teacher',
+        teacherName: user?.name || 'Teacher',
+      });
 
-    alert('✅ Lesson logged successfully!');
+      setLessonLogs((prevLessons) => [lesson, ...prevLessons]);
+      alert('✅ Lesson logged successfully!');
 
-    // Reset form
-    setLessonForm({
-      topic: '',
-      objectives: [],
-      studentsNeedingAttention: [],
-      notes: '',
-      teachingDepth: 'Moderate',
-      aiSuggestions: [],
-    });
+      // Reset form
+      setLessonForm({
+        topic: '',
+        objectives: [],
+        studentsNeedingAttention: [],
+        notes: '',
+        teachingDepth: 'Moderate',
+        aiSuggestions: [],
+      });
 
-    setShowLessonForm(false);
+      setShowLessonForm(false);
+    } catch (error) {
+      console.error('Error saving lesson log:', error);
+      alert('Failed to save lesson log. Please try again.');
+    }
   };
 
   const renderLessonLog = () => {
     // If form is not shown, display the list of logged lessons
     if (!showLessonForm) {
-      // Get stored lessons
-      const allLessonsData = lessonService.getAll();
-
-      // Filter lessons by teacher, class and subject
-      const teacherEmail = user?.email || 'teacher';
-      const filteredLessons = allLessonsData.filter((lesson: any) => {
-        const teacherMatch = lesson.teacherId === teacherEmail;
+      // Filter lessons by class and subject
+      const filteredLessons = lessonLogs.filter((lesson: any) => {
         const classMatch = !selectedLessonClass ||
           (lesson.class === selectedLessonClass.class && lesson.section === selectedLessonClass.section);
         const subjectMatch = selectedSubject === 'All Subjects' || lesson.subject === selectedSubject;
-        return teacherMatch && classMatch && subjectMatch;
+        return classMatch && subjectMatch;
       });
 
       // Sort by date (most recent first) and then by creation if date is same (assuming id is temporal or just use stable sort)
-      const sortedLessons = filteredLessons.sort((a, b) => {
+      const sortedLessons = [...filteredLessons].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
         if (dateA !== dateB) return dateB - dateA;
@@ -1282,7 +1302,12 @@ export function TeacherDashboardNew() {
                 : 'Logged Lessons'}
             </h3>
 
-            {sortedLessons.length > 0 ? (
+            {lessonsLoading ? (
+              <div className="text-center py-12 text-gray-500">
+                <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                <p className="text-lg mb-2">Loading lesson logs...</p>
+              </div>
+            ) : sortedLessons.length > 0 ? (
               <div className="space-y-6">
                 {(() => {
                   let lastDate = '';

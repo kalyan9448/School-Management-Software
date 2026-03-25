@@ -18,12 +18,20 @@ export function SubjectDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   
-  // Dynamic data from localStorage
-  const studentData = StudentProfile.get();
-  const allClasses = TodaysClasses.getAll();
+  // Dynamic data from Firestore (async)
+  const [studentData, setStudentData] = useState<any>({ name: "", grade: "" });
+  const [classItem, setClassItem] = useState<any>(undefined);
 
-  // Find the class data by ID
-  const classItem = allClasses.find((c: any) => c.id === Number(id));
+  useEffect(() => {
+    (async () => {
+      const [profile, classes] = await Promise.all([
+        StudentProfile.get(),
+        TodaysClasses.getAll(),
+      ]);
+      setStudentData(profile);
+      setClassItem(classes.find((c: any) => c.id === Number(id)));
+    })();
+  }, [id]);
 
   const [aiTopicDetails, setAiTopicDetails] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);

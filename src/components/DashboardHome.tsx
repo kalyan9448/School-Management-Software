@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
-import { studentService, attendanceService, classService, eventService, enquiryService } from '../utils/centralDataService';
+import { studentService, attendanceService, classService, eventService, enquiryService, schoolService, feeService } from '../utils/centralDataService';
 
 interface DashboardHomeProps {
   onNavigate?: (view: string) => void;
@@ -16,7 +16,6 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     pendingAdmissions: 0,
     feeDues: 0,
     enquiries: 0,
-    // Dynamic computed badges
     newStudentsThisMonth: 0,
     revenueGrowthPct: 0,
     studentsPendingFee: 0,
@@ -31,201 +30,145 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
 
   useEffect(() => {
-    // Fetch School Code
-    const savedSchools = localStorage.getItem('app_schools');
-    if (savedSchools && schoolId) {
-      const schools = JSON.parse(savedSchools);
-      const school = schools.find((s: any) => s.id === schoolId);
-      if (school?.schoolCode) {
-        setSchoolCode(school.schoolCode);
+    const loadDashboard = async () => {
+      try {
+        // Fetch School Code
+        if (schoolId) {
+          const schools = await schoolService.getAll();
+          const school = schools.find((s: any) => s.id === schoolId);
+          if (school?.schoolCode) setSchoolCode(school.schoolCode);
+        }
+
+        // 1. Fetch Students
+        const allStudents = await studentService.getAll();
+        const totalStudentsCount = allStudents.length;
+
+        // 2. Calculate Today's Attendance
+        const today = new Date().toISOString().split('T')[0];
+        const todaysAttendance = await attendanceService.getByDate(today);
+        const presentTodayCount = todaysAttendance.filter((r: any) => r.status === 'present').length;
+
+        // 3. Fetch Enquiries
+        const allEnquiries = await enquiryService.getAll();
+        const pendingAdmissionsCount = allStudents.filter((s: any) => s.status === 'pending').length;
+
+        // 4. Fetch Fees & Revenue
+        const allPayments = await feeService.getAllPayments();
+        const totalRev = allPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || p.amount || 0), 0);
+        const totalDues = allPayments.filter((p: any) => p.status === 'pending' || p.status === 'partial').reduce((sum: number, p: any) => sum + (p.dueAmount || 0), 0);
+
+        // 4a. Compute dynamic badges
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+        const newThisMonth = allStudents.filter((s: any) => {
+          if (!s.admissionDate) return false;
+          const d = new Date(s.admissionDate);
+          return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+        }).length;
+
+        const prevMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+        const prevMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+        const currentMonthRev = allPayments
+          .filter((p: any) => { const d = new Date(p.paymentDate || p.date); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
+          .reduce((s: number, p: any) => s + (p.totalAmount || p.amount || 0), 0);
+        const prevMonthRev = allPayments
+          .filter((p: any) => { const d = new Date(p.paymentDate || p.date); return d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear; })
+          .reduce((s: number, p: any) => s + (p.totalAmount || p.amount || 0), 0);
+        const revGrowthPct = prevMonthRev > 0
+          ? Math.round(((currentMonthRev - prevMonthRev) / prevMonthRev) * 100)
+          : currentMonthRev > 0 ? 100 : 0;
+
+        const pendingFeeCount = allPayments.filter((p: any) => (p.dueAmount || 0) > 0).length;
+
+        // Average attendance
+        const allAttendance = await attendanceService.getAll();
+        let avgAtt = 0;
+        if (allAttendance.length > 0) {
+          const presentCount = allAttendance.filter((r: any) => r.status === 'present').length;
+          avgAtt = Math.round((presentCount / allAttendance.length) * 100);
+        }
+
+        setStats({
+          totalStudents: totalStudentsCount,
+          totalRevenue: totalRev,
+          presentToday: presentTodayCount,
+          pendingAdmissions: pendingAdmissionsCount,
+          feeDues: totalDues,
+          enquiries: allEnquiries.length,
+          newStudentsThisMonth: newThisMonth,
+          revenueGrowthPct: revGrowthPct,
+          studentsPendingFee: pendingFeeCount,
+          avgAttendancePct: avgAtt,
+        });
+
+        // 5. Upcoming Events
+        const upcoming = await eventService.getUpcoming();
+        const events = upcoming.slice(0, 3).map((e: any, idx: number) => ({
+          id: e.id,
+          title: e.title,
+          date: e.date,
+          time: e.startTime || 'All Day',
+          color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
+        }));
+        setUpcomingEvents(events);
+
+        // 6. Recent Activities
+        const activities: any[] = [];
+
+        allStudents.filter((s: any) => s.status === 'pending').slice(-2).forEach((adm: any) => {
+          activities.push({ id: `adm-${adm.id}`, type: 'admission', message: `Admission pending: ${adm.name}`, time: 'Today', timestamp: Date.now() });
+        });
+
+        allPayments.slice(-2).forEach((p: any) => {
+          activities.push({ id: `fee-${p.id}`, type: 'fee', message: `Payment received: ₹${(p.totalAmount || p.amount || 0).toLocaleString()} from ${p.studentName || 'Student'}`, time: p.paymentDate || p.date, timestamp: Date.now() - 1000 });
+        });
+
+        allEnquiries.slice(-2).forEach((e: any) => {
+          activities.push({ id: `enq-${e.id}`, type: 'enquiry', message: `New enquiry for ${e.studentName || e.childName} (Class ${e.classApplied})`, time: e.enquiryDate, timestamp: Date.now() - 2000 });
+        });
+
+        if (todaysAttendance.length > 0) {
+          activities.push({ id: `attendance-today`, type: 'attendance', message: `${todaysAttendance.length} students attendance marked for today`, time: 'Just now', timestamp: Date.now() + 1000 });
+        }
+
+        setRecentActivities(activities.sort((a, b) => b.timestamp - a.timestamp).slice(0, 5));
+
+        // 7. Class Performance
+        const classes = await classService.getAll();
+        const performance: any[] = [];
+        for (const cls of classes) {
+          const classStudents = await studentService.getByClass(cls.className, cls.section);
+          let totalPresence = 0;
+          let totalRecords = 0;
+          for (const s of classStudents) {
+            const attStats = await attendanceService.getAttendanceStats(s.id);
+            totalPresence += attStats.present;
+            totalRecords += attStats.total;
+          }
+          const avgAttendance = totalRecords > 0 ? Math.round((totalPresence / totalRecords) * 100) : 0;
+          performance.push({ class: `${cls.className}-${cls.section}`, attendance: avgAttendance, color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500' });
+        }
+        const sorted = performance.sort((a, b) => b.attendance - a.attendance).slice(0, 4);
+        setClassPerformance(sorted.length > 0 ? sorted : [{ class: 'No classes', attendance: 0, color: 'bg-purple-500' }]);
+
+        // 8. Overdue enquiry follow-up reminders
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        const overdue = allEnquiries.filter((e: any) => {
+          if (!e.followUpDate || e.status === 'converted' || e.status === 'closed') return false;
+          const d = new Date(e.followUpDate);
+          d.setHours(0, 0, 0, 0);
+          return d <= todayDate;
+        });
+        setOverdueEnquiries(overdue);
+        setShowOverdueBanner(overdue.length > 0);
+      } catch (err) {
+        console.error('Dashboard load error:', err);
       }
-    }
-
-    // 1. Fetch Students
-    const allStudents = studentService.getAll();
-    const totalStudentsCount = allStudents.length;
-
-    // 2. Calculate Today's Attendance
-    const today = new Date().toISOString().split('T')[0];
-    const todaysAttendance = attendanceService.getByDate(today);
-    const presentTodayCount = todaysAttendance.filter((r: any) => r.status === 'present').length;
-
-    // 3. Fetch Enquiries & Admissions (still from localStorage for now as they are in separate modules)
-    const storedAdmissions = localStorage.getItem('admissions_demo_data');
-    const allAdmissions = storedAdmissions ? JSON.parse(storedAdmissions) : [];
-    const pendingAdmissionsCount = allAdmissions.filter((a: any) => a.status === 'pending' || a.status === 'enquiry').length;
-
-    const allEnquiries = enquiryService.getAll();
-
-    // 4. Fetch Fees & Revenue
-    const storedPayments = localStorage.getItem('fee_payments_demo');
-    const allPayments = storedPayments ? JSON.parse(storedPayments) : [];
-    const totalRev = allPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || 0), 0);
-
-    const storedLedgers = localStorage.getItem('student_ledgers_demo');
-    const allLedgers = storedLedgers ? JSON.parse(storedLedgers) : [];
-    const totalDues = allLedgers.reduce((sum: number, l: any) => sum + (l.dueAmount || 0), 0);
-
-    // 4a. Compute dynamic badges
-    // New students admitted this calendar month
-    const now = new Date();
-    const thisMonth = now.getMonth();
-    const thisYear = now.getFullYear();
-    const newThisMonth = allAdmissions.filter((a: any) => {
-      if (!a.admissionDate && !a.appliedDate) return false;
-      const d = new Date(a.admissionDate || a.appliedDate);
-      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
-    }).length;
-
-    // Revenue growth %: current month vs previous month
-    const prevMonth = thisMonth === 0 ? 11 : thisMonth - 1;
-    const prevMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
-    const currentMonthRev = allPayments
-      .filter((p: any) => { const d = new Date(p.paymentDate); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
-      .reduce((s: number, p: any) => s + (p.totalAmount || 0), 0);
-    const prevMonthRev = allPayments
-      .filter((p: any) => { const d = new Date(p.paymentDate); return d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear; })
-      .reduce((s: number, p: any) => s + (p.totalAmount || 0), 0);
-    const revGrowthPct = prevMonthRev > 0
-      ? Math.round(((currentMonthRev - prevMonthRev) / prevMonthRev) * 100)
-      : currentMonthRev > 0 ? 100 : 0;
-
-    // Students with pending/partial fee from ledgers
-    const pendingFeeCount = allLedgers.filter((l: any) => (l.dueAmount || 0) > 0).length;
-
-    // Average attendance % from school_attendance_records (written by AttendanceMarking)
-    const attRecordsRaw = localStorage.getItem('school_attendance_records');
-    let avgAtt = 0;
-    if (attRecordsRaw) {
-      const attRecords = JSON.parse(attRecordsRaw);
-      if (attRecords.length > 0) {
-        const presentCount = attRecords.filter((r: any) => r.status === 'present').length;
-        avgAtt = Math.round((presentCount / attRecords.length) * 100);
-      }
-    } else if (totalStudentsCount > 0) {
-      // Fallback: compute from student attendance % field in demo data
-      const allStu = studentService.getAll();
-      const totalStuAtt = allStu.reduce((s: number, st: any) => s + (st.attendance || 0), 0);
-      avgAtt = allStu.length > 0 ? Math.round(totalStuAtt / allStu.length) : 0;
-    }
-
-    // Update Stats
-    setStats({
-      totalStudents: totalStudentsCount,
-      totalRevenue: totalRev,
-      presentToday: presentTodayCount,
-      pendingAdmissions: pendingAdmissionsCount,
-      feeDues: totalDues,
-      enquiries: allEnquiries.length,
-      newStudentsThisMonth: newThisMonth,
-      revenueGrowthPct: revGrowthPct,
-      studentsPendingFee: pendingFeeCount,
-      avgAttendancePct: avgAtt,
-    });
-
-    // 5. Map Upcoming Events from central service
-    const events = eventService.getUpcoming().slice(0, 3).map((e: any, idx: number) => ({
-      id: e.id,
-      title: e.title,
-      date: e.date,
-      time: e.startTime || 'All Day',
-      color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
-    }));
-    setUpcomingEvents(events);
-
-    // 6. Aggregate Recent Activities
-    const activities: any[] = [];
-
-    // Add Admissions
-    allAdmissions.slice(-2).forEach((adm: any) => {
-      activities.push({
-        id: `adm-${adm.id}`,
-        type: 'admission',
-        message: `Admission ${adm.status}: ${adm.name}`,
-        time: 'Today',
-        timestamp: Date.now()
-      });
-    });
-
-    // Add Payments
-    allPayments.slice(-2).forEach((p: any) => {
-      activities.push({
-        id: `fee-${p.id}`,
-        type: 'fee',
-        message: `Payment received: ₹${p.totalAmount.toLocaleString()} from ${p.studentName}`,
-        time: p.paymentDate,
-        timestamp: Date.now() - 1000
-      });
-    });
-
-    // Add Enquiries
-    allEnquiries.slice(-2).forEach((e: any) => {
-      activities.push({
-        id: `enq-${e.id}`,
-        type: 'enquiry',
-        message: `New enquiry for ${e.studentName} (Class ${e.classApplied})`,
-        time: e.enquiryDate,
-        timestamp: Date.now() - 2000
-      });
-    });
-
-    // Add Attendance Activity
-    if (todaysAttendance.length > 0) {
-      activities.push({
-        id: `attendance-today`,
-        type: 'attendance',
-        message: `${todaysAttendance.length} students attendance marked for today`,
-        time: 'Just now',
-        timestamp: Date.now() + 1000
-      });
-    }
-
-    setRecentActivities(activities.sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, 5));
-
-    // 7. Calculate Class Performance based on historical attendance
-    const classes = classService.getAll();
-    const performance = classes.map((cls: any) => {
-      const classStudents = studentService.getByClass(cls.className, cls.section);
-      let totalPresence = 0;
-      let totalRecords = 0;
-
-      classStudents.forEach((s: any) => {
-        const stats = attendanceService.getAttendanceStats(s.id);
-        totalPresence += stats.present;
-        totalRecords += stats.total;
-      });
-
-      const avgAttendance = totalRecords > 0 ? Math.round((totalPresence / totalRecords) * 100) : 0;
-
-      return {
-        class: `${cls.className}-${cls.section}`,
-        attendance: avgAttendance,
-        color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500'
-      };
-    }).sort((a, b) => b.attendance - a.attendance).slice(0, 4);
-
-    if (performance.length > 0) {
-      setClassPerformance(performance);
-    } else {
-      setClassPerformance([
-        { class: 'Class 8-A', attendance: 0, color: 'bg-purple-500' },
-      ]);
-    }
-
-    // 8. Feature 4: Enquiry overdue follow-up reminders
-    const enquiryRaw = localStorage.getItem('enquiries_demo_data');
-    const allEnquiriesLocal: any[] = enquiryRaw ? JSON.parse(enquiryRaw) : [];
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const overdue = allEnquiriesLocal.filter((e: any) => {
-      if (!e.followUpDate || e.status === 'converted' || e.status === 'closed') return false;
-      const d = new Date(e.followUpDate);
-      d.setHours(0, 0, 0, 0);
-      return d <= todayDate;
-    });
-    setOverdueEnquiries(overdue);
-    setShowOverdueBanner(overdue.length > 0);
-  }, []);
+    };
+    loadDashboard();
+  }, [schoolId]);
 
 
   return (

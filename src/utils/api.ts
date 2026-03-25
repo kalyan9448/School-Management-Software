@@ -1,22 +1,8 @@
-// PURE DEMO MODE - No network calls, all API functions return demo data errors
-// This ensures the application works entirely offline with pre-populated demo data
+// DEPRECATED — This file is no longer used. All data operations use Firestore
+// via src/utils/firestoreService.ts and src/utils/centralDataService.ts.
 
-const USE_DEMO_MODE = true;
-
-interface ApiOptions {
-  method?: string;
-  body?: any;
-  headers?: Record<string, string>;
-}
-
-async function apiCall(endpoint: string, options: ApiOptions = {}) {
-  // Always throw error in demo mode to trigger fallback demo data
-  if (USE_DEMO_MODE) {
-    throw new Error('Demo mode enabled - using local data');
-  }
-
-  // This code will never execute in demo mode
-  throw new Error('API calls are disabled in demo mode');
+async function apiCall(_endpoint: string, _options: {} = {}): Promise<never> {
+  throw new Error('API calls are disabled. Use Firestore services instead.');
 }
 
 // ==================== STUDENT API ====================
@@ -84,11 +70,5 @@ export const initAPI = {
 
 // ==================== HEALTH CHECK ====================
 export const healthAPI = {
-  check: async () => {
-    // Always return false in demo mode (no backend available)
-    if (USE_DEMO_MODE) {
-      return false;
-    }
-    return false;
-  },
+  check: async () => false,
 };

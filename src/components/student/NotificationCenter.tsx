@@ -43,28 +43,26 @@ export function NotificationCenter() {
   // Manual refresh with dynamic simulation
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // Simulate real-time fetch plus the reminder engine logic
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const updated = updateReminders();
+    const updated = await updateReminders();
     setNotifications(updated);
     setIsRefreshing(false);
   };
 
   // Mark all as read
-  const markAllAsRead = () => {
-    const updated = NotificationService.markAllRead();
+  const markAllAsRead = async () => {
+    const updated = await NotificationService.markAllRead();
     setNotifications(updated);
   };
 
   // Mark as read
-  const markAsRead = (id: number) => {
-    const updated = NotificationService.markRead(id);
+  const markAsRead = async (id: number) => {
+    const updated = await NotificationService.markRead(id);
     setNotifications(updated);
   };
 
   // Delete notification
-  const deleteNotification = (id: number) => {
-    const updated = NotificationService.delete(id);
+  const deleteNotification = async (id: number) => {
+    const updated = await NotificationService.delete(id);
     setNotifications(updated);
   };
 

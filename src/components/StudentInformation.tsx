@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { demoStudents, Student, getStudents, saveStudents } from './StudentInformationData';
-import { AcademicYear, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { studentService, type Student } from '../utils/centralDataService';
+import { AcademicYear, DEFAULT_YEARS, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 import { AdmissionForm } from './AdmissionForm';
 
 // --- Feature 3: CSV Export Utility ---
@@ -70,100 +70,20 @@ export function StudentInformation({
   const [view, setView] = useState<'list' | 'edit'>('list'); // 'list' for student list/attendance, 'edit' for AdmissionForm
 
   useEffect(() => {
-    const storedYears = localStorage.getItem('school_academic_years');
-    if (storedYears) {
-      const years = JSON.parse(storedYears);
-      setAcademicYears(years);
-      const active = years.find((y: any) => y.status === 'active')?.id || years[0]?.id || '';
-      if (!selectedAcademicYear) setSelectedAcademicYear(active);
-    }
+    const years = DEFAULT_YEARS;
+    setAcademicYears(years);
+    const active = years.find((y) => y.status === 'active')?.id || years[0]?.id || '';
+    if (!selectedAcademicYear) setSelectedAcademicYear(active);
   }, [selectedAcademicYear]);
 
   // Robust student loading function
-  const loadDynamicStudents = useCallback(() => {
+  const loadDynamicStudents = useCallback(async () => {
     try {
-      const baseStudents = getStudents(); // Get from persistent central store
-      const localAdmissions = localStorage.getItem('admissions_demo_data');
-
-      if (localAdmissions) {
-        const admissions = JSON.parse(localAdmissions);
-        // Filter for only admitted or confirmed students
-        const admittedStudents = admissions.filter((a: any) =>
-          a.status === 'admitted' || a.status === 'confirmed'
-        );
-
-        // Map admissions to Student interface
-        const mappedStudents: Student[] = admittedStudents.map((adm: any) => ({
-          id: adm.id,
-          admissionNo: adm.admissionNo || `ADM${new Date().getFullYear()}${String(Math.floor(Math.random() * 9000) + 1000)}`,
-          name: adm.name,
-          class: adm.classAllotted || adm.classApplied || adm.class || '1',
-          section: adm.section || 'A',
-          rollNo: adm.rollNo || '0',
-          dob: adm.dob || '',
-          gender: adm.gender || 'Male',
-          bloodGroup: adm.bloodGroup || 'O+',
-          fatherName: adm.fatherName || '',
-          motherName: adm.motherName || '',
-          guardianName: adm.guardianName || '',
-          fatherOccupation: adm.fatherOccupation || '',
-          motherOccupation: adm.motherOccupation || '',
-          guardianOccupation: adm.guardianOccupation || '',
-          parentName: adm.parentName || adm.fatherName || adm.guardianName || '',
-          phone: adm.phone || '',
-          emergencyContactNumber: adm.emergencyContactNumber || '',
-          email: adm.email || '',
-          address: adm.address || '',
-          admissionDate: adm.admissionDate || '',
-          academicYear: adm.academicYear || '', // From admission form
-          feeStatus: adm.feeStatus || 'pending',
-          totalFee: adm.totalFee || 50000,
-          paidFee: adm.paidFee || 0,
-          dueFee: adm.dueFee || 50000,
-          attendance: adm.attendance || 0,
-          presentDays: adm.presentDays || 0,
-          totalDays: adm.totalDays || 60,
-          classTeacher: adm.classTeacher || '',
-          classTeacherContact: adm.classTeacherContact || '',
-          transportRoute: adm.transportRoute || '',
-          busNumber: adm.busNumber || '',
-          documents: adm.documents || {},
-          academicHistory: adm.academicHistory || [],
-          medicalInfo: adm.medicalInfo || {
-            allergies: [],
-            conditions: [],
-            emergencyContact: adm.parentName || adm.fatherName || '',
-            emergencyPhone: adm.emergencyContactNumber || adm.phone || '',
-          },
-        }));
-
-        // Merging Strategy
-        const mergedStudents = [...baseStudents];
-
-        mappedStudents.forEach(dynamicStudent => {
-          const index = mergedStudents.findIndex(s => s.id === dynamicStudent.id);
-          if (index !== -1) {
-            // Let StudentPromotionTool have precedence over Admissions if history exists
-            if (mergedStudents[index].academicHistory && mergedStudents[index].academicHistory.length > 0) {
-              // Do not overwrite academicYear and class from admission if it was promoted
-              mergedStudents[index] = { ...dynamicStudent, academicYear: mergedStudents[index].academicYear, class: mergedStudents[index].class, section: mergedStudents[index].section, academicHistory: mergedStudents[index].academicHistory };
-            } else {
-              mergedStudents[index] = dynamicStudent;
-            }
-          } else {
-            mergedStudents.push(dynamicStudent);
-          }
-        });
-
-        setStudents(mergedStudents);
-        saveStudents(mergedStudents); // Update central persistent store too!
-        return;
-      }
-
-      setStudents(baseStudents);
+      const allStudents = await studentService.getAll();
+      setStudents(allStudents as Student[]);
     } catch (error) {
-      console.error("Failed to load admissions data", error);
-      setStudents(getStudents());
+      console.error("Failed to load students from Firestore", error);
+      setStudents([]);
     }
   }, []);
 
@@ -449,28 +369,14 @@ export function StudentInformation({
 
   const handleSaveEdit = async (updatedData: any) => {
     try {
-      const localAdmissions = localStorage.getItem('admissions_demo_data');
-      let admissions = localAdmissions ? JSON.parse(localAdmissions) : [];
-
-      const existingIndex = admissions.findIndex((adm: any) => adm.id === editingStudent?.id);
-
-      if (existingIndex !== -1) {
-        // Update existing dynamic record
-        admissions[existingIndex] = { ...admissions[existingIndex], ...updatedData };
-      } else if (editingStudent) {
-        // This was a demo student or new record, add it as a dynamic admitted student
-        admissions.push({
-          ...editingStudent,
-          ...updatedData,
-          status: 'admitted',
-          id: editingStudent.id || `adm_${Date.now()}`
-        });
+      if (editingStudent?.id) {
+        await studentService.update(editingStudent.id, { ...editingStudent, ...updatedData });
+      } else {
+        await studentService.create({ ...editingStudent, ...updatedData, status: 'admitted' });
       }
 
-      localStorage.setItem('admissions_demo_data', JSON.stringify(admissions));
-
-      // Re-load dynamic students from localStorage to sync UI
-      loadDynamicStudents();
+      // Re-load students from Firestore to sync UI
+      await loadDynamicStudents();
 
       alert('Student profile updated successfully!');
       setView('list');

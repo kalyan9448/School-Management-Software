@@ -26,12 +26,17 @@ export function QuizPage() {
   // State to track quiz regeneration
   const [quizKey, setQuizKey] = useState(0);
   
-  // Shuffle and select random questions on mount or retry
-  const [shuffledQuestions] = useState(() => {
-    const allQuestions = QuizService.getAll();
-    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, Math.min(10, shuffled.length)); // Take up to 10 random questions
-  });
+  const [shuffledQuestions, setShuffledQuestions] = useState<any[]>([]);
+  const [questionsLoaded, setQuestionsLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const allQuestions = await QuizService.getAll();
+      const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
+      setShuffledQuestions(shuffled.slice(0, Math.min(10, shuffled.length)));
+      setQuestionsLoaded(true);
+    })();
+  }, [quizKey]);
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>(new Array(shuffledQuestions.length).fill(null));
@@ -44,22 +49,22 @@ export function QuizPage() {
   // Save result when quiz is completed
   useEffect(() => {
     if (quizCompleted) {
-      const score = calculateScore();
-      const percentage = Math.round((score / shuffledQuestions.length) * 100);
-      
-      QuizService.saveResult({
-        score,
-        total: shuffledQuestions.length,
-        percentage,
-        duration: timeElapsed,
-        date: new Date().toISOString(),
-        answers: answers.reduce((acc, ans, idx) => {
-          acc[shuffledQuestions[idx].id] = ans;
-          return acc;
-        }, {} as Record<number, any>)
-      });
-      
-      console.log("Quiz result saved via QuizService");
+      (async () => {
+        const score = calculateScore();
+        const percentage = Math.round((score / shuffledQuestions.length) * 100);
+        
+        await QuizService.saveResult({
+          score,
+          total: shuffledQuestions.length,
+          percentage,
+          duration: timeElapsed,
+          date: new Date().toISOString(),
+          answers: answers.reduce((acc, ans, idx) => {
+            acc[shuffledQuestions[idx].id] = ans;
+            return acc;
+          }, {} as Record<number, any>)
+        });
+      })();
     }
   }, [quizCompleted]);
 

@@ -51,23 +51,29 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
 
   useEffect(() => {
-    const classes = quizService.getTeacherClasses(teacherEmail);
-    setMyClasses(classes);
-    if (!selectedClass && classes.length > 0) {
-      setSelectedClass(classes[0]);
-    }
+    const loadClasses = async () => {
+      const classes = await quizService.getTeacherClasses(teacherEmail);
+      setMyClasses(classes);
+      if (!selectedClass && classes.length > 0) {
+        setSelectedClass(classes[0]);
+      }
+    };
+    loadClasses();
   }, [teacherEmail]);
 
   useEffect(() => {
-    if (selectedClass) {
-      const data = quizService.getClassPerformance(selectedClass.class, selectedClass.section, selectedClass.subject);
-      setPerformanceData(data);
-      
-      const classQuizzes = quizService.getQuizzesByClass(selectedClass.class, selectedClass.section)
-        .filter(q => q.subject === selectedClass.subject);
-      setQuizzes(classQuizzes);
-    }
-    setLeaderboard(quizService.getTeacherLeaderboard());
+    const loadPerformanceData = async () => {
+      if (selectedClass) {
+        const data = await quizService.getClassPerformance(selectedClass.class, selectedClass.section, selectedClass.subject);
+        setPerformanceData(data);
+        
+        const classQuizzes = await quizService.getQuizzesByClass(selectedClass.class, selectedClass.section);
+        setQuizzes(classQuizzes.filter(q => q.subject === selectedClass.subject));
+      }
+      const lb = await quizService.getTeacherLeaderboard();
+      setLeaderboard(lb);
+    };
+    loadPerformanceData();
   }, [selectedClass]);
 
   const stats = {

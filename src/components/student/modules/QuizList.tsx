@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Clock, CheckCircle2, BookOpen, PenTool, Flag, Calculator, Atom, Scroll } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -97,7 +98,11 @@ const availableQuizzes: Quiz[] = [
 
 export function QuizList() {
   const navigate = useNavigate();
-  const availableQuizzes = HomeworkService.getRecommendedQuizzes();
+  const [availableQuizzes, setAvailableQuizzes] = useState<any[]>([]);
+
+  useEffect(() => {
+    HomeworkService.getRecommendedQuizzes().then(setAvailableQuizzes);
+  }, []);
 
   return (
     <div className="space-y-4">

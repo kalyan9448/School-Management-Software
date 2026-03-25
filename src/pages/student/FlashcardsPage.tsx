@@ -28,10 +28,25 @@ export function FlashcardsPage() {
   
   const source = location.state?.source || 'homework';
   
-  // Dynamic data from localStorage
-  const allClasses = TodaysClasses.getAll();
-  const allHomeworkTopics = HomeworkService.getAll();
-  const studentData = StudentProfile.get();
+  // Dynamic data from Firestore (async)
+  const [allClasses, setAllClasses] = useState<any[]>([]);
+  const [allHomeworkTopics, setAllHomeworkTopics] = useState<any[]>([]);
+  const [studentData, setStudentData] = useState<any>({ name: "", grade: "" });
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const [classes, topics, profile] = await Promise.all([
+        TodaysClasses.getAll(),
+        HomeworkService.getAll(),
+        StudentProfile.get(),
+      ]);
+      setAllClasses(classes);
+      setAllHomeworkTopics(topics);
+      setStudentData(profile);
+      setDataLoaded(true);
+    })();
+  }, []);
   
   // Find data from either classes or homework topics
   const classItem = allClasses.find((c: any) => c.id === Number(topicId));
@@ -83,21 +98,17 @@ export function FlashcardsPage() {
   const isLastCard = flashcards.length > 0 && currentIndex === flashcards.length - 1;
   const currentCardReviewed = currentCard && (knownCards.includes(currentCard.id) || reviewCards.includes(currentCard.id));
 
-  // Save completion status to localStorage when all cards are reviewed
+  // Save completion status when all cards are reviewed
   useEffect(() => {
     if (allCardsReviewed && currentTopic) {
-      const progressValue = 100;
-      
-      // Update central homework service
-      HomeworkService.updateFlashcardProgress(currentTopic.id, progressValue);
-      
-      // Also save individual card progress if needed
-      if (decodedSubject) {
-        knownCards.forEach(id => FlashcardService.markMastered(decodedSubject, id));
-        reviewCards.forEach(id => FlashcardService.markViewed(decodedSubject, id));
-      }
-
-      console.log(`Flashcards completed for topic ${currentTopic.id}! Progress updated via HomeworkService.`);
+      (async () => {
+        await HomeworkService.updateFlashcardProgress(currentTopic.id, 100);
+        
+        if (decodedSubject) {
+          for (const id of knownCards) await FlashcardService.markMastered(decodedSubject, id);
+          for (const id of reviewCards) await FlashcardService.markViewed(decodedSubject, id);
+        }
+      })();
     }
   }, [allCardsReviewed, currentTopic, knownCards.length, reviewCards.length, decodedSubject]);
 

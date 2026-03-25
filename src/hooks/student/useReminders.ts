@@ -1,35 +1,40 @@
-// Custom hook for managing reminders
-import { useEffect, useState } from "react";
+// Custom hook for managing reminders — Firestore-backed
+import { useEffect, useState, useCallback } from "react";
 import { updateReminders, addReminder, type Notification } from "@/services/student/reminderService";
+import { NotificationService } from "@/services/student/studentDataService";
 
 export const useReminders = () => {
-  const [notifications, setNotifications] = useState<Notification[]>(() => {
-    const saved = localStorage.getItem("notifications");
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  // Refresh reminders
-  const refreshReminders = () => {
-    const updated = updateReminders();
+  // Load from Firestore on mount
+  useEffect(() => {
+    (async () => {
+      const data = await NotificationService.getAll();
+      setNotifications(data);
+    })();
+  }, []);
+
+  // Refresh reminders (generates new + merges)
+  const refreshReminders = useCallback(async () => {
+    const updated = await updateReminders();
     setNotifications(updated);
     return updated;
-  };
+  }, []);
 
   // Add custom reminder
-  const createReminder = (
+  const createReminder = useCallback(async (
     type: Notification["type"],
     title: string,
     message: string,
     priority: "high" | "medium" | "low" = "medium",
     actionUrl?: string
   ) => {
-    addReminder(type, title, message, priority, actionUrl);
-    refreshReminders();
-  };
-
+    await addReminder(type, title, message, priority, actionUrl);
+    await refreshReminders();
+  }, [refreshReminders]);
 
   // Trigger quiz completion reminder
-  const onQuizCompleted = (subjectName: string, score: number) => {
+  const onQuizCompleted = useCallback(async (subjectName: string, score: number) => {
     const priority = score >= 80 ? "low" : score >= 60 ? "medium" : "high";
     const message =
       score >= 80
@@ -38,9 +43,8 @@ export const useReminders = () => {
         ? `Good effort! You scored ${score}% on your ${subjectName} quiz. Keep practicing to improve!`
         : `You scored ${score}% on your ${subjectName} quiz. Review the topics and try again!`;
 
-    createReminder("grade", `Quiz Result: ${subjectName}`, message, priority, "/analytics");
-  };
-
+    await createReminder("grade", `Quiz Result: ${subjectName}`, message, priority, "/analytics");
+  }, [createReminder]);
 
   return {
     notifications,

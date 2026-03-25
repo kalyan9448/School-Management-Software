@@ -35,23 +35,13 @@ export const DEFAULT_CLASSES: ClassSection[] = [
  * Gets the active academic year ID.
  */
 export const getActiveAcademicYearId = (): string => {
-    const storedYears = localStorage.getItem('school_academic_years');
-    let years = DEFAULT_YEARS;
-    if (storedYears) {
-        years = JSON.parse(storedYears);
-    }
-    return years.find(y => y.status === 'active')?.id || '2024-2025';
+    return DEFAULT_YEARS.find(y => y.status === 'active')?.id || '2024-2025';
 };
 
 /**
  * Gets all class sections for a given year (defaults to active year).
  */
-export const getClassSections = (yearId?: string): ClassSection[] => {
-    const targetYearId = yearId || getActiveAcademicYearId();
-    const storedClasses = localStorage.getItem(`school_class_sections_${targetYearId}`);
-    if (storedClasses) {
-        return JSON.parse(storedClasses);
-    }
+export const getClassSections = (_yearId?: string): ClassSection[] => {
     return DEFAULT_CLASSES;
 };
 

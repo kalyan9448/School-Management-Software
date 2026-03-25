@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ViewType } from './AdminDashboard';
+import { schoolService } from '../utils/centralDataService';
 import {
   Home,
   UserPlus,
@@ -31,16 +32,20 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
   const [schoolCode, setSchoolCode] = useState<string>('');
 
   useEffect(() => {
-    if (user?.school_id) {
-      const savedSchools = localStorage.getItem('app_schools');
-      if (savedSchools) {
-        const schools = JSON.parse(savedSchools);
-        const school = schools.find((s: any) => s.id === user.school_id);
-        if (school?.schoolCode) {
-          setSchoolCode(school.schoolCode);
+    const loadSchoolCode = async () => {
+      if (user?.school_id) {
+        try {
+          const schools = await schoolService.getAll();
+          const school = schools.find((s: any) => s.id === user.school_id);
+          if (school?.schoolCode) {
+            setSchoolCode(school.schoolCode);
+          }
+        } catch (err) {
+          console.error('Failed to load schools:', err);
         }
       }
-    }
+    };
+    loadSchoolCode();
   }, [user]);
 
   const menuItems = [

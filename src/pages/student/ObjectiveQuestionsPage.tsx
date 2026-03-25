@@ -29,12 +29,20 @@ export function ObjectiveQuestionsPage() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Dynamic data from localStorage
-  const studentData = StudentProfile.get();
-  const allHomeworkTopics = HomeworkService.getAll();
+  // Dynamic data from Firestore (async)
+  const [studentData, setStudentData] = useState<any>({ name: "", grade: "" });
+  const [topicDetails, setTopicDetails] = useState<HomeworkTopic | undefined>(undefined);
 
-  // Find the target topic
-  const topicDetails = allHomeworkTopics.find((t: any) => t.id === Number(topicId));
+  useEffect(() => {
+    (async () => {
+      const [profile, allTopics] = await Promise.all([
+        StudentProfile.get(),
+        HomeworkService.getAll(),
+      ]);
+      setStudentData(profile);
+      setTopicDetails(allTopics.find((t: any) => t.id === Number(topicId)));
+    })();
+  }, [topicId]);
 
   useEffect(() => {
     async function loadQuiz() {
@@ -85,38 +93,37 @@ export function ObjectiveQuestionsPage() {
     setQuestionStartTime(Date.now());
   }, [currentQuestionIndex]);
 
-  // Save quiz completion to localStorage when results are shown
+  // Save quiz completion when results are shown
   useEffect(() => {
     if (showResults && topicId && questions.length > 0) {
-      HomeworkService.updateQuestionsProgress(
-        Number(topicId),
-        questions.length, // attempted all
-        correctAnswers,
-        questions.length
-      );
-      
-      // Save detailed answers for mistake review
-      const savedAnswers = questions.map((q, idx) => ({
-        questionId: q.id,
-        selectedAnswer: answers[idx] ?? -1,
-        isCorrect: answers[idx] === q.correctAnswer,
-      }));
+      (async () => {
+        await HomeworkService.updateQuestionsProgress(
+          Number(topicId),
+          questions.length,
+          correctAnswers,
+          questions.length
+        );
+        
+        const savedAnswers = questions.map((q, idx) => ({
+          questionId: q.id,
+          selectedAnswer: answers[idx] ?? -1,
+          isCorrect: answers[idx] === q.correctAnswer,
+        }));
 
-      const detailedData = {
-        completed: true,
-        questionsAttempted: questions.length,
-        totalQuestions: questions.length,
-        correctAnswers,
-        accuracy,
-        timestamp: new Date().toISOString(),
-        answers: savedAnswers,
-        questionIds: questions.map((q: any) => q.id),
-        questions: questions, // Save actual questions for review
-      };
+        const detailedData = {
+          completed: true,
+          questionsAttempted: questions.length,
+          totalQuestions: questions.length,
+          correctAnswers,
+          accuracy,
+          timestamp: new Date().toISOString(),
+          answers: savedAnswers,
+          questionIds: questions.map((q: any) => q.id),
+          questions: questions,
+        };
 
-      HomeworkService.saveDetailedResults(Number(topicId), detailedData);
-      
-      console.log("Quiz completed and detailed results saved via HomeworkService");
+        await HomeworkService.saveDetailedResults(Number(topicId), detailedData);
+      })();
     }
   }, [showResults, topicId, questions, correctAnswers, accuracy, answers]);
 
@@ -178,19 +185,6 @@ export function ObjectiveQuestionsPage() {
 
   // Results Screen - Use Performance Reward Screen
   if (showResults) {
-    // Get topic info
-    const topic = allHomeworkTopics.find((t: any) => t.id === Number(topicId));
-    
-    // Get previous score from localStorage
-    const previousQuizData = localStorage.getItem(`questions_completed_${topicId}_previous`);
-    const previousScore = previousQuizData ? JSON.parse(previousQuizData).accuracy : null;
-    
-    // Save current score as previous for next time
-    localStorage.setItem(
-      `questions_completed_${topicId}_previous`,
-      JSON.stringify({ accuracy, timestamp: new Date().toISOString() })
-    );
-    
     const timeFormatted = `${Math.floor(timeSpent / 60)}m ${timeSpent % 60}s`;
 
     return (
@@ -198,9 +192,9 @@ export function ObjectiveQuestionsPage() {
         score={accuracy}
         correctAnswers={correctAnswers}
         totalQuestions={questions.length}
-        previousScore={previousScore}
-        subject={topic?.subject || "Unknown Subject"}
-        topic={topic?.topic || "Unknown Topic"}
+        previousScore={null}
+        subject={topicDetails?.subject || "Unknown Subject"}
+        topic={topicDetails?.topic || "Unknown Topic"}
         topicId={topicId || ""}
         onRetry={() => {
           setQuizKey(prevKey => prevKey + 1);

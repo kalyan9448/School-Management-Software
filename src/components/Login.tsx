@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth, getRoleDashboardPath } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Mail,
   Lock,
@@ -19,8 +18,7 @@ type Step = 'email' | 'password' | 'create-password' | 'forgot-password' | 'rese
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function Login() {
-  const navigate = useNavigate();
-  const { checkEmail, login, createPassword, resetPassword } = useAuth();
+  const { checkEmail, login, createPassword, resetPassword, requestPasswordReset } = useAuth();
 
   // Step state
   const [step, setStep] = useState<Step>('email');
@@ -94,15 +92,10 @@ export function Login() {
 
     try {
       const success = await createPassword(email, password);
-      if (success) {
-        // createPassword auto-logs the user in; look up role to navigate
-        const allUsers = JSON.parse(localStorage.getItem('app_users') || '[]');
-        const found = allUsers.find((u: any) => u.email === email);
-        const role = found?.role || 'admin';
-        navigate(getRoleDashboardPath(role), { replace: true });
-      } else {
+      if (!success) {
         setError('Failed to create password. Please try again.');
       }
+      // On success, onAuthStateChanged fires → sets user in context → LoginPage redirects
     } catch {
       setError('An unexpected error occurred.');
     }
@@ -116,8 +109,6 @@ export function Login() {
     setError('');
     setLoading(true);
 
-    // Simulation: in a real app, this sends an email.
-    // For this demo, we just verify the account exists (already done in Step 1, but safe to check)
     const result = await checkEmail(email);
     if (!result.exists) {
       setError('Account not found.');
@@ -125,11 +116,14 @@ export function Login() {
       return;
     }
 
-    // Success simulation
-    setTimeout(() => {
+    // Send Firebase password reset email
+    const sent = await requestPasswordReset(email);
+    if (sent) {
       setStep('reset-password');
-      setLoading(false);
-    }, 1000);
+    } else {
+      setError('Failed to send reset email. Please try again.');
+    }
+    setLoading(false);
   };
 
   // ── Step 3b: Reset password (submit new) ──────────────────────────────────
@@ -142,21 +136,10 @@ export function Login() {
 
     try {
       const success = await resetPassword(email, password);
-      if (success) {
-        const allUsers = JSON.parse(localStorage.getItem('app_users') || '[]');
-        const demoUsers = [
-          { email: 'superadmin@platform.com', role: 'superadmin' },
-          { email: 'admin@school.com', role: 'admin' },
-          { email: 'teacher@school.com', role: 'teacher' },
-          { email: 'parent@school.com', role: 'parent' },
-          { email: 'student@school.com', role: 'student' },
-        ];
-        const found = allUsers.find((u: any) => u.email === email) || demoUsers.find(u => u.email === email);
-        const role = found?.role || 'admin';
-        navigate(getRoleDashboardPath(role as any), { replace: true });
-      } else {
+      if (!success) {
         setError('Failed to reset password. Please try again.');
       }
+      // On success, onAuthStateChanged keeps user in context → LoginPage redirects
     } catch {
       setError('An unexpected error occurred.');
     }
@@ -164,23 +147,7 @@ export function Login() {
     setLoading(false);
   };
 
-  // ── Demo accounts list ─────────────────────────────────────────────────────
-  const demoAccounts: { email: string; role: string }[] = [
-    { email: 'superadmin@platform.com', role: 'Super Admin' },
-    { email: 'admin@school.com', role: 'School Admin' },
-    { email: 'teacher@school.com', role: 'Teacher' },
-    { email: 'student@school.com', role: 'Student' },
-    { email: 'parent@school.com', role: 'Parent' },
-  ];
 
-  // Demo accounts — skip email step, jump straight to password (all are returning users)
-  const fillDemo = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('demo123');
-    setConfirmPassword('');
-    setError('');
-    setStep('password'); // bypass Step 1 — demo accounts never need first-time password creation
-  };
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const goBack = () => {
@@ -306,7 +273,14 @@ export function Login() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => { setPassword(''); setConfirmPassword(''); setError(''); setStep('create-password'); }}
+                    className="text-sm text-amber-600 hover:text-amber-800 font-medium"
+                  >
+                    First time? Set up password
+                  </button>
                   <button 
                     type="button"
                     onClick={() => setStep('forgot-password')}
@@ -456,8 +430,8 @@ export function Login() {
             {step === 'reset-password' && (
               <form onSubmit={handleResetPassword} className="space-y-5">
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
-                  <p className="font-medium mb-0.5">Recovery Code Sent!</p>
-                  <p className="text-xs text-green-700">For this demo, you can proceed directly to setting your new password.</p>
+                  <p className="font-medium mb-0.5">Recovery Email Sent!</p>
+                  <p className="text-xs text-green-700">Check your inbox for a password reset link from Firebase. You can also set a new password below if you're already signed in.</p>
                 </div>
 
                 <div>
@@ -512,30 +486,7 @@ export function Login() {
               </form>
             )}
 
-            {/* ── Demo Accounts ── */}
-            {step === 'email' && (
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <p className="text-xs text-gray-500 text-center mb-3 uppercase tracking-wide font-medium">
-                  Demo Accounts — click to login instantly
-                </p>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {demoAccounts.map((a) => (
-                    <button
-                      key={a.email}
-                      type="button"
-                      onClick={() => fillDemo(a.email)}
-                      className="flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-purple-50 border border-gray-100 hover:border-purple-200 rounded-lg transition-colors text-left group"
-                    >
-                      <span className="text-xs text-gray-700 group-hover:text-gray-900">{a.email}</span>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${roleBadge(a.role)}`}>
-                        {a.role}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-center text-xs text-gray-400 mt-2">Password: <strong>demo123</strong></p>
-              </div>
-            )}
+
           </div>
         </div>
 

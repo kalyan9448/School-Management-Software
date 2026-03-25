@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { auth } from './firebase';
 
 // =============================================================================
 // API Client — Axios instance for calls to the Node.js/Express backend
@@ -15,20 +16,17 @@ export const apiClient = axios.create({
     },
 });
 
-// ── Request Interceptor — attach auth token ──────────────────────────────────
+// ── Request Interceptor — attach Firebase ID token ───────────────────────────
 apiClient.interceptors.request.use(
-    (config) => {
-        // Attach Supabase JWT if available
-        const session = localStorage.getItem('supabase.auth.token');
-        if (session) {
+    async (config) => {
+        // Get the current Firebase user's ID token
+        const currentUser = auth.currentUser;
+        if (currentUser) {
             try {
-                const parsed = JSON.parse(session);
-                const token = parsed?.currentSession?.access_token;
-                if (token) {
-                    config.headers['Authorization'] = `Bearer ${token}`;
-                }
+                const token = await currentUser.getIdToken();
+                config.headers['Authorization'] = `Bearer ${token}`;
             } catch {
-                // ignore
+                // Token retrieval failed — continue without auth header
             }
         }
 

@@ -37,10 +37,23 @@ export function TopicDetailPage() {
   const [questionsCompleted, setQuestionsCompleted] = useState(false);
   const [questionsAccuracy, setQuestionsAccuracy] = useState<number | null>(null);
 
-  // Dynamic data from localStorage
-  const studentData = StudentProfile.get();
-  const allHomeworkTopics = HomeworkService.getAll();
-  const allClasses = TodaysClasses.getAll();
+  // Dynamic data from Firestore (async)
+  const [studentData, setStudentData] = useState<any>({ name: "", grade: "" });
+  const [allHomeworkTopics, setAllHomeworkTopics] = useState<HomeworkTopic[]>([]);
+  const [allClasses, setAllClasses] = useState<any[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const [profile, topics, classes] = await Promise.all([
+        StudentProfile.get(),
+        HomeworkService.getAll(),
+        TodaysClasses.getAll(),
+      ]);
+      setStudentData(profile);
+      setAllHomeworkTopics(topics);
+      setAllClasses(classes);
+    })();
+  }, [topicId]);
 
   // Find the target topic
   const topic = allHomeworkTopics.find((t: any) => t.id === Number(topicId));
@@ -79,9 +92,9 @@ export function TopicDetailPage() {
 
   // Check progress on mount and whenever window regains focus
   useEffect(() => {
-    const refreshProgress = () => {
+    const refreshProgress = async () => {
       if (topicId) {
-        const currentTopic = HomeworkService.getById(Number(topicId));
+        const currentTopic = await HomeworkService.getById(Number(topicId));
         if (currentTopic) {
           setFlashcardProgress(currentTopic.flashcardProgress);
           setFlashcardCompleted(currentTopic.flashcardsCompleted);
@@ -96,7 +109,6 @@ export function TopicDetailPage() {
     refreshProgress();
 
     const handleFocus = () => {
-      console.log("Window focused, refreshing progress details...");
       refreshProgress();
     };
 

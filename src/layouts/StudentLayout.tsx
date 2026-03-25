@@ -1,10 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { BottomNav } from "@/components/student/BottomNav";
 import { Home, BookOpen, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
 import logoImage from '../assets/logo.png';
-import { initializeStudentData } from "@/services/student/studentDataService";
 
 const sidebarNavItems = [
     { path: "/student/dashboard", icon: Home, label: "Dashboard" },
@@ -17,9 +16,6 @@ const sidebarNavItems = [
 const DashboardLayout: React.FC = () => {
     const location = useLocation();
     const isDashboard = location.pathname.includes('dashboard') || location.pathname === '/';
-
-    // Seed localStorage on first mount
-    useEffect(() => { initializeStudentData(); }, []);
 
     const pageTitle = isDashboard ? 'Main Dashboard'
         : location.pathname.includes('homework') ? 'Homework Library'

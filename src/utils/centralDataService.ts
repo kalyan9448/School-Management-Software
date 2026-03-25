@@ -1,4 +1,4 @@
-// Centralized Data Service for All Dashboards
+﻿// Centralized Data Service for All Dashboards
 // This service manages all data operations across the application
 
 // ==================== INTERFACES ====================
@@ -27,6 +27,7 @@ export interface User {
 
 export interface Student {
   id: string;
+  school_id?: string;
   admissionNo: string;
   name: string;
   rollNo: string;
@@ -51,6 +52,7 @@ export interface Student {
 
 export interface Teacher {
   id: string;
+  school_id?: string;
   employeeId: string;
   name: string;
   email: string;
@@ -68,6 +70,7 @@ export interface Teacher {
 
 export interface Class {
   id: string;
+  school_id?: string;
   className: string;
   section: string;
   classTeacher: string;
@@ -78,6 +81,7 @@ export interface Class {
 
 export interface Subject {
   id: string;
+  school_id?: string;
   name: string;
   code: string;
   description?: string;
@@ -85,6 +89,7 @@ export interface Subject {
 
 export interface AttendanceRecord {
   id: string;
+  school_id?: string;
   studentId: string;
   date: string;
   status: 'present' | 'absent' | 'late' | 'half-day' | 'leave';
@@ -95,6 +100,7 @@ export interface AttendanceRecord {
 
 export interface LessonLog {
   id: string;
+  school_id?: string;
   date: string;
   classId: string;
   class: string;
@@ -112,6 +118,7 @@ export interface LessonLog {
 
 export interface Assignment {
   id: string;
+  school_id?: string;
   title: string;
   description: string;
   subject: string;
@@ -127,6 +134,7 @@ export interface Assignment {
 
 export interface AssignmentSubmission {
   id: string;
+  school_id?: string;
   assignmentId: string;
   studentId: string;
   submittedDate: string;
@@ -141,6 +149,7 @@ export interface AssignmentSubmission {
 
 export interface Exam {
   id: string;
+  school_id?: string;
   name: string;
   type: 'unit-test' | 'mid-term' | 'final' | 'practical';
   subject: string;
@@ -155,6 +164,7 @@ export interface Exam {
 
 export interface ExamResult {
   id: string;
+  school_id?: string;
   examId: string;
   studentId: string;
   marksObtained: number;
@@ -169,6 +179,7 @@ export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Frida
 
 export interface TimetableSlot {
   id: string;
+  school_id?: string;
   classId: string;
   class: string;
   section: string;
@@ -184,6 +195,7 @@ export interface TimetableSlot {
 
 export interface FeeStructure {
   id: string;
+  school_id?: string;
   class: string;
   academicYear: string;
   components: FeeComponent[];
@@ -199,6 +211,7 @@ export interface FeeComponent {
 
 export interface FeePayment {
   id: string;
+  school_id?: string;
   studentId: string;
   receiptNo: string;
   amount: number;
@@ -212,6 +225,7 @@ export interface FeePayment {
 
 export interface Announcement {
   id: string;
+  school_id?: string;
   title: string;
   message: string;
   type: 'general' | 'urgent' | 'event' | 'holiday' | 'exam';
@@ -227,6 +241,7 @@ export interface Announcement {
 
 export interface Enquiry {
   id: string;
+  school_id?: string;
   parentName: string;
   studentName: string;
   phone: string;
@@ -242,6 +257,7 @@ export interface Enquiry {
 
 export interface Event {
   id: string;
+  school_id?: string;
   title: string;
   description: string;
   type: 'holiday' | 'exam' | 'ptm' | 'sports' | 'cultural' | 'other';
@@ -257,6 +273,7 @@ export interface Event {
 
 export interface Notification {
   id: string;
+  school_id?: string;
   userId: string;
   type: 'attendance' | 'assignment' | 'exam' | 'fee' | 'announcement' | 'general';
   title: string;
@@ -266,1333 +283,68 @@ export interface Notification {
   link?: string;
 }
 
-// ==================== DATA INITIALIZATION ====================
+// ==================== FIRESTORE-BACKED SERVICES ====================
+// All data operations now go through Firestore. No localStorage, no mock data.
 
-const generateId = () => {
-  return Date.now().toString() + Math.random().toString(36).substring(2, 11);
+import {
+  userService,
+  schoolService,
+  organizationService,
+  studentService,
+  teacherService,
+  classService,
+  subjectService,
+  attendanceService,
+  lessonService,
+  assignmentService,
+  assignmentSubmissionService,
+  examService,
+  examResultService,
+  feeService,
+  announcementService,
+  enquiryService,
+  eventService,
+  notificationService,
+  timetableService,
+  statisticsService,
+  quizService,
+  schoolSettingsService,
+  academicYearService,
+  studentEnrollmentService,
+  feeInvoiceService,
+  auditLogService,
+} from './firestoreService';
+
+export {
+  userService,
+  schoolService,
+  organizationService,
+  studentService,
+  teacherService,
+  classService,
+  subjectService,
+  attendanceService,
+  lessonService,
+  assignmentService,
+  assignmentSubmissionService,
+  examService,
+  examResultService,
+  feeService,
+  announcementService,
+  enquiryService,
+  eventService,
+  notificationService,
+  timetableService,
+  statisticsService,
+  quizService,
+  schoolSettingsService,
+  academicYearService,
+  studentEnrollmentService,
+  feeInvoiceService,
+  auditLogService,
 };
 
-const initializeData = () => {
-  // Initialize demo students
-  if (!localStorage.getItem('app_students')) {
-    const demoStudents: Student[] = [
-      {
-        id: 'STU001',
-        admissionNo: 'KVS2024001',
-        name: 'Aarav Sharma',
-        rollNo: '001',
-        class: '8th',
-        section: 'A',
-        dateOfBirth: '2010-05-15',
-        gender: 'male',
-        fatherName: 'Rajesh Sharma',
-        motherName: 'Priya Sharma',
-        parentPhone: '+91 9876543210',
-        parentEmail: 'parent@school.com',
-        email: 'student@school.com',
-        parentId: '5',
-        address: '123 MG Road, Mumbai',
-        admissionDate: '2024-04-01',
-        status: 'active',
-        bloodGroup: 'O+',
-      },
-      {
-        id: 'STU002',
-        admissionNo: 'KVS2024002',
-        name: 'Diya Patel',
-        rollNo: '002',
-        class: '8th',
-        section: 'A',
-        dateOfBirth: '2010-08-22',
-        gender: 'female',
-        fatherName: 'Amit Patel',
-        motherName: 'Neha Patel',
-        parentPhone: '+91 9876543211',
-        parentEmail: 'patel@example.com',
-        email: 'diya.patel@example.com',
-        address: '456 Park Street, Mumbai',
-        admissionDate: '2024-04-01',
-        status: 'active',
-        bloodGroup: 'A+',
-      },
-      {
-        id: 'STU003',
-        admissionNo: 'KVS2024003',
-        name: 'Arjun Singh',
-        rollNo: '003',
-        class: '8th',
-        section: 'A',
-        dateOfBirth: '2010-03-10',
-        gender: 'male',
-        fatherName: 'Vikram Singh',
-        motherName: 'Anita Singh',
-        parentPhone: '+91 9876543212',
-        parentEmail: 'singh@example.com',
-        email: 'arjun.singh@example.com',
-        address: '789 Lake Road, Mumbai',
-        admissionDate: '2024-04-01',
-        status: 'active',
-        bloodGroup: 'B+',
-      },
-    ];
-    localStorage.setItem('app_students', JSON.stringify(demoStudents));
-  }
-
-  // Initialize demo teachers
-  if (!localStorage.getItem('app_teachers')) {
-    const demoTeachers: Teacher[] = [
-      {
-        id: '3',
-        employeeId: 'EMP001',
-        name: 'John Teacher',
-        email: 'teacher@school.com',
-        phone: '+91 9876543220',
-        subjects: ['Mathematics', 'Science'],
-        classes: [
-          { class: '8th', section: 'A', subject: 'Mathematics' },
-          { class: '8th', section: 'A', subject: 'Science' },
-          { class: '8th', section: 'B', subject: 'Science' },
-        ],
-        qualification: 'M.Sc Mathematics',
-        experience: 5,
-        joiningDate: '2020-06-01',
-        salary: 45000,
-        status: 'active',
-      },
-    ];
-    localStorage.setItem('app_teachers', JSON.stringify(demoTeachers));
-  }
-
-  // Initialize other collections
-  const collections = [
-    'app_classes',
-    'app_subjects',
-    'app_attendance',
-    'app_lessons',
-    'app_assignments',
-    'app_assignment_submissions',
-    'app_exams',
-    'app_exam_results',
-    'app_fee_structures',
-    'app_fee_payments',
-    'app_announcements',
-    'app_enquiries',
-    'app_events',
-    'app_notifications',
-    'app_users',
-  ];
-
-  collections.forEach(collection => {
-    if (!localStorage.getItem(collection)) {
-      localStorage.setItem(collection, JSON.stringify([]));
-    }
-  });
-
-  // Initialize demo schools
-  if (!localStorage.getItem('app_schools') || JSON.parse(localStorage.getItem('app_schools') || '[]').length === 0) {
-    const demoSchools = [
-      {
-        id: 'SCHOOL001',
-        name: 'Kidz Vision - Central Campus',
-        schoolCode: 'KVC',
-        status: 'active',
-        plan: 'Enterprise',
-      },
-      {
-        id: 'SCHOOL002',
-        name: 'Kidz Vision - North Branch',
-        schoolCode: 'KVN',
-        status: 'active',
-        plan: 'Enterprise',
-      },
-      {
-        id: 'SCHOOL003',
-        name: 'Rainbow International School',
-        schoolCode: 'RIS',
-        status: 'active',
-        plan: 'Professional',
-      }
-    ];
-    localStorage.setItem('app_schools', JSON.stringify(demoSchools));
-  }
-
-  // Initialize demo notifications for teacher
-  if (!localStorage.getItem('app_notifications') || JSON.parse(localStorage.getItem('app_notifications') || '[]').length === 0) {
-    const teacherEmail = 'teacher@school.com';
-    const demoNotifications: Notification[] = [
-      {
-        id: 'n1',
-        userId: teacherEmail,
-        type: 'attendance',
-        title: 'Attendance Alert',
-        message: 'Aarav Sharma (Class 8th-A) has been marked absent for 3 consecutive days.',
-        date: new Date().toISOString(),
-        read: false,
-      },
-      {
-        id: 'n2',
-        userId: teacherEmail,
-        type: 'announcement',
-        title: 'Staff Meeting',
-        message: 'There will be a mandatory staff meeting in the auditorium today at 4:30 PM.',
-        date: new Date(Date.now() - 3600000).toISOString(),
-        read: false,
-      },
-      {
-        id: 'n3',
-        userId: teacherEmail,
-        type: 'assignment',
-        title: 'Assignment Submission',
-        message: '15 students have submitted the "Algebra Basics" assignment.',
-        date: new Date(Date.now() - 7200000).toISOString(),
-        read: false,
-      },
-      {
-        id: 'n4',
-        userId: teacherEmail,
-        type: 'exam',
-        title: 'Mid-term Results',
-        message: 'Mid-term results for Class 8th-A are ready for review.',
-        date: new Date(Date.now() - 172800000).toISOString(),
-        read: false,
-      },
-      {
-        id: 'n5',
-        userId: teacherEmail,
-        type: 'fee',
-        title: 'Fee Payment Update',
-        message: 'Monthly fee collection for Class 8th-A has reached 85%.',
-        date: new Date(Date.now() - 259200000).toISOString(),
-        read: true,
-      },
-      {
-        id: 'n6',
-        userId: teacherEmail,
-        type: 'general',
-        title: 'New Student Joined',
-        message: 'Saanvi Reddy has been added to Class 8th-A.',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        read: true,
-      },
-    ];
-    localStorage.setItem('app_notifications', JSON.stringify(demoNotifications));
-  }
-
-  // Initialize demo users (overrides the hardcoded list in AuthContext eventually)
-  if (!localStorage.getItem('app_users') || JSON.parse(localStorage.getItem('app_users') || '[]').length === 0) {
-    const demoUsers: User[] = [
-      { id: '0', email: 'superadmin@platform.com', name: 'Super Admin', role: 'superadmin', isFirstLogin: false },
-      { id: '1', email: 'admin@school.com', name: 'Admin User', role: 'admin', isFirstLogin: false, school_id: 'SCHOOL001' },
-      { id: '3', email: 'teacher@school.com', name: 'John Teacher', role: 'teacher', isFirstLogin: false, school_id: 'SCHOOL001' },
-      { id: '5', email: 'parent@school.com', name: 'Parent User', role: 'parent', isFirstLogin: false, school_id: 'SCHOOL001' },
-      { id: '6', email: 'student@school.com', name: 'Aarav Sharma', role: 'student', isFirstLogin: false, school_id: 'SCHOOL001' },
-    ];
-    localStorage.setItem('app_users', JSON.stringify(demoUsers));
-  }
-
-  // Initialize demo classes
-  if (!localStorage.getItem('app_classes') || JSON.parse(localStorage.getItem('app_classes') || '[]').length === 0) {
-    const demoClasses: Class[] = [
-      {
-        id: 'CLS001',
-        className: '8th',
-        section: 'A',
-        classTeacher: 'John Teacher',
-        capacity: 40,
-        currentStrength: 3,
-        subjects: ['Mathematics', 'Science', 'English', 'Social Studies', 'Hindi'],
-      },
-    ];
-    localStorage.setItem('app_classes', JSON.stringify(demoClasses));
-  }
-
-  // Initialize demo subjects
-  if (!localStorage.getItem('app_subjects') || JSON.parse(localStorage.getItem('app_subjects') || '[]').length === 0) {
-    const demoSubjects: Subject[] = [
-      { id: 'SUB001', name: 'Mathematics', code: 'MATH', description: 'Mathematics' },
-      { id: 'SUB002', name: 'Science', code: 'SCI', description: 'Science' },
-      { id: 'SUB003', name: 'English', code: 'ENG', description: 'English Language' },
-      { id: 'SUB004', name: 'Social Studies', code: 'SST', description: 'Social Studies' },
-      { id: 'SUB005', name: 'Hindi', code: 'HIN', description: 'Hindi Language' },
-    ];
-    localStorage.setItem('app_subjects', JSON.stringify(demoSubjects));
-  }
-
-  // Initialize demo lesson logs
-  if (!localStorage.getItem('app_lessons') || JSON.parse(localStorage.getItem('app_lessons') || '[]').length === 0) {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const twoDaysAgo = new Date(Date.now() - 172800000).toISOString().split('T')[0];
-
-    const demoLessons: LessonLog[] = [
-      {
-        id: 'L001',
-        date: today,
-        classId: 'CLS001',
-        class: '8th',
-        section: 'A',
-        subject: 'Mathematics',
-        topic: 'Introduction to Linear Equations',
-        objectives: ['Understand variables and constants', 'Solve basic one-step equations'],
-        studentsNeedingAttention: ['STU001'],
-        notes: 'Students were very engaged. Aarav needs more practice with subtraction-based equations.',
-        teacherId: 'teacher@school.com',
-        teacherName: 'John Teacher'
-      },
-      {
-        id: 'L002',
-        date: today,
-        classId: 'CLS001',
-        class: '8th',
-        section: 'A',
-        subject: 'Science',
-        topic: 'Cell Structure and Functions',
-        objectives: ['Identify cell organelles', 'Understand the difference between plant and animal cells'],
-        studentsNeedingAttention: [],
-        notes: 'Microscope lab session went well.',
-        teacherId: 'teacher@school.com',
-        teacherName: 'John Teacher'
-      },
-      {
-        id: 'L003',
-        date: yesterday,
-        classId: 'CLS001',
-        class: '8th',
-        section: 'A',
-        subject: 'Mathematics',
-        topic: 'Rational Numbers Review',
-        objectives: ['Convert decimals to fractions', 'Perform addition on rational numbers'],
-        studentsNeedingAttention: ['STU002'],
-        notes: 'Recap of last week\'s concepts.',
-        teacherId: 'teacher@school.com',
-        teacherName: 'John Teacher'
-      },
-      {
-        id: 'L004',
-        date: twoDaysAgo,
-        classId: 'CLS001',
-        class: '8th',
-        section: 'A',
-        subject: 'English',
-        topic: 'Poetry Analysis - The Road Not Taken',
-        objectives: ['Analyze metaphors in poetry', 'Understand rhyme schemes'],
-        studentsNeedingAttention: [],
-        notes: 'Introduced Robert Frost\'s work today.',
-        teacherId: 'teacher@school.com',
-        teacherName: 'John Teacher'
-      }
-    ];
-    localStorage.setItem('app_lessons', JSON.stringify(demoLessons));
-  }
-
-  // Initialize demo events
-  if (!localStorage.getItem('app_events') || JSON.parse(localStorage.getItem('app_events') || '[]').length === 0) {
-    const today = new Date();
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 7);
-    const inTwoWeeks = new Date(today);
-    inTwoWeeks.setDate(today.getDate() + 14);
-
-    const demoEvents: Event[] = [
-      {
-        id: 'EVT001',
-        title: 'Annual Sports Meet',
-        description: 'Annual inter-school sports competition',
-        type: 'sports',
-        date: nextWeek.toISOString().split('T')[0],
-        startTime: '09:00 AM',
-        endTime: '04:00 PM',
-        venue: 'Main Ground',
-        targetAudience: 'all'
-      },
-      {
-        id: 'EVT002',
-        title: 'Parent-Teacher Meeting',
-        description: 'Quarterly review of student progress',
-        type: 'ptm',
-        date: inTwoWeeks.toISOString().split('T')[0],
-        startTime: '10:00 AM',
-        endTime: '01:00 PM',
-        venue: 'Classrooms',
-        targetAudience: 'all'
-      },
-      {
-        id: 'EVT003',
-        title: 'Science Exhibition',
-        description: 'Exhibition of student projects',
-        type: 'cultural',
-        date: new Date(today.getTime() + 86400000 * 3).toISOString().split('T')[0],
-        startTime: '11:00 AM',
-        endTime: '03:00 PM',
-        venue: 'Science Lab',
-        targetAudience: 'all'
-      }
-    ];
-    localStorage.setItem('app_events', JSON.stringify(demoEvents));
-  }
-};
-
-// Initialize on load
-initializeData();
-
-// ==================== DATA SERVICES ====================
-
-export const userService = {
-  getAll: (): User[] => {
-    const data = localStorage.getItem('app_users');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByEmail: (email: string): User | null => {
-    const users = userService.getAll();
-    return users.find(u => u.email === email) || null;
-  },
-
-  create: (user: Partial<User>): User => {
-    const users = userService.getAll();
-    
-    // Simulate Firebase unique email check
-    const existing = users.find(u => u.email === user.email);
-    if (existing) {
-      console.warn(`User with email ${user.email} already exists. Returning existing user.`);
-      return existing;
-    }
-
-    const newUser: User = {
-      id: user.id || generateId(),
-      email: user.email || '',
-      name: user.name || '',
-      role: user.role || 'student',
-      isFirstLogin: user.isFirstLogin ?? true, 
-      school_id: user.school_id,
-      parentId: user.parentId,
-      childrenIds: user.childrenIds || [],
-    };
-
-    users.push(newUser);
-    localStorage.setItem('app_users', JSON.stringify(users));
-    return newUser;
-  },
-
-  update: (id: string, updates: Partial<User>): User | null => {
-    const users = userService.getAll();
-    const index = users.findIndex(u => u.id === id);
-    if (index === -1) return null;
-
-    users[index] = { ...users[index], ...updates };
-    localStorage.setItem('app_users', JSON.stringify(users));
-    return users[index];
-  },
-};
-
-export const schoolService = {
-  getAll: (): any[] => {
-    const data = localStorage.getItem('app_schools');
-    return data ? JSON.parse(data) : [];
-  },
-
-  create: (school: any): any => {
-    const schools = schoolService.getAll();
-    const newSchool = {
-      ...school,
-      id: generateId(),
-      status: 'active',
-      created_at: new Date().toISOString(),
-    };
-    schools.push(newSchool);
-    localStorage.setItem('app_schools', JSON.stringify(schools));
-
-    // Automatically provision the School Admin user
-    userService.create({
-      email: school.principalEmail,
-      name: school.principalName,
-      role: 'admin',
-      school_id: newSchool.id,
-      isFirstLogin: true,
-    });
-
-    return newSchool;
-  }
-};
-
-export const studentService = {
-  getAll: (): Student[] => {
-    const data = localStorage.getItem('app_students');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getById: (id: string): Student | null => {
-    const students = studentService.getAll();
-    return students.find(s => s.id === id) || null;
-  },
-
-  getByClass: (className: string, section: string): Student[] => {
-    const students = studentService.getAll();
-    return students.filter(s => s.class === className && s.section === section);
-  },
-
-  getByParentId: (parentId: string): Student[] => {
-    const students = studentService.getAll();
-    return students.filter(s => s.parentId === parentId);
-  },
-
-  getNextRollNumber: (className: string, section: string, academicYear: string): string => {
-    const students = studentService.getAll();
-    const classStudents = students.filter(s => 
-      s.class === className && 
-      s.section === section && 
-      s.academicYear === academicYear
-    );
-    if (classStudents.length === 0) return '001';
-    
-    const rollNumbers = classStudents
-      .map(s => parseInt(s.rollNo))
-      .filter(n => !isNaN(n));
-    
-    if (rollNumbers.length === 0) return '001';
-    
-    const maxRoll = Math.max(...rollNumbers);
-    return String(maxRoll + 1).padStart(3, '0');
-  },
-
-  isRollNumberUnique: (rollNo: string, className: string, section: string, academicYear: string, excludeStudentId?: string): boolean => {
-    const students = studentService.getAll();
-    const existing = students.find(s => 
-      s.rollNo === rollNo && 
-      s.class === className && 
-      s.section === section && 
-      s.academicYear === academicYear &&
-      s.id !== excludeStudentId
-    );
-    return !existing;
-  },
-
-  create: (student: Partial<Student>): Student => {
-    const students = studentService.getAll();
-    const newStudent: Student = {
-      id: student.id || generateId(),
-      admissionNo: student.admissionNo || `KVS${new Date().getFullYear()}${String(students.length + 1).padStart(3, '0')}`,
-      name: student.name || '',
-      rollNo: student.rollNo || studentService.getNextRollNumber(student.class || '', student.section || 'A', student.academicYear || '2024-2025'),
-      class: student.class || '',
-      section: student.section || '',
-      dateOfBirth: student.dateOfBirth || '',
-      gender: student.gender || 'male',
-      fatherName: student.fatherName || '',
-      motherName: student.motherName || '',
-      parentPhone: student.parentPhone || '',
-      parentEmail: student.parentEmail || '',
-      email: student.email || '', // Student's unique email
-      parentId: student.parentId,
-      address: student.address || '',
-      admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],
-      status: student.status || 'active',
-      photo: student.photo,
-      bloodGroup: student.bloodGroup,
-      medicalInfo: student.medicalInfo,
-    };
-
-    students.push(newStudent);
-    localStorage.setItem('app_students', JSON.stringify(students));
-    return newStudent;
-  },
-
-  update: (id: string, updates: Partial<Student>): Student | null => {
-    const students = studentService.getAll();
-    const index = students.findIndex(s => s.id === id);
-    if (index === -1) return null;
-
-    students[index] = { ...students[index], ...updates };
-    localStorage.setItem('app_students', JSON.stringify(students));
-    return students[index];
-  },
-
-  delete: (id: string): boolean => {
-    const students = studentService.getAll();
-    const filtered = students.filter(s => s.id !== id);
-    localStorage.setItem('app_students', JSON.stringify(filtered));
-    return true;
-  },
-};
-
-export const teacherService = {
-  getAll: (): Teacher[] => {
-    const data = localStorage.getItem('app_teachers');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getById: (id: string): Teacher | null => {
-    const teachers = teacherService.getAll();
-    return teachers.find(t => t.id === id) || null;
-  },
-
-  create: (teacher: Partial<Teacher>): Teacher => {
-    const teachers = teacherService.getAll();
-    const newTeacher: Teacher = {
-      id: teacher.id || generateId(),
-      employeeId: teacher.employeeId || `EMP${String(teachers.length + 1).padStart(3, '0')}`,
-      name: teacher.name || '',
-      email: teacher.email || '',
-      phone: teacher.phone || '',
-      subjects: teacher.subjects || [],
-      classes: teacher.classes || [],
-      qualification: teacher.qualification || '',
-      experience: teacher.experience || 0,
-      joiningDate: teacher.joiningDate || new Date().toISOString().split('T')[0],
-      salary: teacher.salary || 0,
-      photo: teacher.photo,
-      address: teacher.address,
-      status: teacher.status || 'active',
-    };
-
-    teachers.push(newTeacher);
-    localStorage.setItem('app_teachers', JSON.stringify(teachers));
-    return newTeacher;
-  },
-
-  update: (id: string, updates: Partial<Teacher>): Teacher | null => {
-    const teachers = teacherService.getAll();
-    const index = teachers.findIndex(t => t.id === id);
-    if (index === -1) return null;
-
-    teachers[index] = { ...teachers[index], ...updates };
-    localStorage.setItem('app_teachers', JSON.stringify(teachers));
-    return teachers[index];
-  },
-
-  getByEmail: (email: string): Teacher | null => {
-    const teachers = teacherService.getAll();
-    return teachers.find(t => t.email === email) || null;
-  },
-};
-
-export const classService = {
-  getAll: (): Class[] => {
-    const data = localStorage.getItem('app_classes');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getById: (id: string): Class | null => {
-    const classes = classService.getAll();
-    return classes.find(c => c.id === id) || null;
-  },
-
-  create: (classData: Partial<Class>): Class => {
-    const classes = classService.getAll();
-    const newClass: Class = {
-      id: classData.id || generateId(),
-      className: classData.className || '',
-      section: classData.section || '',
-      classTeacher: classData.classTeacher || '',
-      capacity: classData.capacity || 40,
-      currentStrength: classData.currentStrength || 0,
-      subjects: classData.subjects || [],
-    };
-
-    classes.push(newClass);
-    localStorage.setItem('app_classes', JSON.stringify(classes));
-    return newClass;
-  },
-};
-
-export const subjectService = {
-  getAll: (): Subject[] => {
-    const data = localStorage.getItem('app_subjects');
-    return data ? JSON.parse(data) : [];
-  },
-
-  create: (subject: Partial<Subject>): Subject => {
-    const subjects = subjectService.getAll();
-    const newSubject: Subject = {
-      id: subject.id || generateId(),
-      name: subject.name || '',
-      code: subject.code || '',
-      description: subject.description,
-    };
-
-    subjects.push(newSubject);
-    localStorage.setItem('app_subjects', JSON.stringify(subjects));
-    return newSubject;
-  },
-};
-
-export const attendanceService = {
-  getAll: (): AttendanceRecord[] => {
-    const data = localStorage.getItem('app_attendance');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByDate: (date: string): AttendanceRecord[] => {
-    const records = attendanceService.getAll();
-    return records.filter(r => r.date === date);
-  },
-
-  getByStudent: (studentId: string, startDate?: string, endDate?: string): AttendanceRecord[] => {
-    const records = attendanceService.getAll();
-    let filtered = records.filter(r => r.studentId === studentId);
-
-    if (startDate) {
-      filtered = filtered.filter(r => r.date >= startDate);
-    }
-    if (endDate) {
-      filtered = filtered.filter(r => r.date <= endDate);
-    }
-
-    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  },
-
-  getByClass: (className: string, section: string, date: string): AttendanceRecord[] => {
-    const students = studentService.getByClass(className, section);
-    const studentIds = students.map(s => s.id);
-    const records = attendanceService.getByDate(date);
-    return records.filter(r => studentIds.includes(r.studentId));
-  },
-
-  markAttendance: (records: Partial<AttendanceRecord>[]): void => {
-    const existing = attendanceService.getAll();
-    const date = records[0]?.date || new Date().toISOString().split('T')[0];
-
-    // Remove existing records for this date and students
-    const studentIds = records.map(r => r.studentId);
-    const filtered = existing.filter(r => !(r.date === date && studentIds.includes(r.studentId)));
-
-    // Add new records
-    const newRecords: AttendanceRecord[] = records.map(r => ({
-      id: r.id || generateId(),
-      studentId: r.studentId!,
-      date: r.date!,
-      status: r.status!,
-      time: r.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      markedBy: r.markedBy || 'teacher',
-      remarks: r.remarks,
-    }));
-
-    localStorage.setItem('app_attendance', JSON.stringify([...filtered, ...newRecords]));
-
-    // Create notifications for parents
-    newRecords.forEach(record => {
-      const student = studentService.getById(record.studentId);
-      if (student?.parentId) {
-        notificationService.create({
-          userId: student.parentId,
-          type: 'attendance',
-          title: record.status === 'present' ? 'Child Arrived at School' : 'Attendance Alert',
-          message: `${student.name} marked ${record.status} at ${record.time}`,
-          date: record.date,
-        });
-      }
-    });
-  },
-
-  getAttendanceStats: (studentId: string, month?: string): {
-    total: number;
-    present: number;
-    absent: number;
-    late: number;
-    leave: number;
-    percentage: number;
-  } => {
-    let records = attendanceService.getByStudent(studentId);
-
-    if (month) {
-      records = records.filter(r => r.date.startsWith(month));
-    }
-
-    const total = records.length;
-    const present = records.filter(r => r.status === 'present').length;
-    const absent = records.filter(r => r.status === 'absent').length;
-    const late = records.filter(r => r.status === 'late').length;
-    const leave = records.filter(r => r.status === 'leave').length;
-    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
-
-    return { total, present, absent, late, leave, percentage };
-  },
-};
-
-export const lessonService = {
-  getAll: (): LessonLog[] => {
-    const data = localStorage.getItem('app_lessons');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByDate: (date: string): LessonLog[] => {
-    const lessons = lessonService.getAll();
-    return lessons.filter(l => l.date === date);
-  },
-
-  getByTeacher: (teacherId: string, date?: string): LessonLog[] => {
-    const lessons = lessonService.getAll();
-    let filtered = lessons.filter(l => l.teacherId === teacherId);
-    if (date) {
-      filtered = filtered.filter(l => l.date === date);
-    }
-    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  },
-
-  getByClass: (className: string, section: string): LessonLog[] => {
-    const lessons = lessonService.getAll();
-    return lessons.filter(l => l.class === className && l.section === section)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  },
-
-  create: (lesson: Partial<LessonLog>): LessonLog => {
-    const lessons = lessonService.getAll();
-    const newLesson: LessonLog = {
-      id: lesson.id || generateId(),
-      date: lesson.date || new Date().toISOString().split('T')[0],
-      classId: lesson.classId || '',
-      class: lesson.class || '',
-      section: lesson.section || '',
-      subject: lesson.subject || '',
-      topic: lesson.topic || '',
-      objectives: lesson.objectives || [],
-      description: lesson.description,
-      studentsNeedingAttention: lesson.studentsNeedingAttention || [],
-      notes: lesson.notes || '',
-      teacherId: lesson.teacherId || '',
-      teacherName: lesson.teacherName || '',
-      attachments: lesson.attachments || [],
-    };
-
-    lessons.push(newLesson);
-    localStorage.setItem('app_lessons', JSON.stringify(lessons));
-    return newLesson;
-  },
-};
-
-export const assignmentService = {
-  getAll: (): Assignment[] => {
-    const data = localStorage.getItem('app_assignments');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByClass: (className: string, section: string): Assignment[] => {
-    const assignments = assignmentService.getAll();
-    return assignments.filter(a => a.class === className && a.section === section)
-      .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
-  },
-
-  getById: (id: string): Assignment | null => {
-    const assignments = assignmentService.getAll();
-    return assignments.find(a => a.id === id) || null;
-  },
-
-  create: (assignment: Partial<Assignment>): Assignment => {
-    const assignments = assignmentService.getAll();
-    const newAssignment: Assignment = {
-      id: assignment.id || generateId(),
-      title: assignment.title || '',
-      description: assignment.description || '',
-      subject: assignment.subject || '',
-      class: assignment.class || '',
-      section: assignment.section || '',
-      assignedBy: assignment.assignedBy || '',
-      assignedDate: assignment.assignedDate || new Date().toISOString().split('T')[0],
-      dueDate: assignment.dueDate || '',
-      totalMarks: assignment.totalMarks || 0,
-      attachments: assignment.attachments || [],
-      status: assignment.status || 'active',
-    };
-
-    assignments.push(newAssignment);
-    localStorage.setItem('app_assignments', JSON.stringify(assignments));
-
-    // Notify students
-    const students = studentService.getByClass(newAssignment.class, newAssignment.section);
-    students.forEach(student => {
-      if (student.parentId) {
-        notificationService.create({
-          userId: student.parentId,
-          type: 'assignment',
-          title: 'New Assignment Posted',
-          message: `${newAssignment.subject}: ${newAssignment.title}. Due date: ${newAssignment.dueDate}`,
-          date: newAssignment.assignedDate,
-        });
-      }
-    });
-
-    return newAssignment;
-  },
-};
-
-export const assignmentSubmissionService = {
-  getAll: (): AssignmentSubmission[] => {
-    const data = localStorage.getItem('app_assignment_submissions');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByAssignment: (assignmentId: string): AssignmentSubmission[] => {
-    const submissions = assignmentSubmissionService.getAll();
-    return submissions.filter(s => s.assignmentId === assignmentId);
-  },
-
-  getByStudent: (studentId: string): AssignmentSubmission[] => {
-    const submissions = assignmentSubmissionService.getAll();
-    return submissions.filter(s => s.studentId === studentId)
-      .sort((a, b) => new Date(b.submittedDate).getTime() - new Date(a.submittedDate).getTime());
-  },
-
-  submit: (submission: Partial<AssignmentSubmission>): AssignmentSubmission => {
-    const submissions = assignmentSubmissionService.getAll();
-    const newSubmission: AssignmentSubmission = {
-      id: submission.id || generateId(),
-      assignmentId: submission.assignmentId || '',
-      studentId: submission.studentId || '',
-      submittedDate: submission.submittedDate || new Date().toISOString().split('T')[0],
-      files: submission.files || [],
-      remarks: submission.remarks,
-      status: 'submitted',
-    };
-
-    submissions.push(newSubmission);
-    localStorage.setItem('app_assignment_submissions', JSON.stringify(submissions));
-    return newSubmission;
-  },
-
-  grade: (id: string, marksObtained: number, feedback: string, gradedBy: string): AssignmentSubmission | null => {
-    const submissions = assignmentSubmissionService.getAll();
-    const index = submissions.findIndex(s => s.id === id);
-    if (index === -1) return null;
-
-    submissions[index] = {
-      ...submissions[index],
-      marksObtained,
-      feedback,
-      gradedBy,
-      gradedDate: new Date().toISOString().split('T')[0],
-      status: 'graded',
-    };
-
-    localStorage.setItem('app_assignment_submissions', JSON.stringify(submissions));
-
-    // Notify parent
-    const student = studentService.getById(submissions[index].studentId);
-    if (student?.parentId) {
-      notificationService.create({
-        userId: student.parentId,
-        type: 'assignment',
-        title: 'Assignment Graded',
-        message: `${student.name}'s assignment has been graded. Marks: ${marksObtained}`,
-        date: new Date().toISOString().split('T')[0],
-      });
-    }
-
-    return submissions[index];
-  },
-};
-
-export const examService = {
-  getAll: (): Exam[] => {
-    const data = localStorage.getItem('app_exams');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getUpcoming: (): Exam[] => {
-    const exams = examService.getAll();
-    const today = new Date().toISOString().split('T')[0];
-    return exams.filter(e => e.date >= today)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  },
-
-  getByClass: (className: string, section: string): Exam[] => {
-    const exams = examService.getAll();
-    return exams.filter(e => e.class === className && e.section === section);
-  },
-
-  create: (exam: Partial<Exam>): Exam => {
-    const exams = examService.getAll();
-    const newExam: Exam = {
-      id: exam.id || generateId(),
-      name: exam.name || '',
-      type: exam.type || 'unit-test',
-      subject: exam.subject || '',
-      class: exam.class || '',
-      section: exam.section || '',
-      date: exam.date || '',
-      duration: exam.duration || 60,
-      totalMarks: exam.totalMarks || 100,
-      passingMarks: exam.passingMarks || 40,
-      syllabus: exam.syllabus,
-    };
-
-    exams.push(newExam);
-    localStorage.setItem('app_exams', JSON.stringify(exams));
-    return newExam;
-  },
-};
-
-export const examResultService = {
-  getAll: (): ExamResult[] => {
-    const data = localStorage.getItem('app_exam_results');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByStudent: (studentId: string): ExamResult[] => {
-    const results = examResultService.getAll();
-    return results.filter(r => r.studentId === studentId);
-  },
-
-  getByExam: (examId: string): ExamResult[] => {
-    const results = examResultService.getAll();
-    return results.filter(r => r.examId === examId);
-  },
-
-  create: (result: Partial<ExamResult>): ExamResult => {
-    const results = examResultService.getAll();
-    const percentage = result.totalMarks ? Math.round(((result.marksObtained || 0) / result.totalMarks) * 100) : 0;
-    let grade = 'F';
-    if (percentage >= 90) grade = 'A+';
-    else if (percentage >= 80) grade = 'A';
-    else if (percentage >= 70) grade = 'B+';
-    else if (percentage >= 60) grade = 'B';
-    else if (percentage >= 50) grade = 'C';
-    else if (percentage >= 40) grade = 'D';
-
-    const newResult: ExamResult = {
-      id: result.id || generateId(),
-      examId: result.examId || '',
-      studentId: result.studentId || '',
-      marksObtained: result.marksObtained || 0,
-      totalMarks: result.totalMarks || 0,
-      percentage,
-      grade,
-      rank: result.rank,
-      remarks: result.remarks,
-    };
-
-    results.push(newResult);
-    localStorage.setItem('app_exam_results', JSON.stringify(results));
-    return newResult;
-  },
-};
-
-export const feeService = {
-  getAllStructures: (): FeeStructure[] => {
-    const data = localStorage.getItem('app_fee_structures');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getAllPayments: (): FeePayment[] => {
-    const data = localStorage.getItem('app_fee_payments');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getPaymentsByStudent: (studentId: string): FeePayment[] => {
-    const payments = feeService.getAllPayments();
-    return payments.filter(p => p.studentId === studentId)
-      .sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
-  },
-
-  createPayment: (payment: Partial<FeePayment>): FeePayment => {
-    const payments = feeService.getAllPayments();
-    const newPayment: FeePayment = {
-      id: payment.id || generateId(),
-      studentId: payment.studentId || '',
-      receiptNo: payment.receiptNo || `REC${new Date().getFullYear()}${String(payments.length + 1).padStart(4, '0')}`,
-      amount: payment.amount || 0,
-      paymentDate: payment.paymentDate || new Date().toISOString().split('T')[0],
-      paymentMode: payment.paymentMode || 'cash',
-      transactionId: payment.transactionId,
-      collectedBy: payment.collectedBy || '',
-      components: payment.components || [],
-      academicYear: payment.academicYear || '2024-2025',
-    };
-
-    payments.push(newPayment);
-    localStorage.setItem('app_fee_payments', JSON.stringify(payments));
-
-    // Notify parent
-    const student = studentService.getById(newPayment.studentId);
-    if (student?.parentId) {
-      notificationService.create({
-        userId: student.parentId,
-        type: 'fee',
-        title: 'Fee Payment Received',
-        message: `Payment of ₹${newPayment.amount} received. Receipt No: ${newPayment.receiptNo}`,
-        date: newPayment.paymentDate,
-      });
-    }
-
-    return newPayment;
-  },
-};
-
-export const announcementService = {
-  getAll: (): Announcement[] => {
-    const data = localStorage.getItem('app_announcements');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getActive: (): Announcement[] => {
-    const announcements = announcementService.getAll();
-    const today = new Date().toISOString().split('T')[0];
-    return announcements.filter(a => !a.expiryDate || a.expiryDate >= today)
-      .sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
-  },
-
-  getForUser: (role: string, className?: string, section?: string): Announcement[] => {
-    const announcements = announcementService.getActive();
-    return announcements.filter(a => {
-      if (a.targetAudience === 'all') return true;
-      if (a.targetAudience === role + 's') return true;
-      if (a.targetAudience === 'specific-class' && a.class === className && a.section === section) return true;
-      return false;
-    });
-  },
-
-  create: (announcement: Partial<Announcement>): Announcement => {
-    const announcements = announcementService.getAll();
-    const newAnnouncement: Announcement = {
-      id: announcement.id || generateId(),
-      title: announcement.title || '',
-      message: announcement.message || '',
-      type: announcement.type || 'general',
-      postedBy: announcement.postedBy || '',
-      postedDate: announcement.postedDate || new Date().toISOString().split('T')[0],
-      targetAudience: announcement.targetAudience || 'all',
-      class: announcement.class,
-      section: announcement.section,
-      priority: announcement.priority || 'medium',
-      expiryDate: announcement.expiryDate,
-      attachments: announcement.attachments || [],
-    };
-
-    announcements.push(newAnnouncement);
-    localStorage.setItem('app_announcements', JSON.stringify(announcements));
-    return newAnnouncement;
-  },
-};
-
-export const enquiryService = {
-  getAll: (): Enquiry[] => {
-    const data = localStorage.getItem('app_enquiries');
-    return data ? JSON.parse(data) : [];
-  },
-
-  create: (enquiry: Partial<Enquiry>): Enquiry => {
-    const enquiries = enquiryService.getAll();
-    const newEnquiry: Enquiry = {
-      id: enquiry.id || generateId(),
-      parentName: enquiry.parentName || '',
-      studentName: enquiry.studentName || '',
-      phone: enquiry.phone || '',
-      email: enquiry.email || '',
-      classApplied: enquiry.classApplied || '',
-      enquiryDate: enquiry.enquiryDate || new Date().toISOString().split('T')[0],
-      source: enquiry.source || 'walk-in',
-      status: enquiry.status || 'new',
-      followUpDate: enquiry.followUpDate,
-      notes: enquiry.notes,
-      assignedTo: enquiry.assignedTo,
-    };
-
-    enquiries.push(newEnquiry);
-    localStorage.setItem('app_enquiries', JSON.stringify(enquiries));
-    return newEnquiry;
-  },
-
-  update: (id: string, updates: Partial<Enquiry>): Enquiry | null => {
-    const enquiries = enquiryService.getAll();
-    const index = enquiries.findIndex(e => e.id === id);
-    if (index === -1) return null;
-
-    enquiries[index] = { ...enquiries[index], ...updates };
-    localStorage.setItem('app_enquiries', JSON.stringify(enquiries));
-    return enquiries[index];
-  },
-};
-
-export const eventService = {
-  getAll: (): Event[] => {
-    const data = localStorage.getItem('app_events');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getUpcoming: (): Event[] => {
-    const events = eventService.getAll();
-    const today = new Date().toISOString().split('T')[0];
-    return events.filter(e => e.date >= today)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  },
-
-  create: (event: Partial<Event>): Event => {
-    const events = eventService.getAll();
-    const newEvent: Event = {
-      id: event.id || generateId(),
-      title: event.title || '',
-      description: event.description || '',
-      type: event.type || 'other',
-      date: event.date || '',
-      startTime: event.startTime,
-      endTime: event.endTime,
-      venue: event.venue,
-      organizer: event.organizer,
-      targetAudience: event.targetAudience || 'all',
-      class: event.class,
-      section: event.section,
-    };
-
-    events.push(newEvent);
-    localStorage.setItem('app_events', JSON.stringify(events));
-    return newEvent;
-  },
-};
-
-export const notificationService = {
-  getAll: (): Notification[] => {
-    const data = localStorage.getItem('app_notifications');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByUser: (userId: string): Notification[] => {
-    const notifications = notificationService.getAll();
-    return notifications.filter(n => n.userId === userId)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  },
-
-  getUnreadCount: (userId: string): number => {
-    const notifications = notificationService.getByUser(userId);
-    return notifications.filter(n => !n.read).length;
-  },
-
-  create: (notification: Partial<Notification>): Notification => {
-    const notifications = notificationService.getAll();
-    const newNotification: Notification = {
-      id: notification.id || generateId(),
-      userId: notification.userId || '',
-      type: notification.type || 'general',
-      title: notification.title || '',
-      message: notification.message || '',
-      date: notification.date || new Date().toISOString(),
-      read: notification.read || false,
-      link: notification.link,
-    };
-
-    notifications.push(newNotification);
-    localStorage.setItem('app_notifications', JSON.stringify(notifications));
-    return newNotification;
-  },
-
-  markAsRead: (id: string): void => {
-    const notifications = notificationService.getAll();
-    const updated = notifications.map(n =>
-      n.id === id ? { ...n, read: true } : n
-    );
-    localStorage.setItem('app_notifications', JSON.stringify(updated));
-  },
-
-  markAllAsRead: (userId: string): void => {
-    const notifications = notificationService.getAll();
-    const updated = notifications.map(n =>
-      n.userId === userId ? { ...n, read: true } : n
-    );
-    localStorage.setItem('app_notifications', JSON.stringify(updated));
-  },
-};
-
-export const timetableService = {
-  getAll: (): TimetableSlot[] => {
-    const data = localStorage.getItem('app_timetable');
-    return data ? JSON.parse(data) : [];
-  },
-
-  getByClass: (className: string, section: string): TimetableSlot[] => {
-    const slots = timetableService.getAll();
-    return slots.filter(s => s.class === className && s.section === section)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-  },
-
-  getByTeacher: (teacherEmail: string): TimetableSlot[] => {
-    const slots = timetableService.getAll();
-    return slots.filter(s => s.teacherId === teacherEmail)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-  },
-
-  save: (slots: TimetableSlot[]): void => {
-    localStorage.setItem('app_timetable', JSON.stringify(slots));
-  },
-
-  updateSlot: (updatedSlot: TimetableSlot): void => {
-    const slots = timetableService.getAll();
-    const index = slots.findIndex(s => s.id === updatedSlot.id);
-    if (index !== -1) {
-      slots[index] = updatedSlot;
-    } else {
-      slots.push(updatedSlot);
-    }
-    timetableService.save(slots);
-  },
-
-  deleteSlot: (id: string): void => {
-    const slots = timetableService.getAll();
-    const filtered = slots.filter(s => s.id !== id);
-    timetableService.save(filtered);
-  }
-};
-
-// ==================== STATISTICS & ANALYTICS ====================
-
-export const statisticsService = {
-  getDashboardStats: () => {
-    const students = studentService.getAll();
-    const teachers = teacherService.getAll();
-    const today = new Date().toISOString().split('T')[0];
-    const attendance = attendanceService.getByDate(today);
-    const announcements = announcementService.getActive();
-
-    return {
-      totalStudents: students.length,
-      totalTeachers: teachers.length,
-      presentToday: attendance.filter(a => a.status === 'present').length,
-      absentToday: attendance.filter(a => a.status === 'absent').length,
-      activeAnnouncements: announcements.length,
-      attendancePercentage: attendance.length > 0
-        ? Math.round((attendance.filter(a => a.status === 'present').length / attendance.length) * 100)
-        : 0,
-    };
-  },
-
-  getStudentPerformance: (studentId: string) => {
-    const results = examResultService.getByStudent(studentId);
-    const submissions = assignmentSubmissionService.getByStudent(studentId);
-    const gradedSubmissions = submissions.filter(s => s.status === 'graded');
-
-    const totalExamMarks = results.reduce((sum, r) => sum + r.marksObtained, 0);
-    const totalExamMax = results.reduce((sum, r) => sum + r.totalMarks, 0);
-    const examPercentage = totalExamMax > 0 ? Math.round((totalExamMarks / totalExamMax) * 100) : 0;
-
-    const totalAssignmentMarks = gradedSubmissions.reduce((sum, s) => sum + (s.marksObtained || 0), 0);
-    const totalAssignmentMax = gradedSubmissions.length * 100; // Assuming 100 marks per assignment
-    const assignmentPercentage = totalAssignmentMax > 0 ? Math.round((totalAssignmentMarks / totalAssignmentMax) * 100) : 0;
-
-    return {
-      overallPercentage: Math.round((examPercentage + assignmentPercentage) / 2),
-      examPercentage,
-      assignmentPercentage,
-      totalExams: results.length,
-      totalAssignments: submissions.length,
-      gradedAssignments: gradedSubmissions.length,
-      pendingAssignments: submissions.filter(s => s.status === 'submitted').length,
-    };
-  },
-
-  getClassStatistics: (className: string, section: string) => {
-    const students = studentService.getByClass(className, section);
-    const today = new Date().toISOString().split('T')[0];
-    const attendance = attendanceService.getByClass(className, section, today);
-
-    return {
-      totalStudents: students.length,
-      presentToday: attendance.filter(a => a.status === 'present').length,
-      absentToday: attendance.filter(a => a.status === 'absent').length,
-      attendancePercentage: students.length > 0
-        ? Math.round((attendance.filter(a => a.status === 'present').length / students.length) * 100)
-        : 0,
-    };
-  },
-};
-
-// Export all services
+// Default export â€” same shape as before
 export default {
   user: userService,
   school: schoolService,
@@ -1613,55 +365,9 @@ export default {
   notification: notificationService,
   timetable: timetableService,
   statistics: statisticsService,
-};
-import { 
-  quizzesStore, 
-  quizResultsStore, 
-  studentsStore 
-} from './dataStore';
-
-export const quizService = {
-  getAllQuizzes: () => quizzesStore.getAll(),
-  getQuizzesByClass: (className: string, section: string) => quizzesStore.getByClass(className, section),
-  getQuizById: (id: string) => quizzesStore.getById(id),
-  
-  getResultsByQuiz: (quizId: string) => quizResultsStore.getAll().filter(r => r.quizId === quizId),
-  getResultsByStudent: (studentId: string) => quizResultsStore.getAll().filter(r => r.studentId === studentId),
-  
-  getTeacherClasses: (teacherEmail: string) => teacherService.getByEmail(teacherEmail)?.classes || [],
-  
-  getClassPerformance: (className: string, section: string, subject?: string) => {
-    const students = studentsStore.getByClass(className, section);
-    let quizzes = quizzesStore.getByClass(className, section);
-    if (subject) {
-      quizzes = quizzes.filter(q => q.subject === subject);
-    }
-    const results = quizResultsStore.getAll();
-    
-    return students.map(student => {
-      const quizIds = quizzes.map(q => q.id);
-      const studentResults = results.filter(r => r.studentId === student.id && quizIds.includes(r.quizId));
-      return {
-        studentId: student.id,
-        name: student.name,
-        rollNo: student.rollNo,
-        totalQuizzes: quizzes.length,
-        completedQuizzes: studentResults.length,
-        averageScore: studentResults.length > 0 
-          ? Math.round(studentResults.reduce((sum, r) => sum + (r.score / r.total) * 100, 0) / studentResults.length)
-          : 0,
-        results: studentResults
-      };
-    });
-  },
-
-  getTeacherLeaderboard: () => {
-    // Mock leaderboard data based on the requirements
-    return [
-      { id: '1', name: 'John Teacher', score: 92, engagement: 95, subject: 'Mathematics' },
-      { id: '2', name: 'Sarah Johnson', score: 88, engagement: 92, subject: 'English' },
-      { id: '3', name: 'Anjali Verma', score: 85, engagement: 88, subject: 'Science' },
-      { id: '4', name: 'Emily Davis', score: 82, engagement: 90, subject: 'History' },
-    ];
-  }
+  schoolSettings: schoolSettingsService,
+  academicYear: academicYearService,
+  studentEnrollment: studentEnrollmentService,
+  feeInvoice: feeInvoiceService,
+  auditLog: auditLogService,
 };

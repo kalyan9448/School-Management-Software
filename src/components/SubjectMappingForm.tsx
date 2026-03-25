@@ -1,6 +1,6 @@
 import { ArrowLeft, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { Teacher } from './TeachersData';
+import { Teacher, teacherService } from '../utils/centralDataService';
 import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
 
 export interface SubjectMapping {
@@ -39,11 +39,15 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
     const [teachers, setTeachers] = useState<Teacher[]>([]);
 
     useEffect(() => {
-        // Load dynamic teachers
-        const storedTeachers = localStorage.getItem('school_teachers');
-        if (storedTeachers) {
-            setTeachers(JSON.parse(storedTeachers));
-        }
+        const loadTeachers = async () => {
+            try {
+                const data = await teacherService.getAll();
+                setTeachers(data);
+            } catch (err) {
+                console.error('Failed to load teachers:', err);
+            }
+        };
+        loadTeachers();
     }, []);
 
     const classes = getUniqueClasses();

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   User,
@@ -25,22 +25,31 @@ import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/student/ui/avatar";
 import { Progress } from "@/components/student/ui/progress";
-import { studentData as _fallback } from "@/data/studentMockData";
 import { useNavigate } from "react-router";
-import { StudentProfile } from "@/services/student/studentDataService";
+import { StudentProfile, SkillsData } from "@/services/student/studentDataService";
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const studentData = StudentProfile.get();
+  const [studentData, setStudentData] = useState<any>({ name: "", grade: "", email: "" });
   const [isEditing, setIsEditing] = useState(false);
   const [showAddSkill, setShowAddSkill] = useState(false);
   const [newSkill, setNewSkill] = useState("");
 
-  // Load skills from localStorage
-  const [skills, setSkills] = useState<string[]>(() => {
-    const savedSkills = localStorage.getItem("student_skills");
-    return savedSkills ? JSON.parse(savedSkills) : ["Mathematics", "Physics"];
-  });
+  // Load skills from Firestore
+  const [skills, setSkills] = useState<string[]>(["Mathematics", "Physics"]);
+
+  useEffect(() => {
+    (async () => {
+      const [profile, skillsArr] = await Promise.all([
+        StudentProfile.get(),
+        SkillsData.getAll(),
+      ]);
+      setStudentData(profile);
+      if (skillsArr.length > 0) {
+        setSkills(skillsArr.map((s: any) => s.skill || s));
+      }
+    })();
+  }, []);
 
   // Suggested skills based on profile
   const suggestedSkills = [
@@ -56,10 +65,9 @@ export function ProfilePage() {
     "Literature",
   ].filter((skill) => !skills.includes(skill));
 
-  // Save skills to localStorage whenever they change
+  // Save skills whenever they change
   const saveSkills = (updatedSkills: string[]) => {
     setSkills(updatedSkills);
-    localStorage.setItem("student_skills", JSON.stringify(updatedSkills));
   };
 
   const handleAddSkill = (skill: string) => {

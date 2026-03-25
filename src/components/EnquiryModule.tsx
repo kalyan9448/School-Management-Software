@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List, Trash2 } from 'lucide-react';
-import { enquiryAPI } from '../utils/api';
+import { enquiryService } from '../utils/centralDataService';
 import { getUniqueClasses } from '../utils/classUtils';
 
 interface Enquiry {
@@ -36,58 +36,10 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
   const loadEnquiries = async () => {
     try {
       setLoading(true);
-      const response = await enquiryAPI.getAll() as any;
-      setEnquiries(response.enquiries || []);
+      const data = await enquiryService.getAll();
+      setEnquiries(data || []);
     } catch (error) {
       console.error('Failed to load enquiries:', error);
-
-      // Load from localStorage first, then fallback to demo data
-      const localData = localStorage.getItem('enquiries_demo_data');
-      if (localData) {
-        setEnquiries(JSON.parse(localData));
-      } else {
-        const demoEnquiries: Enquiry[] = [
-          {
-            id: '1',
-            parentName: 'Mrs. Meera Kapoor',
-            phone: '+91 98765 11111',
-            email: 'meera.kapoor@email.com',
-            childName: 'Riya Kapoor',
-            classInterest: 'Nursery',
-            enquiryDate: '2024-02-10',
-            followUpDate: '2024-02-20',
-            status: 'pending',
-            notes: 'Interested in full-day program',
-          },
-          {
-            id: '2',
-            parentName: 'Mr. Anil Verma',
-            phone: '+91 98765 22222',
-            email: 'anil.verma@email.com',
-            childName: 'Arnav Verma',
-            classInterest: 'LKG',
-            enquiryDate: '2024-02-12',
-            followUpDate: '2024-02-18',
-            status: 'followed-up',
-            notes: 'Looking for transport facility',
-          },
-          {
-            id: '3',
-            parentName: 'Mrs. Sneha Reddy',
-            phone: '+91 98765 33333',
-            email: 'sneha.reddy@email.com',
-            childName: 'Anika Reddy',
-            classInterest: 'UKG',
-            enquiryDate: '2024-02-15',
-            followUpDate: '2024-02-19',
-            status: 'converted',
-            notes: 'Admission confirmed',
-          },
-        ];
-
-        setEnquiries(demoEnquiries);
-        localStorage.setItem('enquiries_demo_data', JSON.stringify(demoEnquiries));
-      }
     } finally {
       setLoading(false);
     }
@@ -132,22 +84,12 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const isDemoMode = !await checkBackendStatus();
-
-      if (isDemoMode) {
-        const newEnquiry: Enquiry = {
-          id: `${Date.now()}`,
-          ...formData,
-          enquiryDate: new Date().toISOString().split('T')[0],
-          status: 'pending' as const,
-        };
-        const updatedEnquiries = [...enquiries, newEnquiry];
-        setEnquiries(updatedEnquiries);
-        localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
-      } else {
-        await enquiryAPI.create(formData);
-        await loadEnquiries(); // Reload data from backend
-      }
+      await enquiryService.create({
+        ...formData,
+        enquiryDate: new Date().toISOString().split('T')[0],
+        status: 'pending' as const,
+      });
+      await loadEnquiries();
 
       setFormData({
         parentName: '',
@@ -166,28 +108,25 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
     }
   };
 
-  const checkBackendStatus = async () => {
+  const handleStatusChange = async (id: string, newStatus: Enquiry['status']) => {
     try {
-      await enquiryAPI.getAll();
-      return true;
-    } catch {
-      return false;
+      await enquiryService.update(id, { status: newStatus });
+      setEnquiries(prev => prev.map(e =>
+        e.id === id ? { ...e, status: newStatus } : e
+      ));
+    } catch (error) {
+      console.error('Failed to update enquiry status:', error);
     }
   };
 
-  const handleStatusChange = (id: string, newStatus: Enquiry['status']) => {
-    const updatedEnquiries = enquiries.map(e =>
-      e.id === id ? { ...e, status: newStatus } : e
-    );
-    setEnquiries(updatedEnquiries);
-    localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
-  };
-
-  const handleDeleteEnquiry = (id: string) => {
+  const handleDeleteEnquiry = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this enquiry? This action cannot be undone.')) {
-      const updatedEnquiries = enquiries.filter(e => e.id !== id);
-      setEnquiries(updatedEnquiries);
-      localStorage.setItem('enquiries_demo_data', JSON.stringify(updatedEnquiries));
+      try {
+        await enquiryService.delete(id);
+        setEnquiries(prev => prev.filter(e => e.id !== id));
+      } catch (error) {
+        console.error('Failed to delete enquiry:', error);
+      }
     }
   };
 

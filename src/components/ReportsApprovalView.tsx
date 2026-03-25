@@ -15,55 +15,39 @@ export function ReportsApprovalView() {
     format: 'PDF'
   });
 
-  // Load everything on mount
+  // Initialize with default data (no persistence until Firestore collection is set up)
   useEffect(() => {
-    // 1. Scheduled Reports
-    const savedScheduled = localStorage.getItem('school_reports_scheduled');
-    if (savedScheduled) {
-      setScheduledReports(JSON.parse(savedScheduled));
-    } else {
-      const defaultScheduled = [
-        {
-          id: '1',
-          name: 'Weekly Attendance Summary',
-          type: 'Attendance',
-          frequency: 'Weekly - Every Monday',
-          recipients: 'Admin, Academic Head',
-          nextRun: '2024-02-26',
-          status: 'active',
-        },
-        {
-          id: '2',
-          name: 'Monthly Fee Collection',
-          type: 'Fee Collection',
-          frequency: 'Monthly - 1st of month',
-          recipients: 'Admin, Accountant',
-          nextRun: '2024-03-01',
-          status: 'active',
-        }
-      ];
-      setScheduledReports(defaultScheduled);
-      localStorage.setItem('school_reports_scheduled', JSON.stringify(defaultScheduled));
-    }
+    setScheduledReports([
+      {
+        id: '1',
+        name: 'Weekly Attendance Summary',
+        type: 'Attendance',
+        frequency: 'Weekly - Every Monday',
+        recipients: 'Admin, Academic Head',
+        nextRun: '2024-02-26',
+        status: 'active',
+      },
+      {
+        id: '2',
+        name: 'Monthly Fee Collection',
+        type: 'Fee Collection',
+        frequency: 'Monthly - 1st of month',
+        recipients: 'Admin, Accountant',
+        nextRun: '2024-03-01',
+        status: 'active',
+      }
+    ]);
 
-    // 3. Recent Reports
-    const savedRecent = localStorage.getItem('school_reports_recent');
-    if (savedRecent) {
-      setRecentReports(JSON.parse(savedRecent));
-    } else {
-      const defaultRecent = [
-        {
-          id: '1',
-          name: 'January Attendance Summary',
-          type: 'Attendance',
-          generatedOn: '2024-02-01',
-          format: 'PDF',
-          size: '2.3 MB',
-        }
-      ];
-      setRecentReports(defaultRecent);
-      localStorage.setItem('school_reports_recent', JSON.stringify(defaultRecent));
-    }
+    setRecentReports([
+      {
+        id: '1',
+        name: 'January Attendance Summary',
+        type: 'Attendance',
+        generatedOn: '2024-02-01',
+        format: 'PDF',
+        size: '2.3 MB',
+      }
+    ]);
   }, []);
 
   const toggleReportStatus = (id: string) => {
@@ -71,7 +55,6 @@ export function ReportsApprovalView() {
       r.id === id ? { ...r, status: r.status === 'active' ? 'paused' : 'active' } : r
     );
     setScheduledReports(updated);
-    localStorage.setItem('school_reports_scheduled', JSON.stringify(updated));
   };
 
   const handleGenerateReport = () => {
@@ -94,7 +77,6 @@ export function ReportsApprovalView() {
 
       const updated = [newReport, ...recentReports];
       setRecentReports(updated);
-      localStorage.setItem('school_reports_recent', JSON.stringify(updated));
       setShowReportBuilder(false);
       alert('Custom report generated successfully!');
     }, 2000);

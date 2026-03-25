@@ -1,6 +1,7 @@
-// Reminder Engine - Automatically generates notifications based on homework, calendar events, and deadlines
+// Reminder Engine — Firestore-backed
+// Generates notifications from Firestore student data (calendar events, classes, homework)
 
-import { calendarEvents, todaysClasses } from "@/data/studentMockData";
+import { NotificationService, TodaysClasses, CalendarService, HomeworkService } from "./studentDataService";
 
 export interface Notification {
   id: number;
@@ -17,54 +18,33 @@ export interface Notification {
 
 // Generate unique ID
 let notificationIdCounter = 1000;
+const generateId = () => ++notificationIdCounter;
 
-const generateId = () => {
-  notificationIdCounter += 1;
-  return notificationIdCounter;
-};
-
-// Get date strings
-const getTodayString = () => {
-  const today = new Date();
-  return today.toISOString().split("T")[0];
-};
-
-const getTomorrowString = () => {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return tomorrow.toISOString().split("T")[0];
-};
-
-const getDateString = (date: Date) => {
-  return date.toISOString().split("T")[0];
-};
+const getTodayString = () => new Date().toISOString().split("T")[0];
 
 const getDaysUntil = (dateStr: string): number => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const target = new Date(dateStr);
-  const diff = target.getTime() - today.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-/** Returns ISO timestamp for today at the given hour:minute */
 const todayAt = (hour: number, minute = 0): string => {
   const d = new Date();
   d.setHours(hour, minute, 0, 0);
   return d.toISOString();
 };
 
-// Generate homework reminders from todaysClasses
-export const generateHomeworkReminders = (): Notification[] => {
+// Generate homework reminders from Firestore classes
+export const generateHomeworkReminders = async (): Promise<Notification[]> => {
   const reminders: Notification[] = [];
-  const today = getTodayString();
+  const classes = await TodaysClasses.getAll();
+  const hwTopics = await HomeworkService.getAll();
 
-  todaysClasses.forEach((classItem) => {
-    // Check if homework is pending
-    const homeworkKey = `homework_${classItem.id}_status`;
-    const homeworkStatus = localStorage.getItem(homeworkKey) || "pending";
-
-    if (homeworkStatus === "pending") {
+  classes.forEach((classItem: any) => {
+    // Check if any homework for this class is pending
+    const topic = hwTopics.find((t: any) => t.subject === classItem.subject);
+    if (topic && topic.status === "pending") {
       reminders.push({
         id: generateId(),
         type: "homework",
@@ -73,18 +53,17 @@ export const generateHomeworkReminders = (): Notification[] => {
         timestamp: todayAt(8, 0),
         read: false,
         priority: "high",
-        actionUrl: `/homework/${classItem.id}`,
+        actionUrl: `/homework/${topic.id}`,
         icon: "📚",
       });
     }
 
-    // Morning reminder for today's classes
     if (classItem.status === "upcoming") {
       reminders.push({
         id: generateId(),
         type: "reminder",
         title: `Upcoming Class: ${classItem.subject}`,
-        message: `Your ${classItem.subject} class with ${classItem.teacher} starts at ${classItem.time}. Topic: ${classItem.topicDetails?.mainTopic || classItem.topics?.[0]}`,
+        message: `Your ${classItem.subject} class with ${classItem.teacher} starts at ${classItem.time}.`,
         timestamp: todayAt(7, 30),
         read: false,
         priority: "medium",
@@ -98,76 +77,49 @@ export const generateHomeworkReminders = (): Notification[] => {
 };
 
 // Generate deadline reminders from calendar events
-export const generateDeadlineReminders = (): Notification[] => {
+export const generateDeadlineReminders = async (): Promise<Notification[]> => {
   const reminders: Notification[] = [];
-  const today = getTodayString();
-  const tomorrow = getTomorrowString();
+  const calendarEvents = await CalendarService.getAll();
 
-  calendarEvents.forEach((event) => {
+  calendarEvents.forEach((event: any) => {
     const daysUntil = getDaysUntil(event.date);
+    if (daysUntil < 0 || daysUntil > 7) return;
 
-    // Only create reminders for future events (within next 7 days)
-    if (daysUntil >= 0 && daysUntil <= 7) {
-      let priority: "high" | "medium" | "low" = "low";
-      let notificationType: "deadline" | "reminder" = "reminder";
+    let priority: "high" | "medium" | "low" = "low";
+    let notificationType: "deadline" | "reminder" = "reminder";
 
-      if (event.type === "exam") {
-        priority = daysUntil <= 2 ? "high" : "medium";
-        notificationType = "deadline";
-      } else if (event.type === "assignment" || event.type === "homework") {
-        priority = daysUntil <= 1 ? "high" : daysUntil <= 3 ? "medium" : "low";
-        notificationType = "deadline";
-      }
+    if (event.type === "exam") {
+      priority = daysUntil <= 2 ? "high" : "medium";
+      notificationType = "deadline";
+    } else if (event.type === "assignment" || event.type === "homework") {
+      priority = daysUntil <= 1 ? "high" : daysUntil <= 3 ? "medium" : "low";
+      notificationType = "deadline";
+    }
 
-      if (daysUntil === 0) {
-        reminders.push({
-          id: generateId(),
-          type: notificationType,
-          title: `Today: ${event.title}`,
-          message: `${event.description}${event.startTime ? ` at ${event.startTime}` : ""}${event.location ? ` in ${event.location}` : ""}`,
-          timestamp: todayAt(6, 0),
-          read: false,
-          priority: priority,
-          actionUrl: event.actionUrl || "/schedule",
-          icon: event.type === "exam" ? "📝" : event.type === "assignment" ? "📋" : "📅",
-        });
-      } else if (daysUntil === 1) {
-        reminders.push({
-          id: generateId(),
-          type: notificationType,
-          title: `Tomorrow: ${event.title}`,
-          message: `Don't forget! ${event.description}${event.startTime ? ` at ${event.startTime}` : ""}`,
-          timestamp: todayAt(18, 0),
-          read: false,
-          priority: priority,
-          actionUrl: event.actionUrl || "/schedule",
-          icon: event.type === "exam" ? "⚠️" : "🔔",
-        });
-      } else if (daysUntil === 3 && event.type === "exam") {
-        reminders.push({
-          id: generateId(),
-          type: "reminder",
-          title: `Exam in 3 Days: ${event.title}`,
-          message: `Start preparing! ${event.description} is coming up on ${new Date(event.date).toLocaleDateString()}.`,
-          timestamp: todayAt(12, 0),
-          read: false,
-          priority: "medium",
-          actionUrl: event.actionUrl || "/schedule",
-          icon: "📖",
-        });
-      } else if (daysUntil === 7 && event.type === "exam") {
-        reminders.push({
-          id: generateId(),
-          type: "reminder",
-          title: `Exam Next Week: ${event.title}`,
-          message: `Advance notice: ${event.description} is scheduled for ${new Date(event.date).toLocaleDateString()}.`,
-          timestamp: todayAt(9, 0),
-          read: false,
-          priority: "low",
-          actionUrl: event.actionUrl || "/schedule",
-          icon: "📅",
-        });
-      }
+    if (daysUntil === 0) {
+      reminders.push({
+        id: generateId(),
+        type: notificationType,
+        title: `Today: ${event.title}`,
+        message: `${event.description}${event.startTime ? ` at ${event.startTime}` : ""}${event.location ? ` in ${event.location}` : ""}`,
+        timestamp: todayAt(6, 0),
+        read: false,
+        priority,
+        actionUrl: event.actionUrl || "/schedule",
+        icon: event.type === "exam" ? "📝" : "📅",
+      });
+    } else if (daysUntil === 1) {
+      reminders.push({
+        id: generateId(),
+        type: notificationType,
+        title: `Tomorrow: ${event.title}`,
+        message: `Don't forget! ${event.description}`,
+        timestamp: todayAt(18, 0),
+        read: false,
+        priority,
+        actionUrl: event.actionUrl || "/schedule",
+        icon: event.type === "exam" ? "⚠️" : "🔔",
+      });
     }
   });
 
@@ -175,15 +127,15 @@ export const generateDeadlineReminders = (): Notification[] => {
 };
 
 // Generate daily morning reminder
-export const generateDailyReminder = (): Notification => {
-  const todayEvents = calendarEvents.filter((e) => e.date === getTodayString());
-  const eventCount = todayEvents.length;
+export const generateDailyReminder = async (): Promise<Notification> => {
+  const calendarEvents = await CalendarService.getAll();
+  const todayEvents = calendarEvents.filter((e: any) => e.date === getTodayString());
 
   return {
     id: generateId(),
     type: "reminder",
     title: "Good Morning! Ready for Today?",
-    message: `You have ${eventCount} event${eventCount !== 1 ? "s" : ""} scheduled today. Check your schedule and complete your homework!`,
+    message: `You have ${todayEvents.length} event${todayEvents.length !== 1 ? "s" : ""} scheduled today.`,
     timestamp: todayAt(7, 0),
     read: false,
     priority: "medium",
@@ -192,152 +144,49 @@ export const generateDailyReminder = (): Notification => {
   };
 };
 
-// Generate evening reminder for incomplete homework
-export const generateEveningReminder = (): Notification[] => {
-  const reminders: Notification[] = [];
-  const incompleteCount = todaysClasses.filter((c) => {
-    const status = localStorage.getItem(`homework_${c.id}_status`) || "pending";
-    return status === "pending" || status === "in-progress";
-  }).length;
-
-  if (incompleteCount > 0) {
-    reminders.push({
-      id: generateId(),
-      type: "reminder",
-      title: "Evening Check-in",
-      message: `You still have ${incompleteCount} incomplete homework assignment${incompleteCount !== 1 ? "s" : ""}. Complete them before midnight!`,
-      timestamp: todayAt(20, 0),
-      read: false,
-      priority: "high",
-      actionUrl: "/homework",
-      icon: "🌙",
-    });
-  }
-
-  return reminders;
-};
-
-
-// Generate weekly summary notification
-export const generateWeeklySummary = (): Notification => {
-  return {
-    id: generateId(),
-    type: "announcement",
-    title: "📊 Weekly Summary Ready",
-    message: "Your weekly performance report is ready! See how you did this week and get personalized recommendations.",
-    timestamp: todayAt(10, 0),
-    read: false,
-    priority: "low",
-    actionUrl: "/analytics",
-    icon: "📊",
-  };
-};
-
 // Generate all smart reminders
-export const generateAllReminders = (): Notification[] => {
-  const allReminders: Notification[] = [];
-
-  // Add daily morning reminder
-  allReminders.push(generateDailyReminder());
-
-  // Add homework reminders
-  allReminders.push(...generateHomeworkReminders());
-
-  // Add deadline reminders from calendar
-  allReminders.push(...generateDeadlineReminders());
-
-  // Add evening reminders
-  allReminders.push(...generateEveningReminder());
-
-
-  // Add weekly summary
-  allReminders.push(generateWeeklySummary());
-
-  // Sort by timestamp (newest first)
-  return allReminders.sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
+export const generateAllReminders = async (): Promise<Notification[]> => {
+  const [daily, homework, deadline] = await Promise.all([
+    generateDailyReminder(),
+    generateHomeworkReminders(),
+    generateDeadlineReminders(),
+  ]);
+  const all = [daily, ...homework, ...deadline];
+  return all.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 };
 
-// Check and update reminders (call this on app load)
-export const updateReminders = (): Notification[] => {
-  const existingNotifications = localStorage.getItem("student_notifications");
-  const existing: Notification[] = existingNotifications
-    ? JSON.parse(existingNotifications)
-    : [];
+// Check and update reminders — merges engine-generated with stored (preserves read)
+export const updateReminders = async (): Promise<Notification[]> => {
+  const existing = await NotificationService.getAll();
+  const newReminders = await generateAllReminders();
 
-  // Generate new reminders
-  const newReminders = generateAllReminders();
+  const existingKeys = new Set(existing.map(n => `${n.type}_${n.title}`));
+  const unique = newReminders.filter(n => !existingKeys.has(`${n.type}_${n.title}`));
 
-  // Merge: Keep existing (preserve read status), add new unique ones
-  const existingIds = new Set(existing.map((n) => `${n.type}_${n.title}`));
-  const uniqueNewReminders = newReminders.filter(
-    (n) => !existingIds.has(`${n.type}_${n.title}`)
-  );
-
-  // Combine and sort
-  const combined = [...existing, ...uniqueNewReminders].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-
-  // Save back to localStorage
-  localStorage.setItem("student_notifications", JSON.stringify(combined));
-
-  return combined;
-};
-
-// Initialize reminders on first load
-export const initializeReminders = () => {
-  const hasInitialized = localStorage.getItem("reminders_initialized");
-  // Always regenerate if stored data has stale (pre-2026-03) timestamps
-  const storedData = localStorage.getItem("student_notifications");
-  const isStale = storedData && storedData.includes("2026-02-2");
-
-  if (!hasInitialized || isStale) {
-    // First time or stale data - generate all reminders fresh
-    const reminders = generateAllReminders();
-    localStorage.setItem("student_notifications", JSON.stringify(reminders));
-    localStorage.setItem("reminders_initialized", "true");
-    localStorage.setItem("last_reminder_check", new Date().toISOString());
-    return reminders;
-  } else {
-    // Check if we need to update (once per day)
-    const lastCheck = localStorage.getItem("last_reminder_check");
-    const now = new Date();
-
-    if (!lastCheck || isNewDay(new Date(lastCheck), now)) {
-      const updated = updateReminders();
-      localStorage.setItem("last_reminder_check", now.toISOString());
-      return updated;
+  if (unique.length > 0) {
+    // Add each new notification via the service (persists to Firestore)
+    for (const n of unique) {
+      await NotificationService.add(n);
     }
   }
 
-  const existing = localStorage.getItem("student_notifications");
-  return existing ? JSON.parse(existing) : [];
+  return NotificationService.getAll();
 };
 
-// Helper to check if it's a new day
-const isNewDay = (lastDate: Date, currentDate: Date): boolean => {
-  return (
-    lastDate.getDate() !== currentDate.getDate() ||
-    lastDate.getMonth() !== currentDate.getMonth() ||
-    lastDate.getFullYear() !== currentDate.getFullYear()
-  );
+// Initialize reminders on first load
+export const initializeReminders = async (): Promise<Notification[]> => {
+  return updateReminders();
 };
 
-// Add a new reminder manually (for testing or manual creation)
-export const addReminder = (
+// Add a new reminder manually
+export const addReminder = async (
   type: Notification["type"],
   title: string,
   message: string,
   priority: "high" | "medium" | "low",
   actionUrl?: string
-): void => {
-  const notifications = localStorage.getItem("student_notifications");
-  const existing: Notification[] = notifications ? JSON.parse(notifications) : [];
-
-  const newNotification: Notification = {
-    id: generateId(),
+): Promise<void> => {
+  await NotificationService.add({
     type,
     title,
     message,
@@ -346,24 +195,18 @@ export const addReminder = (
     priority,
     actionUrl,
     icon: type === "homework" ? "📚" : type === "deadline" ? "⏰" : "🔔",
-  };
-
-  existing.unshift(newNotification);
-  localStorage.setItem("student_notifications", JSON.stringify(existing));
+  } as Omit<Notification, "id">);
 };
 
 // Clear old notifications (older than 30 days)
-export const clearOldNotifications = (): void => {
-  const notifications = localStorage.getItem("student_notifications");
-  if (!notifications) return;
-
-  const existing: Notification[] = JSON.parse(notifications);
+export const clearOldNotifications = async (): Promise<void> => {
+  const all = await NotificationService.getAll();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const filtered = existing.filter(
-    (n) => new Date(n.timestamp) > thirtyDaysAgo
-  );
-
-  localStorage.setItem("student_notifications", JSON.stringify(filtered));
+  for (const n of all) {
+    if (new Date(n.timestamp) < thirtyDaysAgo) {
+      await NotificationService.delete(n.id);
+    }
+  }
 };

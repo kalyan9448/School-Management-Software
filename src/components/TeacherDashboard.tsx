@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Calendar, FileText, LogOut, Bell } from 'lucide-react';
 import logoImage from '../assets/logo.png';
 import { AttendanceMarking } from './AttendanceMarking';
 import { ClassView } from './ClassView';
+import { classService, timetableService, notificationService } from '../utils/centralDataService';
 
 type ViewType = 'dashboard' | 'attendance' | 'classView';
 
@@ -14,21 +15,47 @@ interface ClassInfo {
   students: number;
 }
 
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 export function TeacherDashboard() {
   const { user, logout } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
+  const [myClasses, setMyClasses] = useState<ClassInfo[]>([]);
+  const [todaySchedule, setTodaySchedule] = useState<{ time: string; class: string; subject: string }[]>([]);
+  const [notificationCount, setNotificationCount] = useState(0);
 
-  const myClasses = [
-    { class: '6', section: 'A', subject: 'Mathematics', students: 35 },
-    { class: '7', section: 'B', subject: 'Mathematics', students: 32 },
-  ];
+  useEffect(() => {
+    const load = async () => {
+      const [allClasses, allSlots, notifications] = await Promise.all([
+        classService.getAll(),
+        timetableService.getAll(),
+        user?.id ? notificationService.getByUser(user.id) : Promise.resolve([]),
+      ]);
 
-  const todaySchedule = [
-    { time: '09:00 AM', class: '6-A', subject: 'Mathematics' },
-    { time: '10:30 AM', class: '7-B', subject: 'Mathematics' },
-    { time: '12:00 PM', class: '6-A', subject: 'Mathematics' },
-  ];
+      const classes: ClassInfo[] = allClasses.map((c: any) => ({
+        class: c.name || c.class || '',
+        section: c.section || '',
+        subject: c.subject || '',
+        students: c.studentCount || 0,
+      }));
+      setMyClasses(classes);
+
+      const todayDay = DAYS[new Date().getDay()];
+      const schedule = allSlots
+        .filter((slot: any) => slot.day === todayDay)
+        .map((slot: any) => ({
+          time: slot.startTime || '',
+          class: `${slot.class || ''}-${slot.section || ''}`.replace(/^-|-$/g, ''),
+          subject: slot.subject || '',
+        }));
+      setTodaySchedule(schedule);
+
+      const unread = (notifications as any[]).filter((n: any) => !n.isRead);
+      setNotificationCount(unread.length);
+    };
+    load();
+  }, [user?.id]);
 
   const handleMarkAttendance = (classInfo: ClassInfo) => {
     setSelectedClass(classInfo);
@@ -111,7 +138,7 @@ export function TeacherDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <p className="text-gray-600 mb-1">Notifications</p>
-                <h2 className="text-gray-900">3</h2>
+                <h2 className="text-gray-900">{notificationCount}</h2>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                 <Bell className="w-6 h-6 text-red-600" />

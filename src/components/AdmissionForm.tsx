@@ -48,8 +48,9 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
   // Auto-suggest roll number when class, section or academic year changes
   useEffect(() => {
     if (!student && formData.classAllotted && formData.section && formData.academicYear) {
-      const nextRoll = studentService.getNextRollNumber(formData.classAllotted, formData.section, formData.academicYear);
-      setFormData(prev => ({ ...prev, rollNo: nextRoll }));
+      studentService.getNextRollNumber(formData.classAllotted, formData.section, formData.academicYear).then(nextRoll => {
+        setFormData(prev => ({ ...prev, rollNo: nextRoll }));
+      });
     }
   }, [formData.classAllotted, formData.section, formData.academicYear, student]);
 
@@ -73,11 +74,11 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     medicalCertificate: { name: 'Medical Certificate', file: null },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate Roll Number Uniqueness
-    const isUnique = studentService.isRollNumberUnique(
+    const isUnique = await studentService.isRollNumberUnique(
       formData.rollNo,
       formData.classAllotted || formData.classApplied,
       formData.section,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Mail, Phone, BookOpen, Calendar, User } from 'lucide-react';
-import { Teacher, initialTeachers } from './TeachersData';
+import { Teacher, teacherService } from '../utils/centralDataService';
 import { TeacherForm } from './TeacherForm';
 
 export function TeachersModule() {
@@ -8,28 +8,19 @@ export function TeachersModule() {
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Load teachers from localStorage or use initial data
   const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   useEffect(() => {
-    const loadTeachers = () => {
-      const storedTeachers = localStorage.getItem('school_teachers');
-      if (storedTeachers) {
-        setTeachers(JSON.parse(storedTeachers));
-      } else {
-        setTeachers(initialTeachers);
-        localStorage.setItem('school_teachers', JSON.stringify(initialTeachers));
+    const loadTeachers = async () => {
+      try {
+        const data = await teacherService.getAll();
+        setTeachers(data);
+      } catch (err) {
+        console.error('Failed to load teachers:', err);
       }
     };
     loadTeachers();
   }, []);
-
-  // Save teachers to localStorage whenever the array changes
-  useEffect(() => {
-    if (teachers.length > 0) {
-      localStorage.setItem('school_teachers', JSON.stringify(teachers));
-    }
-  }, [teachers]);
 
   const filteredTeachers = teachers.filter(teacher =>
     teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -37,9 +28,14 @@ export function TeachersModule() {
     teacher.subjects.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to remove this teacher?')) {
-      setTeachers(teachers.filter(t => t.id !== id));
+      try {
+        await teacherService.update(id, { status: 'inactive' as const });
+        setTeachers(teachers.filter(t => t.id !== id));
+      } catch (err) {
+        console.error('Failed to delete teacher:', err);
+      }
     }
   };
 
@@ -53,13 +49,17 @@ export function TeachersModule() {
     setView('form');
   };
 
-  const handleSaveTeacher = (teacherData: Teacher) => {
-    if (selectedTeacher) {
-      // Update existing
-      setTeachers(teachers.map(t => t.id === teacherData.id ? teacherData : t));
-    } else {
-      // Add new
-      setTeachers([...teachers, teacherData]);
+  const handleSaveTeacher = async (teacherData: Teacher) => {
+    try {
+      if (selectedTeacher) {
+        await teacherService.update(teacherData.id, teacherData);
+        setTeachers(teachers.map(t => t.id === teacherData.id ? teacherData : t));
+      } else {
+        const created = await teacherService.create(teacherData);
+        setTeachers([...teachers, { ...teacherData, id: created.id ?? teacherData.id }]);
+      }
+    } catch (err) {
+      console.error('Failed to save teacher:', err);
     }
     setView('list');
     setSelectedTeacher(null);

@@ -601,7 +601,7 @@ const handleCreate = () => {
 - [ ] Add real-time sync across dashboards
 
 ### Medium Term
-- [ ] Replace localStorage with Supabase
+- [ ] Replace localStorage with database backend
 - [ ] Add file upload for assignments
 - [ ] Add real-time notifications
 - [ ] Add chat/messaging system
