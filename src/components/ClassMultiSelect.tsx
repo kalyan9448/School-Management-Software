@@ -11,7 +11,10 @@ interface ClassMultiSelectProps {
 export function ClassMultiSelect({ value, onChange, required = false }: ClassMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { uniqueClasses: classOptions } = useAcademicClasses();
+  const { classSections } = useAcademicClasses();
+  const classOptions = classSections
+    .map((entry) => `${entry.className} - Sec ${entry.section}`)
+    .sort();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -104,13 +107,14 @@ export function ClassMultiSelect({ value, onChange, required = false }: ClassMul
         </div>
       )}
 
+      {classOptions.length === 0 && (
+        <div className="px-4 py-3 text-sm text-gray-500">No classes found in academic structure.</div>
+      )}
+
       {/* Hidden input for form validation */}
       <input
         type="text"
         required={required}
-          {classOptions.length === 0 && (
-            <div className="px-4 py-3 text-sm text-gray-500">No classes found in academic structure.</div>
-          )}
         value={value.join(', ')}
         onChange={() => {}}
         className="sr-only"

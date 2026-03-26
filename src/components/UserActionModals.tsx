@@ -1,5 +1,7 @@
 import { X } from 'lucide-react';
 
+const formatTeacherAssignment = (assignment: { class: string; section: string; subject: string }) => `${assignment.class} - Sec ${assignment.section} (${assignment.subject})`;
+
 interface ViewUserModalProps {
   user: any;
   userType: 'teacher' | 'student' | 'parent' | null;
@@ -44,7 +46,7 @@ export function ViewUserModal({ user, userType, onClose }: ViewUserModalProps) {
         </div>
         <div>
           <p className="text-sm text-gray-600 mb-1">Assigned Classes</p>
-          <p className="text-gray-900">{user.classes?.join(', ') || 'N/A'}</p>
+          <p className="text-gray-900">{user.classes?.map(formatTeacherAssignment).join(', ') || 'N/A'}</p>
         </div>
       </div>
     </div>

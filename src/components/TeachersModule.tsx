@@ -3,6 +3,8 @@ import { Plus, Search, Edit2, Trash2, Mail, Phone, BookOpen, Calendar, User } fr
 import { Teacher, teacherService } from '../utils/centralDataService';
 import { TeacherForm } from './TeacherForm';
 
+const formatTeacherClassAssignment = (assignment: Teacher['classes'][number]) => `${assignment.class} - Sec ${assignment.section} (${assignment.subject})`;
+
 export function TeachersModule() {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
@@ -227,7 +229,7 @@ export function TeachersModule() {
               <div className="flex flex-wrap gap-2">
                 {teacher.classes?.map((cls, index) => (
                   <span key={index} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                    {cls}
+                    {formatTeacherClassAssignment(cls)}
                   </span>
                 ))}
               </div>

@@ -1,5 +1,9 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
+import { ClassMultiSelect } from './ClassMultiSelect';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
+
+const formatClassSectionOption = (className: string, section: string) => `${className} - Sec ${section}`;
 
 export function AddUserModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
   const [formData, setFormData] = useState({
@@ -93,12 +97,12 @@ export function AddUserModal({ onClose, onSubmit }: { onClose: () => void; onSub
 }
 
 export function AddFeeHeadModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     feeHead: '',
     amount: '',
     frequency: 'monthly',
     mandatory: true,
-    classes: 'All Classes',
   });
 
   const handleSubmit = () => {
@@ -106,7 +110,11 @@ export function AddFeeHeadModal({ onClose, onSubmit }: { onClose: () => void; on
       alert('Please fill in all required fields');
       return;
     }
-    onSubmit({ ...formData, amount: parseFloat(formData.amount) });
+    onSubmit({
+      ...formData,
+      amount: parseFloat(formData.amount),
+      classes: selectedClasses.length > 0 ? selectedClasses : 'All Classes',
+    });
     onClose();
   };
 
@@ -165,13 +173,11 @@ export function AddFeeHeadModal({ onClose, onSubmit }: { onClose: () => void; on
           </div>
           <div>
             <label className="block text-gray-700 mb-2">Applicable Classes</label>
-            <input
-              type="text"
-              value={formData.classes}
-              onChange={(e) => setFormData({ ...formData, classes: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder="All Classes or specific classes"
+            <ClassMultiSelect
+              value={selectedClasses}
+              onChange={setSelectedClasses}
             />
+            <p className="mt-2 text-xs text-gray-500">Leave empty to apply this fee head to all classes.</p>
           </div>
         </div>
         <div className="p-6 border-t border-gray-200 flex gap-3">
@@ -276,21 +282,21 @@ export function AddSubjectMappingModal({
   onClose: () => void;
   onSubmit: (data: any) => void;
 }) {
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     teacherName: '',
     subject: '',
-    classes: '',
     periodsPerWeek: '',
   });
 
   const handleSubmit = () => {
-    if (!formData.teacherName || !formData.subject || !formData.classes || !formData.periodsPerWeek) {
+    if (!formData.teacherName || !formData.subject || selectedClasses.length === 0 || !formData.periodsPerWeek) {
       alert('Please fill in all required fields');
       return;
     }
     onSubmit({
       ...formData,
-      classes: formData.classes.split(',').map((c) => c.trim()),
+      classes: selectedClasses,
       periodsPerWeek: parseInt(formData.periodsPerWeek),
     });
     onClose();
@@ -327,13 +333,10 @@ export function AddSubjectMappingModal({
             />
           </div>
           <div>
-            <label className="block text-gray-700 mb-2">Classes (comma-separated) *</label>
-            <input
-              type="text"
-              value={formData.classes}
-              onChange={(e) => setFormData({ ...formData, classes: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder="e.g., Nursery-A, LKG-A, UKG-A"
+            <ClassMultiSelect
+              value={selectedClasses}
+              onChange={setSelectedClasses}
+              required
             />
           </div>
           <div>
@@ -373,6 +376,7 @@ export function AddDisciplineRecordModal({
   onClose: () => void;
   onSubmit: (data: any) => void;
 }) {
+  const { classSections } = useAcademicClasses();
   const [formData, setFormData] = useState({
     studentName: '',
     class: '',
@@ -419,13 +423,19 @@ export function AddDisciplineRecordModal({
           </div>
           <div>
             <label className="block text-gray-700 mb-2">Class *</label>
-            <input
-              type="text"
+            <select
               value={formData.class}
               onChange={(e) => setFormData({ ...formData, class: e.target.value })}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder="e.g., LKG-A"
-            />
+            >
+              <option value="">Select Class</option>
+              {classSections.map((entry) => {
+                const option = formatClassSectionOption(entry.className, entry.section);
+                return (
+                  <option key={entry.id} value={option}>{option}</option>
+                );
+              })}
+            </select>
           </div>
           <div>
             <label className="block text-gray-700 mb-2">Incident Description *</label>

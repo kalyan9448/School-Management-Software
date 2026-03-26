@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AcademicYear } from '../utils/classUtils';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
-import { Student, getStudents, saveStudents } from './StudentInformationData';
+import { Student } from './StudentInformationData';
 import { studentService } from '../utils/centralDataService';
 import { ArrowRight, Save, UserCheck, AlertTriangle } from 'lucide-react';
 
@@ -25,7 +25,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
     const [students, setStudents] = useState<Student[]>([]);
     const [promotionStates, setPromotionStates] = useState<Record<string, StudentPromotionState>>({});
 
-    const { uniqueClasses } = useAcademicClasses();
+    const { uniqueClasses, sectionsForClass } = useAcademicClasses();
     // Available classes dynamically fetched for the selected year plus alumni
     const classOrder = [...uniqueClasses, 'Alumni/Graduated'];
 
@@ -46,7 +46,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
                     initialStates[student.id] = {
                         studentId: student.id,
                         action: 'promote',
-                        nextClass: defaultNextClass === 'Alumni/Graduated' ? 'Alumni/Graduated' : defaultNextClass.replace('Class ', ''),
+                        nextClass: defaultNextClass,
                         nextSection: student.section,
                     };
                 });
@@ -56,7 +56,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
         } else {
             setStudents([]);
         }
-    }, [fromYear, selectedClass]);
+    }, [fromYear, selectedClass, classOrder]);
 
     const handleActionChange = (studentId: string, action: PromotionAction) => {
         setPromotionStates(prev => {
@@ -68,7 +68,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
             } else if (action === 'promote') {
                 const nextClassIndex = classOrder.indexOf(selectedClass) + 1;
                 const defaultNextClass = nextClassIndex < classOrder.length ? classOrder[nextClassIndex] : 'Alumni/Graduated';
-                newNextClass = defaultNextClass === 'Alumni/Graduated' ? 'Alumni/Graduated' : defaultNextClass.replace('Class ', '');
+                newNextClass = defaultNextClass;
             } else {
                 newNextClass = ''; // NA for transfer/remove
             }
@@ -112,7 +112,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
                     await studentService.update(student.id, {
                         academicYear: toYear,
                         class: promotionUpdate.nextClass,
-                        section: promotionUpdate.nextSection,
+                        section: promotionUpdate.nextClass === 'Alumni/Graduated' ? '' : promotionUpdate.nextSection,
                         academicHistory: updatedHistory,
                     } as any);
                 } else {
@@ -170,7 +170,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
                         >
                             <option value="">Select Class</option>
-                            {classOrder.filter(c => c !== 'Alumni/Graduated').map(c => <option key={c} value={c.replace('Class ', '')}>{c}</option>)}
+                            {classOrder.filter(c => c !== 'Alumni/Graduated').map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
                 </div>
@@ -210,6 +210,7 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
                                         {students.map(student => {
                                             const state = promotionStates[student.id];
                                             if (!state) return null;
+                                            const nextSections = sectionsForClass(state.nextClass);
 
                                             return (
                                                 <tr key={student.id} className="hover:bg-gray-50 transition-colors">
@@ -237,20 +238,29 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
                                                     </td>
                                                     <td className="p-4">
                                                         {(state.action === 'promote' || state.action === 'repeat') ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm font-medium text-gray-900">{state.nextClass}</span>
-                                                                <span className="text-gray-400">|</span>
-                                                                <select
-                                                                    value={state.nextSection}
-                                                                    onChange={(e) => setPromotionStates(prev => ({ ...prev, [student.id]: { ...state, nextSection: e.target.value } }))}
-                                                                    className="text-sm border-gray-300 rounded py-1 px-2 focus:ring-blue-500"
-                                                                >
-                                                                    <option value="A">Sec A</option>
-                                                                    <option value="B">Sec B</option>
-                                                                    <option value="C">Sec C</option>
-                                                                    <option value="D">Sec D</option>
-                                                                </select>
-                                                            </div>
+                                                            state.nextClass === 'Alumni/Graduated' ? (
+                                                                <span className="text-sm font-medium text-gray-900">Alumni/Graduated</span>
+                                                            ) : nextSections.length === 0 ? (
+                                                                <div className="flex items-center gap-2 text-sm text-amber-700">
+                                                                    <span className="font-medium text-gray-900">{state.nextClass}</span>
+                                                                    <span className="text-gray-400">|</span>
+                                                                    <span>No sections configured</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-medium text-gray-900">{state.nextClass}</span>
+                                                                    <span className="text-gray-400">|</span>
+                                                                    <select
+                                                                        value={nextSections.includes(state.nextSection) ? state.nextSection : nextSections[0] || ''}
+                                                                        onChange={(e) => setPromotionStates(prev => ({ ...prev, [student.id]: { ...state, nextSection: e.target.value } }))}
+                                                                        className="text-sm border-gray-300 rounded py-1 px-2 focus:ring-blue-500"
+                                                                    >
+                                                                        {nextSections.map(section => (
+                                                                            <option key={section} value={section}>Sec {section}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            )
                                                         ) : (
                                                             <span className="text-sm text-gray-400 italic">Not Applicable</span>
                                                         )}

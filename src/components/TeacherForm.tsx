@@ -4,6 +4,16 @@ import { ClassMultiSelect } from './ClassMultiSelect';
 import { SubjectMultiSelect } from './SubjectMultiSelect';
 import { Teacher } from '../utils/centralDataService';
 
+const formatAssignedClass = (assignment: { class: string; section: string }) => `${assignment.class} - Sec ${assignment.section}`;
+
+const parseAssignedClass = (value: string) => {
+    const [className, sectionPart] = value.split(' - Sec ');
+    return {
+        class: className,
+        section: sectionPart || '',
+    };
+};
+
 interface TeacherFormProps {
     teacher: Teacher | null;
     onBack: () => void;
@@ -34,7 +44,9 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
         status: teacher?.status || 'active',
     });
 
-    const [selectedClasses, setSelectedClasses] = useState<string[]>(teacher?.classes || []);
+    const [selectedClasses, setSelectedClasses] = useState<string[]>(
+        teacher?.classes ? [...new Set(teacher.classes.map((assignment) => formatAssignedClass(assignment)))] : []
+    );
     const [teacherPhoto, setTeacherPhoto] = useState<string | null>(teacher?.photo || null);
 
     const [documents, setDocuments] = useState<{
@@ -52,10 +64,19 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        const classAssignments = selectedClasses.flatMap((selectedClass) => {
+            const parsed = parseAssignedClass(selectedClass);
+            return formData.subjects.map((subject) => ({
+                class: parsed.class,
+                section: parsed.section,
+                subject,
+            }));
+        });
+
         const teacherData: Teacher = {
             id: teacher?.id || Date.now().toString(),
             ...formData,
-            classes: selectedClasses,
+            classes: classAssignments,
             photo: teacherPhoto,
             documents: documents,
         };
