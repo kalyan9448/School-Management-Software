@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Clock, Users, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 import { timetableService, subjectService, teacherService, TimetableSlot, DayOfWeek } from '../utils/centralDataService';
-import { getClassSections, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 export function TimetableManagement() {
     const [selectedClass, setSelectedClass] = useState('');
@@ -23,8 +23,8 @@ export function TimetableManagement() {
         { start: '14:00', end: '15:00', label: 'Period 5' },
     ];
 
-    const classes = getUniqueClasses();
-    const sections = getSectionsForClass(selectedClass);
+    const { uniqueClasses: classes, sectionsForClass } = useAcademicClasses();
+    const sections = sectionsForClass(selectedClass);
 
     useEffect(() => {
         if (selectedClass && selectedSection) {

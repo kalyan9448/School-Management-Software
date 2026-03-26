@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { AcademicYear, getUniqueClasses } from '../utils/classUtils';
+import { AcademicYear } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { Student, getStudents, saveStudents } from './StudentInformationData';
 import { studentService } from '../utils/centralDataService';
 import { ArrowRight, Save, UserCheck, AlertTriangle } from 'lucide-react';
@@ -24,8 +25,9 @@ export function StudentPromotionTool({ academicYears }: StudentPromotionToolProp
     const [students, setStudents] = useState<Student[]>([]);
     const [promotionStates, setPromotionStates] = useState<Record<string, StudentPromotionState>>({});
 
+    const { uniqueClasses } = useAcademicClasses();
     // Available classes dynamically fetched for the selected year plus alumni
-    const classOrder = [...getUniqueClasses(fromYear), 'Alumni/Graduated'];
+    const classOrder = [...uniqueClasses, 'Alumni/Graduated'];
 
     useEffect(() => {
         if (fromYear && selectedClass) {

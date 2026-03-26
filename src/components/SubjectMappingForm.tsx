@@ -1,7 +1,7 @@
 import { ArrowLeft, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Teacher, teacherService } from '../utils/centralDataService';
-import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 export interface SubjectMapping {
     name: string;
@@ -50,8 +50,8 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
         loadTeachers();
     }, []);
 
-    const classes = getUniqueClasses();
-    const sections = getSectionsForClass(formData.class);
+    const { uniqueClasses: classes, sectionsForClass } = useAcademicClasses();
+    const sections = sectionsForClass(formData.class);
     const subjectsList = [
         'English',
         'Mathematics',

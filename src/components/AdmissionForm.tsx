@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { studentService } from '../utils/centralDataService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,6 +14,7 @@ interface AdmissionFormProps {
 
 export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
   const { user } = useAuth();
+  const { uniqueClasses, sectionsForClass } = useAcademicClasses();
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: student?.name || '',
@@ -435,7 +436,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Select Class</option>
-                {getUniqueClasses().map(cls => (
+                {uniqueClasses.map(cls => (
                   <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
@@ -450,7 +451,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Not Allotted Yet</option>
-                {getUniqueClasses().map(cls => (
+                {uniqueClasses.map(cls => (
                   <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
@@ -466,7 +467,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Select Section</option>
-                {getSectionsForClass(formData.classAllotted || formData.classApplied).map(sec => (
+                {sectionsForClass(formData.classAllotted || formData.classApplied).map(sec => (
                   <option key={sec} value={sec}>{sec}</option>
                 ))}
               </select>

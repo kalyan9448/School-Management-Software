@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp, Plus, X } from 'lucide-react';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 export function ReportsApprovalView() {
+  const { uniqueClasses, uniqueSections, sectionsForClass } = useAcademicClasses();
   const [isGenerating, setIsGenerating] = useState(false);
   const [scheduledReports, setScheduledReports] = useState<any[]>([]);
   const [recentReports, setRecentReports] = useState<any[]>([]);
@@ -244,14 +246,13 @@ export function ReportsApprovalView() {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
                     <select
                       value={reportConfig.class}
-                      onChange={(e) => setReportConfig({ ...reportConfig, class: e.target.value })}
+                      onChange={(e) => setReportConfig({ ...reportConfig, class: e.target.value, section: 'all' })}
                       className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
                     >
                       <option value="all">All Classes</option>
-                      <option value="Nursery">Nursery</option>
-                      <option value="LKG">LKG</option>
-                      <option value="UKG">UKG</option>
-                      <option value="Class 1">Class 1</option>
+                      {uniqueClasses.map((className) => (
+                        <option key={className} value={className}>{className}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -262,9 +263,9 @@ export function ReportsApprovalView() {
                       className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all outline-none bg-gray-50"
                     >
                       <option value="all">All Sections</option>
-                      <option value="A">Section A</option>
-                      <option value="B">Section B</option>
-                      <option value="C">Section C</option>
+                      {(reportConfig.class === 'all' ? uniqueSections : sectionsForClass(reportConfig.class)).map((section) => (
+                        <option key={section} value={section}>Section {section}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

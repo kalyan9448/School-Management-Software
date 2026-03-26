@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Check, ChevronDown, X } from 'lucide-react';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 interface ClassMultiSelectProps {
   value: string[];
@@ -10,8 +11,7 @@ interface ClassMultiSelectProps {
 export function ClassMultiSelect({ value, onChange, required = false }: ClassMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const classOptions = Array.from({ length: 10 }, (_, i) => `Class ${i + 1}`);
+  const { uniqueClasses: classOptions } = useAcademicClasses();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -108,6 +108,9 @@ export function ClassMultiSelect({ value, onChange, required = false }: ClassMul
       <input
         type="text"
         required={required}
+          {classOptions.length === 0 && (
+            <div className="px-4 py-3 text-sm text-gray-500">No classes found in academic structure.</div>
+          )}
         value={value.join(', ')}
         onChange={() => {}}
         className="sr-only"

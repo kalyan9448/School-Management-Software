@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List, Trash2 } from 'lucide-react';
 import { enquiryService } from '../utils/centralDataService';
-import { getUniqueClasses } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 interface Enquiry {
   id: string;
@@ -21,6 +21,7 @@ interface EnquiryModuleProps {
 }
 
 export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
+  const { uniqueClasses } = useAcademicClasses();
   const [showForm, setShowForm] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -519,7 +520,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="">Select Class</option>
-                          {getUniqueClasses().map(num => (
+                          {uniqueClasses.map(num => (
                             <option key={num} value={num}>{num}</option>
                           ))}
                         </select>

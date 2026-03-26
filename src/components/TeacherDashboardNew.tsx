@@ -39,7 +39,7 @@ import {
 } from '../utils/centralDataService';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
-import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { 
   performanceAnalyticsService, 
   TimeSeriesPoint, 
@@ -91,6 +91,7 @@ interface LessonLog {
 
 export function TeacherDashboardNew() {
   const { user, logout } = useAuth();
+  const { uniqueClasses } = useAcademicClasses();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [attendanceDate, setAttendanceDate] = useState(
@@ -898,7 +899,7 @@ export function TeacherDashboardNew() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
                   >
                     <option value="">Select Class</option>
-                    {getUniqueClasses().map((cls) => (
+                    {uniqueClasses.map((cls) => (
                       <option key={cls} value={cls}>
                         {cls}
                       </option>

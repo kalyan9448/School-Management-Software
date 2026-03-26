@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { notificationService, feeService, studentService } from '../utils/centralDataService';
-import { getUniqueClasses } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 // --- Feature 3: CSV Export Utility ---
 function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
@@ -71,6 +71,7 @@ interface StudentLedger {
 }
 
 export function FeeModule() {
+  const { uniqueClasses } = useAcademicClasses();
   const [activeTab, setActiveTab] = useState<Tab>('structure');
   const [showStructureForm, setShowStructureForm] = useState(false);
   const [showCollectionForm, setShowCollectionForm] = useState(false);
@@ -570,7 +571,7 @@ export function FeeModule() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Select Class</option>
-                      {getUniqueClasses().map(cls => (
+                      {uniqueClasses.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
@@ -784,7 +785,7 @@ export function FeeModule() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Select Class</option>
-                      {getUniqueClasses().map(cls => (
+                      {uniqueClasses.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
@@ -1027,8 +1028,8 @@ export function FeeModule() {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white min-w-[150px]"
                 >
                   <option value="all">All Classes</option>
-                  {[...new Set(studentLedgers.map(s => s.class))].sort().map(className => (
-                    <option key={className} value={className}>Class {className}</option>
+                  {uniqueClasses.map(className => (
+                    <option key={className} value={className}>{className}</option>
                   ))}
                 </select>
                 <div className="relative">

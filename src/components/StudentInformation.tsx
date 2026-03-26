@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { studentService, type Student } from '../utils/centralDataService';
-import { AcademicYear, DEFAULT_YEARS, getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { AcademicYear, DEFAULT_YEARS } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { AdmissionForm } from './AdmissionForm';
 
 // --- Feature 3: CSV Export Utility ---
@@ -51,6 +52,7 @@ export function StudentInformation({
   initialClass = 'all',
   initialSection = 'all'
 }: StudentInformationProps = {}) {
+  const { uniqueClasses, sectionsForClass } = useAcademicClasses();
   const [activeMainTab, setActiveMainTab] = useState<'profiles' | 'attendance'>(initialTab);
   const [attendanceTab, setAttendanceTab] = useState<'daily' | 'monthly'>('daily');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -520,7 +522,7 @@ export function StudentInformation({
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 >
                   <option value="all">All Classes</option>
-                  {getUniqueClasses(selectedAcademicYear === 'all' ? undefined : selectedAcademicYear).map(cls => (
+                  {uniqueClasses.map(cls => (
                     <option key={cls} value={cls}>{cls}</option>
                   ))}
                 </select>
@@ -745,7 +747,7 @@ export function StudentInformation({
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Classes</option>
-                      {getUniqueClasses().map(cls => (
+                      {uniqueClasses.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
@@ -759,7 +761,7 @@ export function StudentInformation({
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Sections</option>
-                      {getSectionsForClass(selectedClass).map(section => (
+                      {sectionsForClass(selectedClass).map(section => (
                         <option key={section} value={section}>Section {section}</option>
                       ))}
                     </select>
@@ -943,7 +945,7 @@ export function StudentInformation({
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Classes</option>
-                      {getUniqueClasses().map(cls => (
+                      {uniqueClasses.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
@@ -957,7 +959,7 @@ export function StudentInformation({
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">All Sections</option>
-                      {getSectionsForClass(selectedClass).map(section => (
+                      {sectionsForClass(selectedClass).map(section => (
                         <option key={section} value={section}>Section {section}</option>
                       ))}
                     </select>

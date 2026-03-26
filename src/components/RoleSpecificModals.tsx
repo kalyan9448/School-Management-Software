@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { getUniqueClasses, getSectionsForClass } from '../utils/classUtils';
+import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 // Teacher Modal
 export function CreateTeacherModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
@@ -167,6 +167,7 @@ export function CreateTeacherModal({ onClose, onSubmit }: { onClose: () => void;
 
 // Student Modal
 export function CreateStudentModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
+  const { uniqueClasses, sectionsForClass } = useAcademicClasses();
   const [formData, setFormData] = useState({
     studentName: '',
     admissionNumber: '',
@@ -234,7 +235,7 @@ export function CreateStudentModal({ onClose, onSubmit }: { onClose: () => void;
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
                 <option value="">Select Class</option>
-                {getUniqueClasses().map(cls => (
+                {uniqueClasses.map(cls => (
                   <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
@@ -247,7 +248,7 @@ export function CreateStudentModal({ onClose, onSubmit }: { onClose: () => void;
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
                 <option value="">Select Section</option>
-                {getSectionsForClass(formData.class).map(sec => (
+                {sectionsForClass(formData.class).map(sec => (
                   <option key={sec} value={sec}>{sec}</option>
                 ))}
               </select>
