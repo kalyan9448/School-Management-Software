@@ -125,16 +125,19 @@ export function StudentInformation({
     setCurrentPage(0); // Reset pagination on filter change
   }, [selectedClass, selectedSection, students]);
 
+  const totalWorkingDays = 24; // Consistent for summary and table
   const monthlyAttendance: MonthlyAttendance[] = attendance.map(record => {
     const student = students.find(s => s.id === record.studentId);
+    const present = student?.presentDays || 0;
+    const total = student?.totalDays || totalWorkingDays;
     return {
       studentName: record.studentName,
       rollNo: record.rollNo,
-      presentDays: student?.presentDays || 0,
-      absentDays: (student?.totalDays || 60) - (student?.presentDays || 0),
+      presentDays: present,
+      absentDays: total - present,
       lateDays: 0,
-      totalDays: student?.totalDays || 60,
-      percentage: student?.attendance || 0
+      totalDays: total,
+      percentage: total > 0 ? (present / total) * 100 : 0
     };
   });
 
@@ -144,7 +147,8 @@ export function StudentInformation({
       student.class.includes(searchTerm);
 
     const matchesClass = profileClassFilter === 'all' || student.class === profileClassFilter;
-    const matchesYear = selectedAcademicYear === 'all' || student.academicYear === selectedAcademicYear;
+    const studentYear = student.academicYear || '2024-2025';
+    const matchesYear = selectedAcademicYear === 'all' || studentYear === selectedAcademicYear;
 
     return matchesSearch && matchesClass && matchesYear;
   });
@@ -644,22 +648,22 @@ export function StudentInformation({
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="inline-flex flex-col items-center">
-                            <span className={`text-lg font-bold ${getAttendanceColor(student.attendance)}`}>
-                              {student.attendance}%
+                            <span className={`text-lg font-bold ${getAttendanceColor(student.attendance ?? 0)}`}>
+                              {student.attendance ?? 0}%
                             </span>
                             <span className="text-xs text-gray-500">
-                              {student.presentDays}/{student.totalDays}
+                              {student.presentDays ?? 0}/{student.totalDays ?? 0}
                             </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex flex-col items-center gap-1">
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getFeeStatusBadge(student.feeStatus)}`}>
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getFeeStatusBadge(student.feeStatus ?? 'pending')}`}>
                               {student.feeStatus === 'paid' ? '✓ Paid' : student.feeStatus === 'partial' ? '◐ Partial' : '⊘ Pending'}
                             </span>
-                            {student.dueFee > 0 && (
+                            { (student.dueFee ?? 0) > 0 && (
                               <span className="text-xs text-red-600">
-                                ₹{student.dueFee.toLocaleString()} due
+                                ₹{(student.dueFee ?? 0).toLocaleString()} due
                               </span>
                             )}
                           </div>
@@ -988,7 +992,7 @@ export function StudentInformation({
 
                 <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
                   <p className="text-gray-600 mb-2">Total Working Days</p>
-                  <p className="text-gray-900">24 days</p>
+                  <p className="text-gray-900">{totalWorkingDays} days</p>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
@@ -1112,8 +1116,8 @@ export function StudentInformation({
                     <p>DOB: <span className="text-gray-900">{selectedStudent.dob}</span></p>
                   </div>
                 </div>
-                <span className={`px-4 py-2 rounded-full ${getFeeStatusBadge(selectedStudent.feeStatus)}`}>
-                  {selectedStudent.feeStatus.toUpperCase()}
+                <span className={`px-4 py-2 rounded-full ${getFeeStatusBadge(selectedStudent.feeStatus ?? 'pending')}`}>
+                  {(selectedStudent.feeStatus ?? 'pending').toUpperCase()}
                 </span>
               </div>
 
@@ -1160,21 +1164,21 @@ export function StudentInformation({
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-purple-700 mb-1">Overall Attendance</p>
-                      <p className={`text-2xl ${getAttendanceColor(selectedStudent.attendance)}`}>
-                        {selectedStudent.attendance}%
+                      <p className={`text-2xl ${getAttendanceColor(selectedStudent.attendance ?? 0)}`}>
+                        {selectedStudent.attendance ?? 0}%
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-purple-700 mb-1">Days Present / Total</p>
                       <p className="text-purple-900">
-                        {selectedStudent.presentDays} / {selectedStudent.totalDays} days
+                        {selectedStudent.presentDays ?? 0} / {selectedStudent.totalDays ?? 0} days
                       </p>
                     </div>
                   </div>
                   <div className="w-full bg-purple-200 rounded-full h-3">
                     <div
                       className="bg-purple-600 h-3 rounded-full transition-all"
-                      style={{ width: `${selectedStudent.attendance}%` }}
+                      style={{ width: `${selectedStudent.attendance ?? 0}%` }}
                     />
                   </div>
                 </div>
@@ -1190,21 +1194,21 @@ export function StudentInformation({
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     <div>
                       <p className="text-green-700 mb-1">Total Fee</p>
-                      <p className="text-green-900">₹{selectedStudent.totalFee.toLocaleString()}</p>
+                      <p className="text-green-900">₹{(selectedStudent.totalFee ?? 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-green-700 mb-1">Paid Amount</p>
-                      <p className="text-green-900">₹{selectedStudent.paidFee.toLocaleString()}</p>
+                      <p className="text-green-900">₹{(selectedStudent.paidFee ?? 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-red-700 mb-1">Due Amount</p>
-                      <p className="text-red-900">₹{selectedStudent.dueFee.toLocaleString()}</p>
+                      <p className="text-red-900">₹{(selectedStudent.dueFee ?? 0).toLocaleString()}</p>
                     </div>
                   </div>
                   <div className="w-full bg-green-200 rounded-full h-3">
                     <div
                       className="bg-green-600 h-3 rounded-full transition-all"
-                      style={{ width: `${(selectedStudent.paidFee / selectedStudent.totalFee) * 100}%` }}
+                      style={{ width: `${((selectedStudent.paidFee ?? 0) / (selectedStudent.totalFee || 1)) * 100}%` }}
                     />
                   </div>
                 </div>
@@ -1265,7 +1269,7 @@ export function StudentInformation({
                         <AlertCircle className="w-4 h-4" />
                         Allergies
                       </p>
-                      {selectedStudent.medicalInfo.allergies.length > 0 ? (
+                      {selectedStudent.medicalInfo?.allergies && selectedStudent.medicalInfo.allergies.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {selectedStudent.medicalInfo.allergies.map((allergy, index) => (
                             <span key={index} className="px-3 py-1 bg-red-200 text-red-900 rounded-full">
@@ -1282,7 +1286,7 @@ export function StudentInformation({
                         <AlertCircle className="w-4 h-4" />
                         Medical Conditions
                       </p>
-                      {selectedStudent.medicalInfo.conditions.length > 0 ? (
+                      {selectedStudent.medicalInfo?.conditions && selectedStudent.medicalInfo.conditions.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {selectedStudent.medicalInfo.conditions.map((condition, index) => (
                             <span key={index} className="px-3 py-1 bg-red-200 text-red-900 rounded-full">
@@ -1300,11 +1304,11 @@ export function StudentInformation({
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-red-700 mb-1">Name</p>
-                        <p className="text-red-900">{selectedStudent.medicalInfo.emergencyContact}</p>
+                        <p className="text-red-900">{selectedStudent.medicalInfo?.emergencyContact || '-'}</p>
                       </div>
                       <div>
                         <p className="text-red-700 mb-1">Phone</p>
-                        <p className="text-red-900">{selectedStudent.medicalInfo.emergencyPhone}</p>
+                        <p className="text-red-900">{selectedStudent.medicalInfo?.emergencyPhone || '-'}</p>
                       </div>
                     </div>
                   </div>

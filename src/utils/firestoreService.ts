@@ -444,10 +444,11 @@ export const studentService = {
             parentId: student.parentId || '',
             address: student.address || '',
             admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],
+            academicYear: student.academicYear || '2024-2025',
             status: student.status || 'active',
             photo: student.photo || '',
             bloodGroup: student.bloodGroup || '',
-            medicalInfo: student.medicalInfo || '',
+            medicalInfo: student.medicalInfo as any,
         };
         return createDoc<Student>('students', newStudent);
     },

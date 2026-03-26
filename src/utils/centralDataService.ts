@@ -47,7 +47,32 @@ export interface Student {
   status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted' | 'active' | 'inactive' | 'transferred';
   photo?: string;
   bloodGroup?: string;
-  medicalInfo?: string;
+  medicalInfo?: {
+    allergies: string[];
+    conditions: string[];
+    emergencyContact: string;
+    emergencyPhone: string;
+  };
+  // UI and Stats fields
+  phone?: string; // Often matches parentPhone
+  presentDays?: number;
+  totalDays?: number;
+  attendance?: number;
+  feeStatus?: 'paid' | 'partial' | 'pending';
+  dueFee?: number;
+  totalFee?: number;
+  paidFee?: number;
+  fatherOccupation?: string;
+  motherOccupation?: string;
+  guardianName?: string;
+  guardianOccupation?: string;
+  emergencyContactNumber?: string;
+  classTeacher?: string;
+  classTeacherContact?: string;
+  transportRoute?: string;
+  busNumber?: string;
+  parentName?: string;
+  dob?: string;
 }
 
 export interface Teacher {
