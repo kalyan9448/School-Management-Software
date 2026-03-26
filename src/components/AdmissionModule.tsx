@@ -3,7 +3,10 @@ import { Plus, Search, Filter, Edit, Eye, CheckCircle, Clock, XCircle, UserPlus,
 import { AdmissionForm } from './AdmissionForm';
 import { AcademicYear, DEFAULT_YEARS, getActiveAcademicYearId } from '../utils/classUtils';
 import { useAuth } from '../contexts/AuthContext';
-import { userService, studentService, schoolService } from '../utils/centralDataService';
+import { auth, db } from '../services/firebase';
+import { apiClient } from '../services/apiClient';
+import { userService, studentService, schoolService, admissionService } from '../utils/centralDataService';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface Student {
   id: string;
@@ -29,14 +32,7 @@ interface Student {
   appliedDate: string;
   admissionDate?: string;
   academicYear?: string;
-  documents?: {
-    birthCertificate?: string;
-    transferCertificate?: string;
-    previousMarkSheets?: string;
-    idProof?: string;
-    medicalCertificate?: string;
-    [key: string]: any;
-  };
+
 }
 
 interface AdmissionModuleProps {
@@ -57,6 +53,84 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const { user } = useAuth();
 
+  const getResolvedSchoolId = () => user?.school_id?.trim() || sessionStorage.getItem('active_school_id')?.trim() || '';
+
+  const syncSchoolContext = async (schoolId: string) => {
+    if (!schoolId) return;
+
+    sessionStorage.setItem('active_school_id', schoolId);
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    try {
+      await setDoc(doc(db, 'users', currentUser.uid), {
+        school_id: schoolId,
+        role: user?.role || 'admin',
+        email: user?.email || currentUser.email || '',
+      }, { merge: true });
+    } catch (error) {
+      console.warn('[AdmissionModule] Could not persist school context to user profile:', error);
+    }
+
+    try {
+      const token = await currentUser.getIdToken();
+      const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+      await fetch(`${apiBase}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (error) {
+      console.warn('[AdmissionModule] Backend claim sync failed:', error);
+    }
+
+    try {
+      await currentUser.getIdToken(true);
+    } catch (error) {
+      console.warn('[AdmissionModule] Token refresh failed:', error);
+    }
+  };
+
+  const mapAdmissionRecord = (s: any): Student => ({
+    id: s.id,
+    admissionNo: s.admissionNo || '',
+    name: s.name || '',
+    dob: s.dob || s.dateOfBirth || '',
+    gender: s.gender || '',
+    bloodGroup: s.bloodGroup || '',
+    fatherName: s.fatherName || '',
+    motherName: s.motherName || '',
+    guardianName: s.guardianName || '',
+    fatherOccupation: s.fatherOccupation || '',
+    motherOccupation: s.motherOccupation || '',
+    guardianOccupation: s.guardianOccupation || '',
+    parentName: s.fatherName || s.parentName || '',
+    phone: s.phone || s.parentPhone || '',
+    emergencyContactNumber: s.emergencyContactNumber || '',
+    email: s.email || s.parentEmail || '',
+    rollNo: s.rollNo || '',
+    classApplied: s.classApplied || s.class || '',
+    classAllotted: s.classAllotted || s.class || '',
+    status: (s.status as Student['status']) || 'enquiry',
+    appliedDate: s.appliedDate || s.admissionDate || '',
+    admissionDate: s.admissionDate || '',
+    academicYear: s.academicYear || '',
+  });
+
+  const loadLegacyAdmissionsFromStudents = async () => {
+    const firestoreStudents = await studentService.getAll();
+    setStudents(firestoreStudents.map(mapAdmissionRecord));
+  };
+
+  const loadAdmissionsFromBackend = async () => {
+    const response = await apiClient.get('/api/school-admin/admissions');
+    const records = Array.isArray(response.data?.admissions) ? response.data.admissions : [];
+    setStudents(records.map(mapAdmissionRecord));
+  };
+
   // Load data
   useEffect(() => {
     // Load academic years
@@ -65,7 +139,12 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     if (view === 'list') {
       loadAdmissions();
     }
-  }, [view, selectedYear]);
+  }, [view, selectedYear, user]);
+
+  useEffect(() => {
+    setView(initialView);
+    setSelectedStudent(initialData || null);
+  }, [initialView, initialData]);
 
   // Migration logic to fix missing admission numbers
   useEffect(() => {
@@ -74,8 +153,8 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
       if (hasMissingIds) {
         const fixIds = async () => {
           const currentYear = new Date().getFullYear();
-          const schools = await schoolService.getAll();
-          const currentSchool = schools.find((s: any) => s.id === user?.school_id);
+          const currentSchoolId = user?.school_id || sessionStorage.getItem('active_school_id');
+          const currentSchool = currentSchoolId ? await schoolService.getById(currentSchoolId) : null;
           const schoolCode = currentSchool?.schoolCode || 'ADM';
           const updatedStudents = students.map((s, index) => {
             if (!s.admissionNo || s.admissionNo.trim() === '') {
@@ -90,36 +169,59 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     }
   }, [students, user?.school_id]);
 
-  const loadAdmissions = async () => {
+  const loadAdmissions = async (hasRetried = false) => {
     try {
       setLoading(true);
       setServerError(null);
-      const firestoreStudents = await studentService.getAll();
-      setStudents(firestoreStudents.map((s: any) => ({
-        id: s.id,
-        admissionNo: s.admissionNo || '',
-        name: s.name || '',
-        dob: s.dateOfBirth || s.dob || '',
-        gender: s.gender || '',
-        bloodGroup: s.bloodGroup || '',
-        fatherName: s.fatherName || '',
-        motherName: s.motherName || '',
-        guardianName: s.guardianName || '',
-        parentName: s.fatherName || s.parentName || '',
-        phone: s.parentPhone || s.phone || '',
-        emergencyContactNumber: s.emergencyContactNumber || '',
-        email: s.parentEmail || s.email || '',
-        rollNo: s.rollNo || '',
-        classApplied: s.class || s.classApplied || '',
-        classAllotted: s.class || s.classAllotted || '',
-        status: (s.status as any) || 'admitted',
-        appliedDate: s.admissionDate || s.appliedDate || '',
-        admissionDate: s.admissionDate,
-        academicYear: s.academicYear,
-      })));
+
+      const resolvedSchoolId = getResolvedSchoolId();
+
+      // Always keep session school context aligned with the authenticated user.
+      if (resolvedSchoolId && sessionStorage.getItem('active_school_id') !== resolvedSchoolId) {
+        sessionStorage.setItem('active_school_id', resolvedSchoolId);
+      }
+
+      if (!resolvedSchoolId) {
+        // School context not ready yet — will re-fire once auth resolves user.
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        await loadAdmissionsFromBackend();
+        return;
+      } catch (backendError) {
+        console.warn('[AdmissionModule] Backend admissions load failed, falling back to Firestore:', backendError);
+      }
+
+      const firestoreAdmissions = await admissionService.getAll();
+      setStudents(firestoreAdmissions.map(mapAdmissionRecord));
     } catch (error: any) {
       console.error('Failed to load admissions:', error);
-      setServerError('Failed to load admissions from Firestore. Please try again.');
+
+      const resolvedSchoolId = getResolvedSchoolId();
+      if (error?.code === 'permission-denied' && resolvedSchoolId && !hasRetried) {
+        await syncSchoolContext(resolvedSchoolId);
+        await loadAdmissions(true);
+        return;
+      }
+
+      if (error?.code === 'permission-denied' || error?.message?.includes('permissions')) {
+        try {
+          await loadLegacyAdmissionsFromStudents();
+          setServerError(null);
+          return;
+        } catch (fallbackError) {
+          console.error('Failed to load legacy admissions from students:', fallbackError);
+        }
+      }
+
+      setServerError(
+        error?.code === 'permission-denied'
+          ? 'Could not access admissions for the active school. School context was refreshed; please try again.'
+          : 'Failed to load admissions from Firestore. Please try again.'
+      );
       setStudents([]);
     } finally {
       setLoading(false);
@@ -161,8 +263,8 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
   const generateAdmissionNumber = async () => {
     const currentYear = new Date().getFullYear();
     const admissionCount = students.length + 1;
-    const schools = await schoolService.getAll();
-    const currentSchool = schools.find((s: any) => s.id === user?.school_id);
+    const currentSchoolId = getResolvedSchoolId();
+    const currentSchool = currentSchoolId ? await schoolService.getById(currentSchoolId) : null;
     const schoolCode = currentSchool?.schoolCode || 'ADM';
     return `${schoolCode}-${currentYear}-${admissionCount.toString().padStart(4, '0')}`;
   };
@@ -177,34 +279,69 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
         }}
         onSave={async (studentData) => {
           try {
+            const resolvedSchoolId = getResolvedSchoolId();
+
+            // Ensure school context before any Firestore write
+            if (resolvedSchoolId && sessionStorage.getItem('active_school_id') !== resolvedSchoolId) {
+              sessionStorage.setItem('active_school_id', resolvedSchoolId);
+            }
+            if (!resolvedSchoolId) {
+              alert('School context is not available. Please reload the page and try again.');
+              return;
+            }
+
+            // Sync JWT claims so Firestore rules see the correct school_id
+            await syncSchoolContext(resolvedSchoolId);
+
             let savedId: string;
 
             if (selectedStudent) {
-              // Update existing student in Firestore
-              await studentService.update(selectedStudent.id, {
+              // Update existing admission in Firestore
+              await admissionService.update(selectedStudent.id, {
                 ...studentData,
-                dateOfBirth: studentData.dob,
-                fatherName: studentData.fatherName || studentData.parentName,
-                parentPhone: studentData.phone,
-                parentEmail: studentData.parentEmail || studentData.email,
-                class: studentData.classAllotted || studentData.classApplied,
               });
               savedId = selectedStudent.id;
               alert('Admission updated successfully!');
             } else {
-              // Create new student in Firestore
+              // Create new admission — try backend first (Admin SDK bypasses rules),
+              // then fall back to direct Firestore client SDK.
               const admissionNo = studentData.admissionNo?.trim() || await generateAdmissionNumber();
-              const created = await studentService.create({
+              const admissionPayload = {
                 ...studentData,
                 admissionNo,
-                dateOfBirth: studentData.dob,
-                fatherName: studentData.fatherName || studentData.parentName,
-                parentPhone: studentData.phone,
-                parentEmail: studentData.parentEmail || studentData.email,
-                class: studentData.classAllotted || studentData.classApplied,
                 appliedDate: new Date().toISOString().split('T')[0],
                 status: studentData.status || 'enquiry',
-              });
+              };
+
+              let created: any = null;
+              let backendError: any = null;
+              try {
+                const resp = await apiClient.post('/api/school-admin/admissions', admissionPayload);
+                created = resp.data?.admission || resp.data;
+              } catch (backendErr: any) {
+                backendError = backendErr;
+                console.warn('[AdmissionModule] Backend create failed, falling back to Firestore:', backendErr);
+              }
+
+              if (!created?.id) {
+                try {
+                  created = await admissionService.create(admissionPayload);
+                } catch (firestoreErr: any) {
+                  // Both backend and Firestore failed — give a clear message
+                  const isPermission = firestoreErr?.code === 'permission-denied' || firestoreErr?.message?.includes('permissions');
+                  if (isPermission) {
+                    throw new Error(
+                      'Permission denied by Firestore.\n\n' +
+                      'To fix this, do ONE of the following:\n' +
+                      '1. Start the backend server: cd backend && node src/index.js\n' +
+                      '2. Deploy Firestore rules: firebase deploy --only firestore:rules\n' +
+                      '3. Log out and log back in (so JWT claims get refreshed)'
+                    );
+                  }
+                  throw firestoreErr;
+                }
+              }
+
               savedId = created.id;
               alert(`Admission created successfully!\n\nAdmission Number: ${admissionNo}\nStudent Name: ${studentData.name}`);
             }
@@ -214,9 +351,29 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
             setSelectedStudent(null);
 
             // --- PROVISIONING LOGIC ---
-            // Only create login accounts if the student is marked as "Admitted"
+            // Only create login accounts and student record if the student is marked as "Admitted"
             if (studentData.status === 'admitted') {
-              const studentId = savedId;
+              // 0. Also create a record in the students collection
+              const createdStudent = await studentService.create({
+                admissionNo: studentData.admissionNo,
+                name: studentData.name,
+                dateOfBirth: studentData.dob,
+                gender: studentData.gender,
+                bloodGroup: studentData.bloodGroup,
+                fatherName: studentData.fatherName || studentData.parentName,
+                motherName: studentData.motherName,
+                parentPhone: studentData.phone,
+                parentEmail: studentData.parentEmail || studentData.email,
+                email: studentData.email,
+                address: studentData.address,
+                class: studentData.classAllotted || studentData.classApplied,
+                section: studentData.section,
+                rollNo: studentData.rollNo,
+                admissionDate: studentData.admissionDate || new Date().toISOString().split('T')[0],
+                academicYear: studentData.academicYear,
+                status: 'active',
+              });
+              const studentId = createdStudent.id;
               
               // 1. Provision Student Login Account (Only if email is provided)
               if (studentData.email) {
@@ -232,8 +389,10 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
               // 2. Provision/Link Parent Login Account
               const allUsers = await userService.getAll();
               const existingParent = allUsers.find((u: any) => u.email === studentData.parentEmail && u.role === 'parent');
+              let parentUserId = '';
 
               if (existingParent) {
+                parentUserId = existingParent.id;
                 // Link student to existing parent account
                 const currentChildren = existingParent.childrenIds || [];
                 if (!currentChildren.includes(studentId)) {
@@ -241,9 +400,9 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                     childrenIds: [...currentChildren, studentId]
                   });
                 }
-              } else {
+              } else if (studentData.parentEmail) {
                 // Create new parent account and link student
-                await userService.create({
+                const createdParent = await userService.create({
                   email: studentData.parentEmail,
                   name: studentData.parentName || studentData.guardianName || 'Parent',
                   role: 'parent',
@@ -251,6 +410,12 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                   childrenIds: [studentId],
                   isFirstLogin: true
                 });
+                parentUserId = createdParent.id;
+              }
+
+              // 3. Link parent back to student record
+              if (parentUserId) {
+                await studentService.update(studentId, { parentId: parentUserId });
               }
               
               console.log('Automated provisioning completed for:', studentData.email, studentData.parentEmail);
@@ -491,14 +656,8 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
           </div>
 
           <button
-            onClick={async () => {
-              const schoolsList = await schoolService.getAll();
-              let currentSchool = schoolsList.find((s: any) => s.id === user?.school_id);
-
-              if (!currentSchool?.schoolCode) {
-                alert('⚠️ School Code not configured. Please contact Super Admin to set one before creating admissions.');
-                return;
-              }
+            onClick={() => {
+              setSelectedStudent(null);
               setView('form');
             }}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/30"
@@ -716,7 +875,10 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
             </p>
             {filteredStudents.length === 0 && (
               <button
-                onClick={() => setView('form')}
+                onClick={() => {
+                  setSelectedStudent(null);
+                  setView('form');
+                }}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/30"
               >
                 New Admission for {selectedYear}

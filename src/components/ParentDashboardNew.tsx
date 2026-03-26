@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardNav, parentNavItems } from './DashboardNav';
 import {
@@ -108,46 +108,48 @@ export function ParentDashboardNew() {
   const { user, logout } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
 
-  // 1. Fetch children for this parent
-  const { students: children } = useStudents({ parentId: user?.id });
+  // 1. Fetch children for this parent (tries parentId, then childrenIds, then email match)
+  const { students: children, loading: childrenLoading } = useStudents({
+    parentId: user?.id,
+    childrenIds: user?.childrenIds,
+    parentEmail: user?.email,
+  });
 
   // 2. State for selected child
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
-  // Initialize selected child if not set
-  useMemo(() => {
-    if (!selectedChildId && children.length > 0) {
+  // Initialize selected child when children load
+  useEffect(() => {
+    if (children.length > 0 && (!selectedChildId || !children.find(c => c.id === selectedChildId))) {
       setSelectedChildId(children[0].id);
     }
-  }, [children, selectedChildId]);
+  }, [children]);
 
-  const selectedChild = children.find(c => c.id === selectedChildId) || children[0] || {
-    id: '1',
-    name: 'Aarav Sharma',
-    class: '8th',
-    section: 'A',
-    rollNo: '001',
-  };
+  const selectedChild = children.find(c => c.id === selectedChildId) || children[0] || null;
 
-  // 3. Fetch dynamic data for selected child
-  const { attendance: studentAttendance, stats: attendanceStats } = useAttendance({
-    studentId: selectedChild?.id,
-    startDate: new Date().toISOString().substring(0, 7) + '-01'
-  });
+  // 3. Fetch dynamic data for selected child (only when a real child is selected)
+  const { attendance: studentAttendance, stats: attendanceStats } = useAttendance(
+    selectedChild ? {
+      studentId: selectedChild.id,
+      startDate: new Date().toISOString().substring(0, 7) + '-01'
+    } : undefined
+  );
 
-  const { lessons } = useLessons({
-    class: selectedChild?.class,
-    section: selectedChild?.section
-  });
+  const { lessons } = useLessons(
+    selectedChild ? {
+      class: selectedChild.class,
+      section: selectedChild.section
+    } : undefined
+  );
 
   const { notifications: dynamicNotifications } = useNotifications(user?.id);
 
   // Additional dynamic data for progress, fees, etc.
-  const { payments: feeRecords } = useFeePayments({ studentId: selectedChild?.id });
+  const { payments: feeRecords } = useFeePayments(selectedChild ? { studentId: selectedChild.id } : undefined);
   const { performance: studentPerformance } = useStudentPerformance(selectedChild?.id);
-  const { assignments } = useAssignments({ class: selectedChild?.class, section: selectedChild?.section });
-  const { exams } = useExams({ class: selectedChild?.class, section: selectedChild?.section });
-  const { results: examResults } = useExamResults({ studentId: selectedChild?.id });
+  const { assignments } = useAssignments(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
+  const { exams } = useExams(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
+  const { results: examResults } = useExamResults(selectedChild ? { studentId: selectedChild.id } : undefined);
 
   // Demo data fallback / merging
   const todayDate = new Date().toISOString().split('T')[0];
@@ -716,17 +718,33 @@ export function ParentDashboardNew() {
       <div className="space-y-6">
         {/* Child Info Card */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-              <Users className="w-8 h-8 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h2 className="text-white mb-1">{selectedChild.name}</h2>
+                <p className="text-purple-100">
+                  Class {selectedChild.class} - Section {selectedChild.section} • Roll No:{' '}
+                  {selectedChild.rollNo}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-white mb-1">{selectedChild.name}</h2>
-              <p className="text-purple-100">
-                Class {selectedChild.class} - Section {selectedChild.section} • Roll No:{' '}
-                {selectedChild.rollNo}
-              </p>
-            </div>
+            {/* Child Selector */}
+            {children.length > 1 && (
+              <select
+                value={selectedChildId || ''}
+                onChange={(e) => setSelectedChildId(e.target.value)}
+                className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+              >
+                {children.map(c => (
+                  <option key={c.id} value={c.id} className="text-gray-900">
+                    {c.name} - Class {c.class}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -1522,6 +1540,33 @@ export function ParentDashboardNew() {
   };
 
   const renderContent = () => {
+    // Loading state while children data is being fetched
+    if (childrenLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600">Loading your children's data...</p>
+        </div>
+      );
+    }
+
+    // No children linked to this parent
+    if (!selectedChild) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-md">
+          <Users className="w-20 h-20 text-gray-300 mb-4" />
+          <h2 className="text-gray-900 mb-2">No Children Linked</h2>
+          <p className="text-gray-600 text-center max-w-md mb-4">
+            No student records are linked to your account yet. Please contact your school administrator to link your child's record.
+          </p>
+          <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
+            <p><strong>Your email:</strong> {user?.email}</p>
+            <p className="mt-1">The school admin needs to add this email as the parent email during admission.</p>
+          </div>
+        </div>
+      );
+    }
+
     switch (currentView) {
       case 'dashboard':
         return renderDashboard();

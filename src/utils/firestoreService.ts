@@ -17,6 +17,7 @@ import {
     query,
     where,
     orderBy,
+    documentId,
     Timestamp,
     type DocumentData,
     type QueryConstraint,
@@ -44,6 +45,7 @@ export type {
     Notification,
     DayOfWeek,
     TimetableSlot,
+    Admission,
 } from './centralDataService';
 
 // Re-export new production interfaces from types
@@ -75,6 +77,7 @@ import type {
     Event,
     Notification,
     TimetableSlot,
+    Admission,
 } from './centralDataService';
 
 import type {
@@ -101,6 +104,11 @@ function requireSchoolId(): string {
     return sid;
 }
 
+/** Remove keys whose value is undefined — Firestore rejects undefined field values. */
+function stripUndefined(obj: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
 /**
  * Fetch all docs from a collection, optionally filtered. Returns typed array.
  * Automatically injects school_id filter for school-scoped collections.
@@ -122,6 +130,8 @@ async function fetchCollection<T>(
 /**
  * Add a doc with auto-generated ID. Returns the doc with its new ID.
  * Automatically injects school_id for school-scoped collections.
+ * Uses setDoc instead of addDoc+updateDoc to avoid a two-step write
+ * that can be blocked by Firestore security rules on the update step.
  */
 async function createDoc<T extends { id: string }>(
     collectionName: string,
@@ -131,9 +141,11 @@ async function createDoc<T extends { id: string }>(
     const payload = GLOBAL_COLLECTIONS.has(collectionName)
         ? rest
         : { ...rest, school_id: requireSchoolId() };
-    const ref = await addDoc(collection(db, collectionName), payload);
-    // Also write the id field into the doc so it's self-referencing
-    await updateDoc(ref, { id: ref.id });
+    // Generate a new doc reference to get a unique ID
+    const ref = doc(collection(db, collectionName));
+    // Write id + payload in a single atomic setDoc (no follow-up updateDoc needed)
+    const fullPayload = stripUndefined({ ...payload, id: ref.id });
+    await setDoc(ref, fullPayload);
     return { id: ref.id, ...payload } as T;
 }
 
@@ -146,7 +158,7 @@ async function setDocById<T>(
     const payload = GLOBAL_COLLECTIONS.has(collectionName)
         ? data
         : { ...data, school_id: requireSchoolId() };
-    await setDoc(doc(db, collectionName, id), payload, { merge: true });
+    await setDoc(doc(db, collectionName, id), stripUndefined(payload as Record<string, any>), { merge: true });
 }
 
 /** Update specific fields of a doc. Verifies school_id ownership for school-scoped collections. */
@@ -166,7 +178,7 @@ async function updateDocById(
         // Prevent school_id from being changed via update
         delete updates.school_id;
     }
-    await updateDoc(doc(db, collectionName, id), updates);
+    await updateDoc(doc(db, collectionName, id), stripUndefined(updates));
 }
 
 /** Delete a doc by ID. Verifies school_id ownership for school-scoped collections. */
@@ -234,7 +246,7 @@ export const userService = {
             role: user.role || 'student',
             isFirstLogin: user.isFirstLogin ?? true,
             school_id: schoolId,
-            parentId: user.parentId,
+            parentId: user.parentId || '',
             childrenIds: user.childrenIds || [],
         };
         return createDoc<User>('users', newUser);
@@ -263,9 +275,15 @@ export const schoolService = {
         const schoolId = school.id || doc(collection(db, 'schools')).id;
         const { id: _stripId, ...rest } = school;
 
+        // Normalize email to lowercase for consistent lookups across the system
+        const adminEmail = (school.principalEmail || school.email || '').trim().toLowerCase();
+
         const payload = {
             ...rest,
             id: schoolId,
+            // Store as both 'email' and 'principalEmail' so every lookup path works
+            email: adminEmail || rest.email,
+            principalEmail: adminEmail || rest.principalEmail,
             status: school.status || 'active',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -277,10 +295,10 @@ export const schoolService = {
         // This is a best-effort operation — if it fails (e.g. due to Firestore
         // rules before custom claims are set), the school still gets created
         // and the admin account can be provisioned on the user's first login.
-        if (school.principalEmail || school.email) {
+        if (adminEmail) {
             try {
                 await userService.create({
-                    email: school.principalEmail || school.email,
+                    email: adminEmail,
                     name: school.principalName || school.principal || '',
                     role: 'admin',
                     school_id: schoolId,
@@ -311,10 +329,23 @@ export const organizationService = {
     },
 
     create: async (org: any): Promise<any> => {
-        return createDoc<any>('organizations', {
-            ...org,
+        // Use the caller-provided id (e.g. "ORG001") as the Firestore doc id so the
+        // UI id and the persisted id always match — same pattern as schoolService.create().
+        const orgId = org.id || doc(collection(db, 'organizations')).id;
+        const { id: _strip, ...rest } = org;
+        const payload = {
+            ...rest,
+            id: orgId,
             created_at: new Date().toISOString(),
-        });
+        };
+        await setDoc(doc(db, 'organizations', orgId), payload);
+        return { id: orgId, ...payload };
+    },
+
+    getById: async (id: string): Promise<any | null> => {
+        const snap = await getDoc(doc(db, 'organizations', id));
+        if (!snap.exists()) return null;
+        return { id: snap.id, ...snap.data() };
     },
 
     update: async (id: string, updates: any): Promise<void> => {
@@ -347,6 +378,23 @@ export const studentService = {
 
     getByParentId: async (parentId: string): Promise<Student[]> => {
         return fetchCollection<Student>('students', where('parentId', '==', parentId));
+    },
+
+    getByIds: async (ids: string[]): Promise<Student[]> => {
+        if (!ids.length) return [];
+        // Firestore 'in' queries support max 30 items
+        const results: Student[] = [];
+        for (let i = 0; i < ids.length; i += 30) {
+            const batch = ids.slice(i, i + 30);
+            const docs = await fetchCollection<Student>('students', where(documentId(), 'in', batch));
+            results.push(...docs);
+        }
+        return results;
+    },
+
+    getByParentEmail: async (email: string): Promise<Student[]> => {
+        if (!email) return [];
+        return fetchCollection<Student>('students', where('parentEmail', '==', email));
     },
 
     getNextRollNumber: async (className: string, section: string, academicYear: string): Promise<string> => {
@@ -393,13 +441,13 @@ export const studentService = {
             parentPhone: student.parentPhone || '',
             parentEmail: student.parentEmail || '',
             email: student.email || '',
-            parentId: student.parentId,
+            parentId: student.parentId || '',
             address: student.address || '',
             admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],
             status: student.status || 'active',
-            photo: student.photo,
-            bloodGroup: student.bloodGroup,
-            medicalInfo: student.medicalInfo,
+            photo: student.photo || '',
+            bloodGroup: student.bloodGroup || '',
+            medicalInfo: student.medicalInfo || '',
         };
         return createDoc<Student>('students', newStudent);
     },
@@ -411,6 +459,67 @@ export const studentService = {
 
     delete: async (id: string): Promise<boolean> => {
         await deleteDocById('students', id);
+        return true;
+    },
+};
+
+// ==================== ADMISSION SERVICE ====================
+
+export const admissionService = {
+    getAll: async (): Promise<Admission[]> => {
+        return fetchCollection<Admission>('admissions');
+    },
+
+    getById: async (id: string): Promise<Admission | null> => {
+        return getDocById<Admission>('admissions', id);
+    },
+
+    getByStatus: async (status: string): Promise<Admission[]> => {
+        return fetchCollection<Admission>('admissions', where('status', '==', status));
+    },
+
+    getByAcademicYear: async (academicYear: string): Promise<Admission[]> => {
+        return fetchCollection<Admission>('admissions', where('academicYear', '==', academicYear));
+    },
+
+    create: async (admission: Partial<Admission>): Promise<Admission> => {
+        const newAdmission: Omit<Admission, 'id'> & { id?: string } = {
+            admissionNo: admission.admissionNo || '',
+            name: admission.name || '',
+            dob: admission.dob || '',
+            gender: admission.gender || 'Male',
+            bloodGroup: admission.bloodGroup || '',
+            fatherName: admission.fatherName || '',
+            motherName: admission.motherName || '',
+            guardianName: admission.guardianName || '',
+            fatherOccupation: admission.fatherOccupation || '',
+            motherOccupation: admission.motherOccupation || '',
+            guardianOccupation: admission.guardianOccupation || '',
+            parentName: admission.parentName || '',
+            phone: admission.phone || '',
+            emergencyContactNumber: admission.emergencyContactNumber || '',
+            email: admission.email || '',
+            parentEmail: admission.parentEmail || '',
+            address: admission.address || '',
+            classApplied: admission.classApplied || '',
+            classAllotted: admission.classAllotted || '',
+            section: admission.section || 'A',
+            rollNo: admission.rollNo || '',
+            status: admission.status || 'enquiry',
+            appliedDate: admission.appliedDate || new Date().toISOString().split('T')[0],
+            admissionDate: admission.admissionDate || '',
+            academicYear: admission.academicYear || '',
+        };
+        return createDoc<Admission>('admissions', newAdmission);
+    },
+
+    update: async (id: string, updates: Partial<Admission>): Promise<Admission | null> => {
+        await updateDocById('admissions', id, updates);
+        return getDocById<Admission>('admissions', id);
+    },
+
+    delete: async (id: string): Promise<boolean> => {
+        await deleteDocById('admissions', id);
         return true;
     },
 };
@@ -811,6 +920,10 @@ export const examResultService = {
 // ==================== FEE SERVICE ====================
 
 export const feeService = {
+    getAll: async (): Promise<FeePayment[]> => {
+        return fetchCollection<FeePayment>('fee_payments');
+    },
+
     getAllStructures: async (): Promise<FeeStructure[]> => {
         return fetchCollection<FeeStructure>('fee_structures');
     },

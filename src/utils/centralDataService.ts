@@ -239,6 +239,36 @@ export interface Announcement {
   attachments?: string[];
 }
 
+export interface Admission {
+  id: string;
+  school_id?: string;
+  admissionNo: string;
+  name: string;
+  dob: string;
+  gender: string;
+  bloodGroup: string;
+  fatherName: string;
+  motherName: string;
+  guardianName: string;
+  fatherOccupation: string;
+  motherOccupation: string;
+  guardianOccupation: string;
+  parentName: string;
+  phone: string;
+  emergencyContactNumber: string;
+  email: string;
+  parentEmail: string;
+  address: string;
+  classApplied: string;
+  classAllotted: string;
+  section: string;
+  rollNo: string;
+  status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted';
+  appliedDate: string;
+  admissionDate: string;
+  academicYear: string;
+}
+
 export interface Enquiry {
   id: string;
   school_id?: string;
@@ -313,6 +343,7 @@ import {
   studentEnrollmentService,
   feeInvoiceService,
   auditLogService,
+  admissionService,
 } from './firestoreService';
 
 export {
@@ -342,6 +373,7 @@ export {
   studentEnrollmentService,
   feeInvoiceService,
   auditLogService,
+  admissionService,
 };
 
 // Default export â€” same shape as before

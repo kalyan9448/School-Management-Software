@@ -25,6 +25,23 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'build',
+    chunkSizeWarningLimit: 1024,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          const modulePath = id.split('node_modules/')[1];
+          if (!modulePath) return;
+
+          const segments = modulePath.split('/');
+          const packageName = segments[0].startsWith('@')
+            ? `${segments[0]}-${segments[1]}`
+            : segments[0];
+
+          return `vendor-${packageName.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+        },
+      },
+    },
   },
   server: {
     port: 5173,

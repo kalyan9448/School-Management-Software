@@ -1397,26 +1397,6 @@ export function StudentInformation({
                   </div>
                 </div>
               </div>
-
-              {/* Document Records */}
-              {selectedStudent.documents && Object.keys(selectedStudent.documents).length > 0 && (
-                <div className="mt-8">
-                  <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-green-600" />
-                    Document Records
-                  </h3>
-                  <div className="bg-green-50 rounded-lg p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(selectedStudent.documents).map(([key, doc]: [string, any]) => (
-                        <div key={key} className="flex items-center gap-3">
-                          {doc.file ? <Check className="w-5 h-5 text-green-600" /> : <X className="w-5 h-5 text-red-500" />}
-                          <span className="text-gray-800 capitalize truncate">{doc.name || key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

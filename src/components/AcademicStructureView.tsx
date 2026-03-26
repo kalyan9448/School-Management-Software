@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Copy, ArrowRightLef
 import { StudentPromotionTool } from './StudentPromotionTool.tsx';
 import SubjectMappingView from './SubjectMappingView';
 import { TimetableManagement } from './TimetableManagement';
-import { AcademicYear, ClassSection, DEFAULT_YEARS, DEFAULT_CLASSES } from '../utils/classUtils';
+import { AcademicYear, ClassSection, DEFAULT_YEARS } from '../utils/classUtils';
 import { Teacher, classService, teacherService } from '../utils/centralDataService';
 
 const CLASS_OPTIONS = [
@@ -51,15 +51,15 @@ export function AcademicStructureView() {
             id: c.id,
             className: c.className,
             section: c.section,
-            classTeacher: c.classTeacher,
+            classTeacher: c.classTeacher || 'Unassigned',
             students: c.currentStrength ?? 0,
             capacity: c.capacity ?? 30,
           })));
         } else {
-          setClassSections(DEFAULT_CLASSES);
+          setClassSections([]);
         }
       } catch {
-        setClassSections(DEFAULT_CLASSES);
+        setClassSections([]);
       }
 
       // Load teachers from Firestore
@@ -103,9 +103,7 @@ export function AcademicStructureView() {
       // Duplicate structure if a base year is selected
       if (baseYearId) {
         // Clone existing classes into Firestore for the new year
-        const baseClasses = baseYearId === '2024-2025' && classSections.length === 0
-          ? DEFAULT_CLASSES
-          : classSections;
+        const baseClasses = classSections;
         for (const cls of baseClasses) {
           await classService.create({
             className: cls.className,
@@ -151,71 +149,81 @@ export function AcademicStructureView() {
   };
 
   const handleAddClass = async () => {
-    if (!newClassName || !newSectionName || !newClassTeacher) {
-      alert("Please fill all fields.");
+    if (!newClassName || !newSectionName) {
+      alert("Please fill class name and section.");
       return;
     }
 
-    const capacity = parseInt(newCapacity) || 30;
-    const created = await classService.create({
-      className: newClassName,
-      section: newSectionName,
-      classTeacher: newClassTeacher,
-      capacity,
-      currentStrength: 0,
-      subjects: [],
-    });
+    try {
+      const capacity = parseInt(newCapacity) || 30;
+      const created = await classService.create({
+        className: newClassName,
+        section: newSectionName,
+        classTeacher: newClassTeacher || '',
+        capacity,
+        currentStrength: 0,
+        subjects: [],
+      });
 
-    const newClassSection: ClassSection = {
-      id: created.id,
-      className: newClassName,
-      section: newSectionName,
-      classTeacher: newClassTeacher,
-      students: 0,
-      capacity,
-    };
+      const newClassSection: ClassSection = {
+        id: created.id,
+        className: newClassName,
+        section: newSectionName,
+        classTeacher: newClassTeacher || 'Unassigned',
+        students: 0,
+        capacity,
+      };
 
-    setClassSections(prev => [...prev, newClassSection]);
+      setClassSections(prev => [...prev, newClassSection]);
 
-    setShowAddClassModal(false);
-    setNewClassName('');
-    setNewSectionName('');
-    setNewClassTeacher('');
-    setNewCapacity('30');
+      setShowAddClassModal(false);
+      setNewClassName('');
+      setNewSectionName('');
+      setNewClassTeacher('');
+      setNewCapacity('30');
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to add class: " + (error.message || "Unknown error"));
+    }
   };
 
   const handleAddSection = async () => {
-    if (!newSectionName || !newClassTeacher || !selectedClassNameForSection) {
-      alert("Please fill all fields.");
+    if (!newSectionName || !selectedClassNameForSection) {
+      alert("Please fill section name.");
       return;
     }
 
-    const capacity = parseInt(newCapacity) || 30;
-    const created = await classService.create({
-      className: selectedClassNameForSection,
-      section: newSectionName,
-      classTeacher: newClassTeacher,
-      capacity,
-      currentStrength: 0,
-      subjects: [],
-    });
+    try {
+      const capacity = parseInt(newCapacity) || 30;
+      const created = await classService.create({
+        className: selectedClassNameForSection,
+        section: newSectionName,
+        classTeacher: newClassTeacher || '',
+        capacity,
+        currentStrength: 0,
+        subjects: [],
+      });
 
-    const newClassSection: ClassSection = {
-      id: created.id,
-      className: selectedClassNameForSection,
-      section: newSectionName,
-      classTeacher: newClassTeacher,
-      students: 0,
-      capacity,
-    };
+      const newClassSection: ClassSection = {
+        id: created.id,
+        className: selectedClassNameForSection,
+        section: newSectionName,
+        classTeacher: newClassTeacher || 'Unassigned',
+        students: 0,
+        capacity,
+      };
 
-    setClassSections(prev => [...prev, newClassSection]);
+      setClassSections(prev => [...prev, newClassSection]);
 
-    setShowAddSectionModal(false);
-    setNewSectionName('');
-    setNewClassTeacher('');
-    setNewCapacity('30');
-    setSelectedClassNameForSection('');
+      setShowAddSectionModal(false);
+      setNewSectionName('');
+      setNewClassTeacher('');
+      setNewCapacity('30');
+      setSelectedClassNameForSection('');
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to add section: " + (error.message || "Unknown error"));
+    }
   };
 
 
@@ -595,7 +603,7 @@ export function AcademicStructureView() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher</label>
                 <select
                   value={newClassTeacher}
                   onChange={e => setNewClassTeacher(e.target.value)}
@@ -666,7 +674,7 @@ export function AcademicStructureView() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class Teacher</label>
                 <select
                   value={newClassTeacher}
                   onChange={e => setNewClassTeacher(e.target.value)}

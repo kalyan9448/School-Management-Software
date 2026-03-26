@@ -1,5 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const { admin, verifyFirebaseToken } = require('../utils/firebaseAdmin');
+
+const db = admin.firestore();
+
+function resolveSchoolId(req) {
+	return req.schoolId || req.firebaseUser?.school_id || null;
+}
 
 // All routes scoped to req.schoolId (from x-school-id header)
 
@@ -21,8 +28,66 @@ router.get('/classes', (req, res) => res.json({ classes: [], schoolId: req.schoo
 router.post('/classes', (req, res) => res.json({ message: 'Create class' }));
 
 // Admissions & Enquiries
-router.get('/admissions', (req, res) => res.json({ admissions: [], schoolId: req.schoolId }));
-router.post('/admissions', (req, res) => res.json({ message: 'Create admission' }));
+router.get('/admissions', verifyFirebaseToken, async (req, res) => {
+	try {
+		const schoolId = resolveSchoolId(req);
+		if (!schoolId) {
+			return res.status(400).json({ error: 'Missing school context' });
+		}
+
+		const admissionsSnap = await db
+			.collection('admissions')
+			.where('school_id', '==', schoolId)
+			.get();
+
+		let admissions = admissionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+		// Legacy fallback for instances still storing admissions in students.
+		if (admissions.length === 0) {
+			const studentsSnap = await db
+				.collection('students')
+				.where('school_id', '==', schoolId)
+				.get();
+
+			admissions = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+		}
+
+		res.json({ admissions, schoolId });
+	} catch (error) {
+		console.error('[schoolAdmin] Admissions fetch failed:', error);
+		res.status(500).json({ error: error.message || 'Failed to load admissions' });
+	}
+});
+router.post('/admissions', verifyFirebaseToken, async (req, res) => {
+	try {
+		const schoolId = resolveSchoolId(req);
+		if (!schoolId) {
+			return res.status(400).json({ error: 'Missing school context' });
+		}
+
+		const data = req.body;
+		if (!data || !data.name) {
+			return res.status(400).json({ error: 'Admission data with at least a name is required' });
+		}
+
+		const admissionRef = db.collection('admissions').doc();
+		const payload = {
+			...data,
+			id: admissionRef.id,
+			school_id: schoolId,
+			appliedDate: data.appliedDate || new Date().toISOString().split('T')[0],
+			status: data.status || 'enquiry',
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		};
+
+		await admissionRef.set(payload);
+		res.json({ admission: payload, id: admissionRef.id });
+	} catch (error) {
+		console.error('[schoolAdmin] Admission create failed:', error);
+		res.status(500).json({ error: error.message || 'Failed to create admission' });
+	}
+});
 router.get('/enquiries', (req, res) => res.json({ enquiries: [], schoolId: req.schoolId }));
 router.post('/enquiries', (req, res) => res.json({ message: 'Create enquiry' }));
 

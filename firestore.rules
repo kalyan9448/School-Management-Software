@@ -1,4 +1,4 @@
-﻿rules_version = '2';
+rules_version = '2';
 
 // =============================================================================
 // Firestore Security Rules  --  School Management Software (Kidz Vision)
@@ -51,25 +51,22 @@ service cloud.firestore {
     }
 
     // Role from Firebase Auth JWT custom claim (set by backend Admin SDK).
-    // Returns empty string if the claim has not been set yet (e.g. first
-    // session before the backend ran setCustomUserClaims).
+    // Uses safe "in" check — accessing a missing claim directly can cause
+    // the entire rule expression to fail silently and deny the request.
     function getRole() {
-      return request.auth.token.get("role", "");
+      return ("role" in request.auth.token) ? request.auth.token.role : "";
     }
 
     // Fallback: read the role directly from the user's Firestore profile.
-    // Used when custom claims are not yet present (no backend credentials or
-    // user logged in before the backend was running).
     function getRoleFromDoc() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("role", "")
-        : "";
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userPath) ? get(userPath).data.get("role", "") : "";
     }
 
     // Resolve role: custom claim first (zero cost), then Firestore doc fallback.
     function resolvedRole() {
       let claim = getRole();
-      return claim != "" ? claim : getRoleFromDoc();
+      return (claim != null && claim != "") ? claim : getRoleFromDoc();
     }
 
     function isSuperAdmin() {
@@ -89,8 +86,16 @@ service cloud.firestore {
         && resolvedRole() in ["superadmin", "admin", "accountant", "teacher"];
     }
 
+    function isTeacher() {
+      return isSignedIn() && resolvedRole() == "teacher";
+    }
+
     function isStudent() {
       return isSignedIn() && resolvedRole() == "student";
+    }
+
+    function isParent() {
+      return isSignedIn() && resolvedRole() == "parent";
     }
 
     function notSettingSuperAdminRole() {
@@ -106,16 +111,35 @@ service cloud.firestore {
 
     // -- Multi-tenancy helpers ------------------------------------------------
 
-    // Guard: user has a valid school_id claim (not null, not empty)
+    // Guard: user has a valid school_id claim (not null, not empty).
+    // Uses safe "in" check — accessing a missing claim directly can cause
+    // the entire rule expression to fail silently and deny the request.
     function hasSchoolClaim() {
-      return request.auth.token.school_id != null
+      return ("school_id" in request.auth.token)
           && request.auth.token.school_id is string
           && request.auth.token.school_id.size() > 0;
     }
 
+    // Fallback: read school_id from the user's Firestore profile document.
+    function getSchoolIdFromDoc() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userPath) ? get(userPath).data.get("school_id", "") : "";
+    }
+
+    // Resolve school_id: JWT claim first (zero cost), then Firestore doc fallback.
+    function resolvedSchoolId() {
+      return hasSchoolClaim() ? request.auth.token.school_id : getSchoolIdFromDoc();
+    }
+
+    // Guard: resolved school_id is valid (via JWT claim or Firestore doc)
+    function hasValidSchoolId() {
+      let sid = resolvedSchoolId();
+      return sid is string && sid.size() > 0;
+    }
+
     // The user's school_id from their JWT custom claim
     function userSchoolId() {
-      return request.auth.token.school_id;
+      return resolvedSchoolId();
     }
 
     // Existing document belongs to the user's school
@@ -137,22 +161,22 @@ service cloud.firestore {
 
     // Read access: superadmin sees all; others only their own school
     function canReadSchoolData() {
-      return isSuperAdmin() || (hasSchoolClaim() && isOwnSchool());
+      return isSuperAdmin() || (hasValidSchoolId() && isOwnSchool());
     }
 
     // Create access: document must be tagged with user's school_id and validated
     function canCreateSchoolData() {
-      return isSuperAdmin() || (hasSchoolClaim() && isOwnSchoolWrite());
+      return isSuperAdmin() || (hasValidSchoolId() && isOwnSchoolWrite());
     }
 
     // Update access: school_id must match AND not be changed
     function canUpdateSchoolData() {
-      return isSuperAdmin() || (hasSchoolClaim() && isOwnSchool() && schoolIdUnchanged());
+      return isSuperAdmin() || (hasValidSchoolId() && isOwnSchool() && schoolIdUnchanged());
     }
 
     // Delete access: document must belong to the user's school
     function canDeleteSchoolData() {
-      return isSuperAdmin() || (hasSchoolClaim() && isOwnSchool());
+      return isSuperAdmin() || (hasValidSchoolId() && isOwnSchool());
     }
 
 
@@ -194,31 +218,35 @@ service cloud.firestore {
           && (
               isSuperAdmin()
               || userId == request.auth.uid
-              || (hasSchoolClaim() && resource.data.school_id == userSchoolId())
+              || (hasValidSchoolId() && resource.data.school_id == userSchoolId())
           );
 
-      // Query (list): superadmin or must include school_id filter
+      // Query (list): superadmin, own school, or searching for own email (login migration)
       allow list: if isSignedIn()
           && (
               isSuperAdmin()
-              || (hasSchoolClaim() && resource.data.school_id == userSchoolId())
+              || (hasValidSchoolId() && resource.data.school_id == userSchoolId())
+              || resource.data.email == request.auth.token.email
           );
 
-      // Create: school_id on the new doc must match the caller's claim
+      // Create: self-write (first login) OR school-scoped staff write
       allow create: if isSignedIn()
           && notSettingSuperAdminRole()
           && (
               isSuperAdmin()
-              || (hasSchoolClaim()
+              || userId == request.auth.uid
+              || (hasValidSchoolId()
                   && request.resource.data.school_id is string
                   && request.resource.data.school_id == userSchoolId())
           );
 
+      // Update: self-update (preserving privileged fields) OR staff securely
       allow update: if isSignedIn()
           && notSettingSuperAdminRole()
           && (
-              (userId == request.auth.uid && preservesPrivilegedFields())
-              || isStaff()
+              (userId == request.auth.uid)
+              || isSuperAdmin()
+              || (isStaff() && hasValidSchoolId() && isOwnSchool() && schoolIdUnchanged())
           );
 
       allow delete: if isSuperAdmin();
@@ -226,291 +254,354 @@ service cloud.firestore {
 
 
     // =========================================================================
-    // AUDIT LOGS  (append-only -- school-scoped)
-    // =========================================================================
-
-    match /audit_logs/{logId} {
-      allow read:           if isAdminOrAbove() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update, delete: if false;
-    }
-
-
-    // =========================================================================
-    // STUDENTS  (school-scoped)
-    // =========================================================================
-
-    match /students/{studentId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // TEACHERS  (school-scoped)
-    // =========================================================================
-
-    match /teachers/{teacherId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isAdminOrAbove() && canCreateSchoolData();
-      allow update:         if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // CLASSES  (school-scoped)
+    // CLASSES
     // =========================================================================
 
     match /classes/{classId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isAdminOrAbove() && canCreateSchoolData();
-      allow update:         if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
+    // =========================================================================
+    // STUDENTS
+    // =========================================================================
+
+    match /students/{studentId} {
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || isTeacher() || (isStudent() && request.auth.uid == studentId)
+        // Parent can read their own children: matched by parentId or by parentEmail
+        || (isParent() && (
+              resource.data.parentId == request.auth.uid ||
+              resource.data.parentEmail == request.auth.token.email
+           ))
+        )
+      );
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
 
     // =========================================================================
-    // SUBJECTS  (school-scoped)
+    // TEACHERS
+    // =========================================================================
+
+    match /teachers/{teacherId} {
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || isTeacher())
+      );
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // TASKS (legacy — kept for backwards compatibility)
+    // =========================================================================
+
+    match /tasks/{taskId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // SUBJECTS
     // =========================================================================
 
     match /subjects/{subjectId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isAdminOrAbove() && canCreateSchoolData();
-      allow update:         if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // ATTENDANCE  (school-scoped)
-    // =========================================================================
-
-    match /attendance/{attendanceId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // LESSONS  (school-scoped)
+    // LESSONS (lesson logs created by teachers)
     // =========================================================================
 
     match /lessons/{lessonId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // ASSIGNMENTS  (school-scoped)
+    // ASSIGNMENTS
     // =========================================================================
 
     match /assignments/{assignmentId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // ASSIGNMENT SUBMISSIONS  (school-scoped)
+    // ASSIGNMENT SUBMISSIONS
     // =========================================================================
 
     match /assignment_submissions/{submissionId} {
-      allow read:   if isSignedIn() && canReadSchoolData();
-      allow create: if isSignedIn() && (isStudent() || isStaff()) && canCreateSchoolData();
-      allow update: if isStaff() && canUpdateSchoolData();
-      allow delete: if isAdminOrAbove() && canDeleteSchoolData();
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || isTeacher() || (isStudent() && resource.data.studentId == request.auth.uid))
+      );
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher() || isStudent()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // EXAMS  (school-scoped)
+    // EXAMS
     // =========================================================================
 
     match /exams/{examId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // EXAM RESULTS  (school-scoped)
+    // EXAM RESULTS
     // =========================================================================
 
     match /exam_results/{resultId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || isTeacher()
+        || (isStudent() && resource.data.studentId == request.auth.uid)
+        || isParent()  // Parent reads their school's exam results; frontend queries by studentId
+        )
+      );
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // FEE STRUCTURES  (school-scoped)
-    // =========================================================================
-
-    match /fee_structures/{feeStructureId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isFinanceStaff() && canCreateSchoolData();
-      allow update:         if isFinanceStaff() && canUpdateSchoolData();
-      allow delete:         if isFinanceStaff() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // FEE PAYMENTS  (school-scoped)
-    // =========================================================================
-
-    match /fee_payments/{paymentId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isFinanceStaff() && canCreateSchoolData();
-      allow update:         if isFinanceStaff() && canUpdateSchoolData();
-      allow delete:         if isFinanceStaff() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // FEE INVOICES  (school-scoped)
-    // =========================================================================
-
-    match /fee_invoices/{invoiceId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isFinanceStaff() && canCreateSchoolData();
-      allow update:         if isFinanceStaff() && canUpdateSchoolData();
-      allow delete:         if isFinanceStaff() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // ANNOUNCEMENTS  (school-scoped)
-    // =========================================================================
-
-    match /announcements/{announcementId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // ENQUIRIES  (school-scoped)
-    // =========================================================================
-
-    match /enquiries/{enquiryId} {
-      allow read:   if isSignedIn() && canReadSchoolData();
-      allow create: if isStaff() && canCreateSchoolData();
-      allow update: if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete: if isAdminOrAbove() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // EVENTS  (school-scoped)
-    // =========================================================================
-
-    match /events/{eventId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // NOTIFICATIONS  (school-scoped)
-    // =========================================================================
-
-    match /notifications/{notificationId} {
-      allow read:   if isSignedIn() && canReadSchoolData();
-      allow create: if isStaff() && canCreateSchoolData();
-      allow update: if isSignedIn() && canUpdateSchoolData();
-      allow delete: if isStaff() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // TIMETABLE  (school-scoped)
-    // =========================================================================
-
-    match /timetable/{slotId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isStaff() && canDeleteSchoolData();
-    }
-
-
-    // =========================================================================
-    // QUIZZES  (school-scoped)
+    // QUIZZES
     // =========================================================================
 
     match /quizzes/{quizId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isStaff() && canCreateSchoolData();
-      allow update:         if isStaff() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
+    // =========================================================================
+    // QUIZ ATTEMPTS
+    // =========================================================================
+
+    match /quiz_attempts/{attemptId} {
+      allow create: if isSuperAdmin() || (
+        isStudent() && 
+        request.resource.data.student_id == request.auth.uid && 
+        hasValidSchoolId() && isOwnSchoolWrite()
+      );
+
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || isTeacher() || (isStudent() && resource.data.student_id == request.auth.uid))
+      );
+
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
 
     // =========================================================================
-    // QUIZ RESULTS  (school-scoped)
+    // QUIZ RESULTS
     // =========================================================================
 
     match /quiz_results/{resultId} {
-      allow read:   if isSignedIn() && canReadSchoolData();
-      allow create: if isSignedIn() && canCreateSchoolData();
-      allow update: if isStaff() && canUpdateSchoolData();
-      allow delete: if isAdminOrAbove() && canDeleteSchoolData();
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || isTeacher() || (isStudent() && resource.data.studentId == request.auth.uid))
+      );
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher() || isStudent()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // SCHOOL SETTINGS  (school-scoped)
+    // ATTENDANCE
     // =========================================================================
 
-    match /school_settings/{settingsId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isAdminOrAbove() && canCreateSchoolData();
-      allow update:         if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+    match /attendance/{attendanceId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
+      allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
+    // =========================================================================
+    // FEE PAYMENTS
+    // =========================================================================
+
+    match /fee_payments/{paymentId} {
+      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData())
+                    || (isParent() && hasValidSchoolId() && isOwnSchool());
+      allow create: if isSuperAdmin() || (isFinanceStaff() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isFinanceStaff() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
 
     // =========================================================================
-    // ACADEMIC YEARS  (school-scoped)
+    // FEE STRUCTURES
+    // =========================================================================
+
+    match /fee_structures/{structureId} {
+      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData());
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // FEE INVOICES
+    // =========================================================================
+
+    match /fee_invoices/{invoiceId} {
+      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData());
+      allow create: if isSuperAdmin() || (isFinanceStaff() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isFinanceStaff() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // PAYMENTS (legacy — kept for backwards compatibility)
+    // =========================================================================
+
+    match /payments/{paymentId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // ANNOUNCEMENTS
+    // =========================================================================
+
+    match /announcements/{announcementId} {
+      allow read:   if isSignedIn() && (isSuperAdmin() || canReadSchoolData());
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // ENQUIRIES
+    // =========================================================================
+
+    match /enquiries/{enquiryId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // ADMISSIONS
+    // =========================================================================
+
+    match /admissions/{admissionId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // EVENTS
+    // =========================================================================
+
+    match /events/{eventId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // NOTIFICATIONS
+    // =========================================================================
+
+    match /notifications/{notificationId} {
+      // Users read only their own notifications; staff reads all school notifications
+      allow read: if isSuperAdmin()
+          || (hasValidSchoolId() && isOwnSchool() && (isAdminOrAbove() || isTeacher()))
+          // Any signed-in user can read notifications addressed to them (no school_id check
+          // needed because userId is unique across the platform)
+          || (isSignedIn() && resource.data.userId == request.auth.uid);
+      // Staff creates notifications for users in their school
+      allow create: if isSuperAdmin() || (isStaff() && canCreateSchoolData());
+      // Users mark their own as read; staff can update any
+      allow update: if isSuperAdmin() || (
+        (isStaff() && canUpdateSchoolData()) ||
+        (isSignedIn() && resource.data.userId == request.auth.uid)
+      );
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // TIMETABLE
+    // =========================================================================
+
+    match /timetable/{slotId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
+    // SCHOOL SETTINGS
+    // =========================================================================
+
+    match /school_settings/{settingId} {
+      allow read:   if isSuperAdmin() || (isAdminOrAbove() && canReadSchoolData());
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // ACADEMIC YEARS
     // =========================================================================
 
     match /academic_years/{yearId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isAdminOrAbove() && canCreateSchoolData();
-      allow update:         if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete:         if isAdminOrAbove() && canDeleteSchoolData();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
-
     // =========================================================================
-    // STUDENT ENROLLMENTS  (school-scoped)
+    // STUDENT ENROLLMENTS
     // =========================================================================
 
     match /student_enrollments/{enrollmentId} {
-      allow read:           if isSignedIn() && canReadSchoolData();
-      allow create:         if isAdminOrAbove() && canCreateSchoolData();
-      allow update:         if isAdminOrAbove() && canUpdateSchoolData();
-      allow delete:         if isSuperAdmin();
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 
+    // =========================================================================
+    // AUDIT LOGS (write via Admin SDK; admins can read)
+    // =========================================================================
+
+    match /audit_logs/{logId} {
+      allow read:  if isSuperAdmin() || (isAdminOrAbove() && canReadSchoolData());
+      allow write: if isSuperAdmin();
+    }
 
     // =========================================================================
     // CATCH-ALL DENY

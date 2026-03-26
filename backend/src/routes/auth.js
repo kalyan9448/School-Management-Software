@@ -68,9 +68,33 @@ router.post('/check-email', async (req, res) => {
     }
 });
 
+/** Robustly find a school ID by searching multiple possible principal email fields. */
+async function findSchoolIdByEmail(email) {
+    const trimmed = email.trim();
+    const lowered = trimmed.toLowerCase();
+    
+    // Check possible field names in the schools collection
+    const fields = ['email', 'principalEmail', 'principalGmail', 'principal_email'];
+    
+    for (const field of fields) {
+        let q = await db.collection('schools')
+            .where(field, '==', trimmed)
+            .limit(1)
+            .get();
+        
+        if (q.empty && trimmed !== lowered) {
+            q = await db.collection('schools')
+                .where(field, '==', lowered)
+                .limit(1)
+                .get();
+        }
+
+        if (!q.empty) return q.docs[0].id;
+    }
+    return null;
+}
+
 // POST /api/auth/login — sync user profile via Admin SDK and return it.
-// Admin SDK bypasses Firestore security rules, so it can write role='superadmin'
-// even though the client-side rules block that write.
 router.post('/login', verifyFirebaseToken, async (req, res) => {
     try {
         const { uid, email, name } = req.firebaseUser;
@@ -85,17 +109,24 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
             const updates = {};
 
             // Upgrade to superadmin if the email is in the superadmin list
-            // but the stored role is still 'admin' (e.g. migrated from old auto-id)
             if (correctRole === 'superadmin' && user.role !== 'superadmin') {
                 updates.role = 'superadmin';
                 user.role = 'superadmin';
             }
 
-            // Clear isFirstLogin — the user has a Firebase Auth account and
-            // has successfully authenticated, so the first-login flow is done.
+            // Clear isFirstLogin
             if (user.isFirstLogin) {
                 updates.isFirstLogin = false;
                 user.isFirstLogin = false;
+            }
+
+            // Fallback: If school_id is missing for an admin, try to find it!
+            if (user.role === 'admin' && !user.school_id) {
+                const assignedSid = await findSchoolIdByEmail(email);
+                if (assignedSid) {
+                    updates.school_id = assignedSid;
+                    user.school_id = assignedSid;
+                }
             }
 
             if (Object.keys(updates).length > 0) {
@@ -103,18 +134,40 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 await userRef.update(updates);
             }
         } else {
-            // Create profile via Admin SDK — bypasses the client-side rule that
-            // blocks writing role='superadmin' from the browser.
-            user = {
-                id: uid,
-                email,
-                name: name || email.split('@')[0] || 'User',
-                role: correctRole,
-                isFirstLogin: true,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
-            await userRef.set(user);
+            // Check if there is an orphaned user doc with this email (from frontend auto-provision)
+            const lowered = email.toLowerCase().trim();
+            const existingQuery = await db.collection('users')
+                .where('email', 'in', [email.trim(), lowered])
+                .limit(1)
+                .get();
+
+            if (!existingQuery.empty) {
+                const existingDoc = existingQuery.docs[0];
+                user = { id: uid, ...existingDoc.data() };
+                
+                // If the auto-provisioned doc was also missing school_id, try finding it
+                if (!user.school_id && user.role === 'admin') {
+                    user.school_id = await findSchoolIdByEmail(email);
+                }
+
+                await userRef.set(user);
+                try { await db.collection('users').doc(existingDoc.id).delete(); } catch(e) {}
+            } else {
+                // Completely new user — search for their school!
+                const assignedSchoolId = (correctRole === 'admin') ? await findSchoolIdByEmail(email) : null;
+
+                user = {
+                    id: uid,
+                    email: email.trim(),
+                    name: name || email.split('@')[0] || 'User',
+                    role: correctRole,
+                    school_id: assignedSchoolId,
+                    isFirstLogin: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                };
+                await userRef.set(user);
+            }
         }
 
         // Set Firebase Auth custom claims so Firestore security rules can check

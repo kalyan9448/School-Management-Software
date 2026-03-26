@@ -84,12 +84,29 @@ async function getUserFromFirestore(uid: string, email?: string): Promise<User |
 
                 // Migrate: copy the profile to /users/{firebaseUID} so future
                 // lookups by UID succeed immediately.
+                const oldDocId = existingDoc.id;
                 const migratedUser: User = { ...existingData, id: uid };
                 await setDoc(doc(db, 'users', uid), migratedUser, { merge: true });
 
                 // Remove the orphaned doc (different ID) to avoid duplicates
-                if (existingDoc.id !== uid) {
-                    try { await deleteDoc(doc(db, 'users', existingDoc.id)); } catch { /* best effort */ }
+                if (oldDocId !== uid) {
+                    try { await deleteDoc(doc(db, 'users', oldDocId)); } catch { /* best effort */ }
+
+                    // Fix the parentId on any student records that still reference
+                    // the old random doc ID (happens when parent was provisioned by
+                    // userService.create() before their first Firebase Auth login).
+                    if (existingData.role === 'parent' && oldDocId) {
+                        try {
+                            const staleStudents = await getDocs(
+                                query(collection(db, 'students'), where('parentId', '==', oldDocId))
+                            );
+                            await Promise.all(
+                                staleStudents.docs.map(d =>
+                                    setDoc(doc(db, 'students', d.id), { parentId: uid }, { merge: true })
+                                )
+                            );
+                        } catch { /* best effort — parentEmail fallback covers this */ }
+                    }
                 }
 
                 return migratedUser;
@@ -188,7 +205,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     // Firestore rules fall back to the previous token claims.
                 }
 
-                // 4. Set tenant context (school_id) so dashboard data loads correctly
+                // 4. Fallback: If school_id is STILL missing (backend down, race
+                //    condition, etc.), try to resolve it from the schools collection.
+                if (!appUser!.school_id && appUser!.role !== 'superadmin') {
+                    try {
+                        const emailLower = email.toLowerCase().trim();
+                        const emailTrimmed = email.trim();
+                        const fields = ['email', 'principalEmail', 'principalGmail', 'principal_email'] as const;
+                        let foundSchoolId: string | null = null;
+
+                        for (const field of fields) {
+                            // Try lowercase first
+                            const q1 = query(collection(db, 'schools'), where(field, '==', emailLower));
+                            const snap1 = await getDocs(q1);
+                            if (!snap1.empty) {
+                                foundSchoolId = snap1.docs[0].id;
+                                break;
+                            }
+                            // Also try original casing
+                            if (emailTrimmed !== emailLower) {
+                                const q2 = query(collection(db, 'schools'), where(field, '==', emailTrimmed));
+                                const snap2 = await getDocs(q2);
+                                if (!snap2.empty) {
+                                    foundSchoolId = snap2.docs[0].id;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (foundSchoolId) {
+                            appUser!.school_id = foundSchoolId;
+                            // Persist the fix to Firestore so it sticks
+                            await saveUserToFirestore(firebaseUser.uid, appUser!);
+                            console.log('[AuthContext] Auto-resolved school_id:', foundSchoolId);
+                        } else {
+                            console.warn('[AuthContext] Could not resolve school_id for', emailLower);
+                        }
+                    } catch (err) {
+                        console.warn('Frontend school_id resolution failed:', err);
+                    }
+                }
+
+                // 5. Set tenant context (school_id) so dashboard data loads correctly
                 if (appUser!.school_id) {
                     sessionStorage.setItem('active_school_id', appUser!.school_id);
                 }

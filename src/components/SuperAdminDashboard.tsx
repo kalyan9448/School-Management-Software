@@ -459,17 +459,23 @@ export function SuperAdminDashboard() {
         errors.push('Announcements: ' + (err?.message || 'Failed to load'));
       }
 
-      // Reconcile org-school links: fix schools whose organizationId
-      // doesn't match any actual org (caused by old auto-ID bug).
+      // Reconcile org-school links: fix schools whose organizationId is missing
+      // or doesn't match any actual org (caused by old auto-ID bug or race condition).
       const orgIdSet = new Set(firestoreOrganizations.map((o: any) => o.id));
       const reconciledSchools = firestoreSchools.map((school: any) => {
-        if (school.organizationId && !orgIdSet.has(school.organizationId)) {
-          // Try to match by organizationName
+        // School already has a valid organizationId — nothing to fix
+        if (school.organizationId && orgIdSet.has(school.organizationId)) {
+          return school;
+        }
+        // Missing, empty, or stale organizationId — try to match by organizationName
+        // (case-insensitive, trimmed to tolerate minor formatting differences)
+        const schoolOrgName = (school.organizationName || '').trim().toLowerCase();
+        if (schoolOrgName) {
           const matchedOrg = firestoreOrganizations.find(
-            (o: any) => o.name === school.organizationName
+            (o: any) => (o.name || '').trim().toLowerCase() === schoolOrgName
           );
           if (matchedOrg) {
-            // Fix the link in Firestore (fire-and-forget)
+            // Persist the corrected link back to Firestore (fire-and-forget)
             schoolService.update(school.id, { organizationId: matchedOrg.id }).catch(() => {});
             return { ...school, organizationId: matchedOrg.id };
           }
@@ -477,8 +483,26 @@ export function SuperAdminDashboard() {
         return school;
       });
 
+      // ── Repair schoolsCount on every org ────────────────────────────────
+      // Build a map of actual school counts per organizationId from live data.
+      // This fixes any org document whose schoolsCount field is 0 / stale.
+      const schoolCountByOrg = new Map<string, number>();
+      for (const school of reconciledSchools) {
+        const oid = (school as any).organizationId;
+        if (oid) schoolCountByOrg.set(oid, (schoolCountByOrg.get(oid) || 0) + 1);
+      }
+      const repairedOrganizations = firestoreOrganizations.map((org: any) => {
+        const actualCount = schoolCountByOrg.get(org.id) || 0;
+        if (org.schoolsCount !== actualCount) {
+          // Persist the correct count back to Firestore (fire-and-forget)
+          organizationService.update(org.id, { schoolsCount: actualCount }).catch(() => {});
+          return { ...org, schoolsCount: actualCount };
+        }
+        return org;
+      });
+
       setSchools(reconciledSchools as any);
-      setOrganizations(firestoreOrganizations as any);
+      setOrganizations(repairedOrganizations as any);
       if (firestoreAnnouncements.length > 0) {
         setAnnouncements(firestoreAnnouncements as any);
       }
@@ -624,6 +648,7 @@ export function SuperAdminDashboard() {
     subscriptionEnd.setFullYear(subscriptionEnd.getFullYear() + 1);
 
     // Create new school
+    const normalizedEmail = schoolForm.principalEmail.trim().toLowerCase();
     const newSchool: School = {
       id: schoolId,
       name: schoolForm.name,
@@ -635,10 +660,12 @@ export function SuperAdminDashboard() {
       storage: '0 GB',
       subscriptionEnd: subscriptionEnd.toISOString().split('T')[0],
       principal: schoolForm.principalName,
-      email: schoolForm.principalEmail,
+      email: normalizedEmail,
+      principalEmail: normalizedEmail,
+      principalName: schoolForm.principalName,
       phone: schoolForm.principalPhone,
       principalAddress: schoolForm.principalAddress,
-      principalGmail: schoolForm.principalGmail,
+      principalGmail: schoolForm.principalGmail ? schoolForm.principalGmail.trim().toLowerCase() : '',
       address: schoolForm.address,
       city: schoolForm.city,
       state: schoolForm.state,
@@ -650,7 +677,6 @@ export function SuperAdminDashboard() {
       schoolCode: schoolForm.schoolCode,
     };
 
-    // Add to schools list (organization school count is computed dynamically)
     setSchools([...schools, newSchool]);
 
     // Save school to Firestore (also auto-creates admin user)
@@ -665,6 +691,15 @@ export function SuperAdminDashboard() {
       setSchools(prev => prev.filter(s => s.id !== newSchool.id));
       return;
     }
+
+    // Increment schoolsCount on the parent organization in Firestore
+    const newSchoolCount = schools.filter(s => s.organizationId === schoolForm.organizationId).length + 1;
+    organizationService.update(schoolForm.organizationId, { schoolsCount: newSchoolCount }).catch(err =>
+      console.warn('Failed to update org school count:', err)
+    );
+    setOrganizations(prev => prev.map(o =>
+      o.id === schoolForm.organizationId ? { ...o, schoolsCount: newSchoolCount } : o
+    ));
 
     // Show success message
     alert(`School "${schoolForm.name}" created successfully!\nAn administrator account has been provisioned for ${schoolForm.principalEmail}.`);
@@ -4370,7 +4405,20 @@ export function SuperAdminDashboard() {
               <button
                 onClick={() => {
                   if (confirm(`Are you sure you want to delete ${selectedSchool.name}? This action cannot be undone.`)) {
+                    const orgId = selectedSchool.organizationId;
                     setSchools(schools.filter(s => s.id !== selectedSchool.id));
+                    // Delete from Firestore
+                    schoolService.delete(selectedSchool.id).catch(err =>
+                      console.error('Failed to delete school from Firestore:', err)
+                    );
+                    // Decrement schoolsCount on parent organization
+                    if (orgId) {
+                      const newCount = Math.max(0, schools.filter(s => s.organizationId === orgId).length - 1);
+                      organizationService.update(orgId, { schoolsCount: newCount }).catch(() => {});
+                      setOrganizations(prev => prev.map(o =>
+                        o.id === orgId ? { ...o, schoolsCount: newCount } : o
+                      ));
+                    }
                     setCurrentView('schools');
                     setSelectedSchool(null);
                     alert(`${selectedSchool.name} has been deleted.`);

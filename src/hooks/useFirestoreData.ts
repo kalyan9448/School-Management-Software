@@ -58,9 +58,13 @@ export const useStudents = (filters?: {
   class?: string;
   section?: string;
   parentId?: string;
+  childrenIds?: string[];
+  parentEmail?: string;
 }) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const childrenIdsKey = filters?.childrenIds?.join(',') || '';
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -69,7 +73,18 @@ export const useStudents = (filters?: {
       if (filters?.class && filters?.section) {
         data = await dataService.student.getByClass(filters.class, filters.section);
       } else if (filters?.parentId) {
+        // Try parentId first, fall back to childrenIds, then parentEmail
         data = await dataService.student.getByParentId(filters.parentId);
+        if (data.length === 0 && filters.childrenIds?.length) {
+          data = await dataService.student.getByIds(filters.childrenIds);
+        }
+        if (data.length === 0 && filters.parentEmail) {
+          data = await dataService.student.getByParentEmail(filters.parentEmail);
+        }
+      } else if (filters?.childrenIds?.length) {
+        data = await dataService.student.getByIds(filters.childrenIds);
+      } else if (filters?.parentEmail) {
+        data = await dataService.student.getByParentEmail(filters.parentEmail);
       } else {
         data = await dataService.student.getAll();
       }
@@ -80,7 +95,7 @@ export const useStudents = (filters?: {
     } finally {
       setLoading(false);
     }
-  }, [filters?.class, filters?.section, filters?.parentId]);
+  }, [filters?.class, filters?.section, filters?.parentId, childrenIdsKey, filters?.parentEmail]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { students, loading, refresh };
@@ -163,6 +178,12 @@ export const useAttendance = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!filters) {
+      setAttendance([]);
+      setStats(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let data: AttendanceRecord[];
@@ -204,6 +225,11 @@ export const useLessons = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!filters) {
+      setLessons([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let data: LessonLog[];
@@ -238,6 +264,11 @@ export const useAssignments = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!filters) {
+      setAssignments([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = (filters?.class && filters?.section)
@@ -296,6 +327,11 @@ export const useExams = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!filters) {
+      setExams([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let data: Exam[];
@@ -328,6 +364,11 @@ export const useExamResults = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!filters) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       let data: ExamResult[] = [];
@@ -358,6 +399,11 @@ export const useFeePayments = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!filters) {
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = filters?.studentId
