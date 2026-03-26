@@ -940,10 +940,25 @@ export const feeService = {
         return payments.sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
     },
 
+    createStructure: async (structure: any): Promise<any> => {
+        return createDoc<any>('fee_structures', structure);
+    },
+
+    updateStructure: async (id: string, updates: any): Promise<void> => {
+        await updateDocById('fee_structures', id, updates);
+    },
+
+    deleteStructure: async (id: string): Promise<void> => {
+        await deleteDocById('fee_structures', id);
+    },
+
     createPayment: async (payment: Partial<FeePayment>): Promise<FeePayment> => {
         const allPayments = await feeService.getAllPayments();
         const newPayment = await createDoc<FeePayment>('fee_payments', {
             studentId: payment.studentId || '',
+            studentName: payment.studentName || '',
+            admissionNo: payment.admissionNo || '',
+            class: payment.class || '',
             receiptNo: payment.receiptNo || `REC${new Date().getFullYear()}${String(allPayments.length + 1).padStart(4, '0')}`,
             amount: payment.amount || 0,
             paymentDate: payment.paymentDate || new Date().toISOString().split('T')[0],

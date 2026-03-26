@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { notificationService, feeService, studentService } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
@@ -44,6 +44,7 @@ interface FeeStructure {
 
 interface Payment {
   id: string;
+  studentId: string;
   studentName: string;
   admissionNo: string;
   class: string;
@@ -111,56 +112,41 @@ export function FeeModule() {
     class: '',
     feeType: '',
     amount: '',
+    paidAmount: '',
     paymentMode: 'cash' as const,
     discount: '',
     lateFee: '',
     notes: '',
   });
 
+  // Smart Search State
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentSearchClass, setStudentSearchClass] = useState('');
+  const [studentSearchSection, setStudentSearchSection] = useState('');
+  const [selectedStudentForFee, setSelectedStudentForFee] = useState<any>(null);
+  const [selectedStudentLedger, setSelectedStudentLedger] = useState<StudentLedger | null>(null);
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
 
   // Student Ledgers
   const [studentLedgers, setStudentLedgers] = useState<StudentLedger[]>([]);
+  const [studentsData, setStudentsData] = useState<any[]>([]);
 
   // Load data from Firestore on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const allFees = await feeService.getAll();
-
-        // Separate structures from payments based on data shape
-        const structures = allFees.filter((f: any) => f.type === 'structure');
-        const paymentRecords = allFees.filter((f: any) => f.type === 'payment');
+        const structures = await feeService.getAllStructures() as any[];
+        const paymentRecords = await feeService.getAllPayments() as any[];
 
         if (structures.length > 0) setFeeStructures(structures);
         if (paymentRecords.length > 0) setPayments(paymentRecords);
 
-        // Derive ledgers from students + payment data
+        // Fetch students and store them
         const students = await studentService.getAll();
-        if (students.length > 0) {
-          const ledgers: StudentLedger[] = students.map((s: any) => {
-            const studentPayments = paymentRecords.filter(
-              (p: any) => p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase()
-            );
-            const paidAmount = studentPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || 0), 0);
-            const totalFee = s.totalFee || 0;
-            return {
-              studentName: s.name || s.studentName || '',
-              admissionNo: s.admissionNo || '',
-              class: s.class || '',
-              totalFee,
-              paidAmount,
-              dueAmount: Math.max(0, totalFee - paidAmount),
-              lastPaymentDate: studentPayments.length > 0
-                ? studentPayments[studentPayments.length - 1].paymentDate
-                : '-',
-              parentPhone: s.parentPhone || '',
-              parentId: s.parentId,
-            };
-          });
-          setStudentLedgers(ledgers);
-        }
+        setStudentsData(students);
       } catch (err) {
         console.error('Failed to load fee data:', err);
       }
@@ -168,18 +154,145 @@ export function FeeModule() {
     loadData();
   }, []);
 
+  // Dynamically calculate Student Ledgers
+  useEffect(() => {
+    if (studentsData.length === 0) return;
+    
+    const ledgers: StudentLedger[] = studentsData.map((s: any) => {
+      const studentPayments = payments.filter(
+        (p: any) => p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase() || p.studentId === s.id
+      );
+      const paidAmount = studentPayments.reduce((sum: number, p: any) => sum + (parseFloat(p.totalAmount) || parseFloat(p.amount) || 0), 0);
+      
+      // Clean up class name for lookup
+      const studentClass = s.class?.replace(/^Class\s+/i, '') || '';
+      const classStructure = feeStructures.find((str: any) => str.class?.replace(/^Class\s+/i, '') === studentClass);
+      
+      const calculatedTotalFee = classStructure 
+        ? (parseFloat(classStructure.admissionFee as any) || 0) +
+          (parseFloat(classStructure.annualFee as any) || 0) +
+          ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) +
+          ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) +
+          ((parseFloat(classStructure.transportFee as any) || 0) * 12) +
+          ((parseFloat(classStructure.daycareFee as any) || 0) * 12) +
+          ((parseFloat(classStructure.activityFee as any) || 0) * 12)
+        : (parseFloat(s.totalFee as any) || 0);
+
+      return {
+        studentName: s.name || s.studentName || '',
+        admissionNo: s.admissionNo || '',
+        class: studentClass,
+        totalFee: calculatedTotalFee,
+        paidAmount,
+        dueAmount: Math.max(0, calculatedTotalFee - paidAmount),
+        lastPaymentDate: studentPayments.length > 0
+          ? studentPayments[studentPayments.length - 1].paymentDate
+          : '-',
+        parentPhone: s.parentPhone || '',
+        parentId: s.parentId,
+      };
+    });
+    setStudentLedgers(ledgers);
+  }, [studentsData, payments, feeStructures]);
+
   // Generate Receipt Number
   const generateReceiptNo = () => {
     const count = payments.length + 1;
     return `RCP${count.toString().padStart(4, '0')}`;
   };
 
-  // Calculate total amount with discount and late fee
-  const calculateTotalAmount = () => {
+  // Calculate total fee minus discount plus late fee
+  const calculateNetPayable = () => {
     const amount = parseFloat(collectionForm.amount) || 0;
     const discount = parseFloat(collectionForm.discount) || 0;
     const lateFee = parseFloat(collectionForm.lateFee) || 0;
     return amount - discount + lateFee;
+  };
+
+  const calculateBalance = () => {
+    const net = calculateNetPayable();
+    const paid = parseFloat(collectionForm.paidAmount) || 0;
+    return Math.max(0, net - paid);
+  };
+
+  // Smart Search Logic
+  const filteredSearchStudents = useMemo(() => {
+    if (!studentSearchQuery && !studentSearchClass && !studentSearchSection) return [];
+    
+    return studentsData.filter(student => {
+      const query = studentSearchQuery.toLowerCase();
+      const matchesQuery = !query || 
+        student.name?.toLowerCase().includes(query) ||
+        student.studentName?.toLowerCase().includes(query) ||
+        student.admissionNo?.toLowerCase().includes(query) ||
+        student.parentPhone?.includes(query) ||
+        student.parentName?.toLowerCase().includes(query);
+        
+      const matchesClass = !studentSearchClass || student.class === studentSearchClass;
+      const matchesSection = !studentSearchSection || student.section === studentSearchSection;
+      
+      return matchesQuery && matchesClass && matchesSection;
+    }).slice(0, 8); // Display top 8 results rapidly
+  }, [studentsData, studentSearchQuery, studentSearchClass, studentSearchSection]);
+
+  const handleSelectStudentForFee = (student: any) => {
+    setSelectedStudentForFee(student);
+    
+    // Find ledger if exists
+    const ledger = studentLedgers.find(
+      l => l.admissionNo?.toLowerCase() === student.admissionNo?.toLowerCase()
+    );
+    setSelectedStudentLedger(ledger || null);
+    
+    setCollectionForm(prev => ({
+      ...prev,
+      studentName: student.name || student.studentName || '',
+      admissionNo: student.admissionNo || '',
+      class: student.class || '',
+      feeType: '', // reset fee type when selecting new student
+      amount: '',
+      paidAmount: '',
+    }));
+    
+    setStudentSearchQuery('');
+    setIsSearchDropdownOpen(false);
+  };
+
+  const clearSelectedStudentForFee = () => {
+    setSelectedStudentForFee(null);
+    setSelectedStudentLedger(null);
+    setCollectionForm(prev => ({
+      ...prev,
+      studentName: '',
+      admissionNo: '',
+      class: '',
+      feeType: '',
+      amount: '',
+    }));
+  };
+
+  const handleFeeTypeChange = (feeType: string) => {
+    let amount = 0;
+    if (selectedStudentForFee) {
+      const classStructure = feeStructures.find(s => s.class === selectedStudentForFee.class);
+      if (classStructure) {
+        switch (feeType) {
+          case 'Admission Fee': amount = classStructure.admissionFee; break;
+          case 'Annual Fee': amount = classStructure.annualFee; break;
+          case 'Monthly Fee': amount = classStructure.monthlyFee; break;
+          case 'Quarterly Fee': amount = classStructure.quarterlyFee; break;
+          case 'Transport Fee': amount = classStructure.transportFee; break;
+          case 'Daycare Fee': amount = classStructure.daycareFee; break;
+          case 'Activity Fee': amount = classStructure.activityFee; break;
+        }
+      }
+    }
+    setCollectionForm(prev => ({
+      ...prev,
+      feeType,
+      amount: amount.toString(),
+      paidAmount: amount.toString() // auto-fill paidAmount with full amount by default
+    }));
   };
 
   // Generate Professional PDF Receipt
@@ -228,38 +341,45 @@ export function FeeModule() {
     doc.setFont('helvetica', 'normal');
     centerText('---------------------------------------------------------', 108);
 
+    const netPayable = (payment.amount || 0) - (payment.discount || 0) + (payment.lateFee || 0);
+    const balance = Math.max(0, netPayable - payment.totalAmount);
+
     // Table Header
     doc.setFont('helvetica', 'bold');
-    doc.text('| Fee Type', 20, 115);
-    doc.text('| Amount', 140, 115);
-    doc.text('|', 180, 115);
+    doc.text('Description', 20, 115);
+    doc.text('Amount', 140, 115);
 
     doc.setFont('helvetica', 'normal');
-    doc.text('|-----------------|--------|', 20, 120);
+    centerText('---------------------------------------------------------', 120);
 
     // Table Row
-    doc.text(`| ${payment.feeType}`, 20, 128);
-    doc.text(`| Rs. ${payment.totalAmount.toLocaleString()}`, 140, 128);
-    doc.text('|', 180, 128);
+    doc.text(`Total Fee (${payment.feeType})`, 20, 128);
+    doc.text(`Rs. ${netPayable.toLocaleString()}`, 140, 128);
 
-    centerText('---------------------------------------------------------', 136);
+    doc.text(`Amount Paid NOW`, 20, 135);
+    doc.text(`Rs. ${payment.totalAmount.toLocaleString()}`, 140, 135);
+
+    doc.text(`Remaining Balance`, 20, 142);
+    doc.text(`Rs. ${balance.toLocaleString()}`, 140, 142);
+
+    centerText('---------------------------------------------------------', 150);
 
     // Total
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total Amount Paid : Rs. ${payment.totalAmount.toLocaleString()}`, 20, 145);
-    centerText('---------------------------------------------------------', 151);
+    doc.text(`Payment Received : Rs. ${payment.totalAmount.toLocaleString()}`, 20, 158);
+    centerText('---------------------------------------------------------', 165);
 
     // Footer
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text('Thank you for your payment.', 20, 165);
+    doc.text('Thank you for your payment.', 20, 175);
 
-    doc.text('Authorized Signature', 140, 180);
-    doc.text('School Admin', 140, 187);
+    doc.text('Authorized Signature', 140, 190);
+    doc.text('School Admin', 140, 197);
 
-    centerText('---------------------------------------------------------', 200);
-    centerText('Generated from School Management System', 207);
-    centerText('---------------------------------------------------------', 214);
+    centerText('---------------------------------------------------------', 210);
+    centerText('Generated from School Management System', 217);
+    centerText('---------------------------------------------------------', 224);
 
     // Download file
     doc.save(`Receipt_${payment.receiptNo}.pdf`);
@@ -303,7 +423,7 @@ export function FeeModule() {
         activityFee: parseFloat(structureForm.activityFee) || 0,
       };
 
-      await feeService.create({ ...updatedStructure, type: 'structure' });
+      await feeService.updateStructure(editingStructure.id, updatedStructure);
       const updatedStructures = feeStructures.map(s =>
         s.id === editingStructure.id ? updatedStructure : s
       );
@@ -326,7 +446,7 @@ export function FeeModule() {
         activityFee: parseFloat(structureForm.activityFee) || 0,
         customCategories: [],
       };
-      await feeService.create({ ...newStructure, type: 'structure' });
+      await feeService.createStructure(newStructure);
       const updatedStructures = [...feeStructures, newStructure];
       setFeeStructures(updatedStructures);
       alert(`Fee structure for Class ${structureForm.class} has been added successfully!`);
@@ -365,9 +485,14 @@ export function FeeModule() {
   // Handle Delete Fee Structure
   const handleDeleteStructure = (structure: FeeStructure) => {
     if (confirm(`Are you sure you want to delete fee structure for Class ${structure.class}?`)) {
-      const updatedStructures = feeStructures.filter(s => s.id !== structure.id);
-      setFeeStructures(updatedStructures);
-      alert(`Fee structure for Class ${structure.class} has been deleted successfully!`);
+      feeService.deleteStructure(structure.id).then(() => {
+        const updatedStructures = feeStructures.filter(s => s.id !== structure.id);
+        setFeeStructures(updatedStructures);
+        alert(`Fee structure for Class ${structure.class} has been deleted successfully!`);
+      }).catch(err => {
+        console.error('Failed to delete structure:', err);
+        alert('Failed to delete. Please try again.');
+      });
     }
   };
 
@@ -375,47 +500,87 @@ export function FeeModule() {
   const handleCollectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const receiptNo = generateReceiptNo();
-    const totalAmount = calculateTotalAmount();
+    const netPayable = calculateNetPayable();
+    const paidAmount = parseFloat(collectionForm.paidAmount) || 0;
+    const balance = calculateBalance();
+
+    if (paidAmount <= 0) {
+      alert('Please enter a valid paid amount greater than 0');
+      return;
+    }
 
     const newPayment: Payment = {
       id: Date.now().toString(),
+      studentId: selectedStudentForFee?.id || '',
       studentName: collectionForm.studentName,
       admissionNo: collectionForm.admissionNo,
       class: collectionForm.class,
-      amount: parseFloat(collectionForm.amount) || 0,
+      amount: parseFloat(collectionForm.amount) || 0, // Original base amount mapped to `amount`
       paymentMode: collectionForm.paymentMode,
       paymentDate: new Date().toISOString().split('T')[0],
       receiptNo: receiptNo,
       feeType: collectionForm.feeType,
       discount: parseFloat(collectionForm.discount) || 0,
       lateFee: parseFloat(collectionForm.lateFee) || 0,
-      totalAmount: totalAmount,
-      status: 'paid',
+      totalAmount: paidAmount, // `totalAmount` tracks what was actually paid
+      status: balance > 0 ? 'partial' : 'paid',
     };
 
-    await feeService.recordPayment({ ...newPayment, type: 'payment' });
+    await feeService.createPayment(newPayment as any);
     const newPayments = [newPayment, ...payments];
     setPayments(newPayments);
 
-    // Update Student Ledger dynamically
-    const updatedLedgers = studentLedgers.map(s => {
-      // Compare by admission number to find the student
-      if (s.admissionNo.toLowerCase() === collectionForm.admissionNo.toLowerCase()) {
-        const newPaid = s.paidAmount + totalAmount;
-        return {
-          ...s,
-          paidAmount: newPaid,
-          dueAmount: Math.max(0, s.totalFee - newPaid),
-          lastPaymentDate: newPayment.paymentDate
-        };
+    // Student Ledger update is now handled dynamically by the useEffect hook since `payments` is updated
+
+    // Automate sending notifications to parent and student dashboards
+    if (selectedStudentForFee) {
+      const now = new Date().toISOString();
+      
+      const statusText = balance > 0 
+        ? `Payment of ₹${paidAmount.toLocaleString()} received. Remaining ₹${balance.toLocaleString()}` 
+        : `Fee fully paid`;
+
+      const parentMsg = `Dear Parent, ${statusText} towards ${collectionForm.feeType} for ${collectionForm.studentName}. Receipt No: ${receiptNo}.`;
+      const studentMsg = `${statusText} for ${collectionForm.feeType}. Receipt No: ${receiptNo}.`;
+
+      const notificationPromises = [];
+
+      // Notify Parent
+      if (selectedStudentForFee.parentId) {
+        notificationPromises.push(
+          notificationService.create({
+            userId: selectedStudentForFee.parentId,
+            type: 'fee',
+            title: balance > 0 ? 'Partial Payment Received' : 'Fee Payment Successful',
+            message: parentMsg,
+            date: now,
+          })
+        );
       }
-      return s;
-    });
 
-    setStudentLedgers(updatedLedgers);
+      // Notify Student
+      if (selectedStudentForFee.id) {
+        notificationPromises.push(
+          notificationService.create({
+            userId: selectedStudentForFee.id,
+            type: 'fee',
+            title: balance > 0 ? 'Partial Fee Payment' : 'Fee Payment Successful',
+            message: studentMsg,
+            date: now,
+          })
+        );
+      }
 
+      if (notificationPromises.length > 0) {
+        await Promise.all(notificationPromises).catch(err => console.error("Failed to send some notifications:", err));
+      }
+    }
     // Generate PDF and show success
-    alert(`Payment Successful!\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${totalAmount.toLocaleString()}\n\nReceipt PDF generated automatically.`);
+    const alertMessage = balance > 0 
+      ? `Payment Successful! (Partial)\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${paidAmount.toLocaleString()}\nRemaining Balance: ₹${balance.toLocaleString()}\n\nReceipt PDF generated automatically.`
+      : `Payment Successful! (Full)\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${paidAmount.toLocaleString()}\nFee fully paid.\n\nReceipt PDF generated automatically.`;
+    
+    alert(alertMessage);
 
     setCollectionForm({
       studentName: '',
@@ -423,6 +588,7 @@ export function FeeModule() {
       class: '',
       feeType: '',
       amount: '',
+      paidAmount: '',
       paymentMode: 'cash',
       discount: '',
       lateFee: '',
@@ -441,7 +607,7 @@ export function FeeModule() {
     const today = new Date().toISOString().split('T')[0];
     return payments
       .filter(p => p.paymentDate === today)
-      .reduce((sum, p) => sum + p.totalAmount, 0);
+      .reduce((sum, p) => sum + (parseFloat(p.totalAmount as any) || parseFloat(p.amount as any) || 0), 0);
   };
 
   const getMonthlyCollection = () => {
@@ -449,10 +615,11 @@ export function FeeModule() {
     const currentYear = new Date().getFullYear();
     return payments
       .filter(p => {
+        if (!p.paymentDate) return false;
         const date = new Date(p.paymentDate);
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       })
-      .reduce((sum, p) => sum + p.totalAmount, 0);
+      .reduce((sum, p) => sum + (parseFloat(p.totalAmount as any) || parseFloat(p.amount as any) || 0), 0);
   };
 
   const getTotalOutstanding = () => {
@@ -462,10 +629,11 @@ export function FeeModule() {
   const getClassWiseCollection = () => {
     const classWise: { [key: string]: number } = {};
     payments.forEach(p => {
-      if (!classWise[p.class]) {
-        classWise[p.class] = 0;
+      const cls = p.class?.replace(/^Class\s+/i, '') || 'General';
+      if (!classWise[cls]) {
+        classWise[cls] = 0;
       }
-      classWise[p.class] += p.totalAmount;
+      classWise[cls] += (parseFloat(p.totalAmount as any) || parseFloat(p.amount as any) || 0);
     });
     return classWise;
   };
@@ -699,31 +867,31 @@ export function FeeModule() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-blue-50 rounded-lg p-3">
                     <p className="text-blue-700 mb-1">Admission Fee</p>
-                    <p className="text-blue-900">₹{structure.admissionFee.toLocaleString()}</p>
+                    <p className="text-blue-900">₹{(structure.admissionFee || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-green-50 rounded-lg p-3">
                     <p className="text-green-700 mb-1">Annual Fee</p>
-                    <p className="text-green-900">₹{structure.annualFee.toLocaleString()}</p>
+                    <p className="text-green-900">₹{(structure.annualFee || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-purple-50 rounded-lg p-3">
                     <p className="text-purple-700 mb-1">Monthly Fee</p>
-                    <p className="text-purple-900">₹{structure.monthlyFee.toLocaleString()}</p>
+                    <p className="text-purple-900">₹{(structure.monthlyFee || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-orange-50 rounded-lg p-3">
                     <p className="text-orange-700 mb-1">Quarterly Fee</p>
-                    <p className="text-orange-900">₹{structure.quarterlyFee.toLocaleString()}</p>
+                    <p className="text-orange-900">₹{(structure.quarterlyFee || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-indigo-50 rounded-lg p-3">
                     <p className="text-indigo-700 mb-1">Transport Fee</p>
-                    <p className="text-indigo-900">₹{structure.transportFee.toLocaleString()}</p>
+                    <p className="text-indigo-900">₹{(structure.transportFee || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-pink-50 rounded-lg p-3">
                     <p className="text-pink-700 mb-1">Daycare Fee</p>
-                    <p className="text-pink-900">₹{structure.daycareFee.toLocaleString()}</p>
+                    <p className="text-pink-900">₹{(structure.daycareFee || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-yellow-50 rounded-lg p-3">
                     <p className="text-yellow-700 mb-1">Activity Fee</p>
-                    <p className="text-yellow-900">₹{structure.activityFee.toLocaleString()}</p>
+                    <p className="text-yellow-900">₹{(structure.activityFee || 0).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -750,75 +918,161 @@ export function FeeModule() {
           {showCollectionForm && (
             <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
               <h3 className="text-gray-900 mb-4">Payment Entry</h3>
-              <form onSubmit={handleCollectionSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 mb-2">Student Name *</label>
-                    <input
-                      type="text"
-                      value={collectionForm.studentName}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, studentName: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter student name"
-                    />
-                  </div>
+              <form onSubmit={handleCollectionSubmit} className="space-y-6">
+                
+                {/* Smart Search Section */}
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <h4 className="text-gray-900 font-medium mb-3">1. Select Student</h4>
+                  
+                  {!selectedStudentForFee ? (
+                    <div className="space-y-4">
+                      {/* Search Filters */}
+                      <div className="flex gap-2">
+                        <select
+                          value={studentSearchClass}
+                          onChange={(e) => setStudentSearchClass(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-1/3"
+                        >
+                          <option value="">All Classes</option>
+                          {uniqueClasses.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+                        </select>
+                        <select
+                          value={studentSearchSection}
+                          onChange={(e) => setStudentSearchSection(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-1/3"
+                        >
+                          <option value="">All Sections</option>
+                          {['A', 'B', 'C', 'D'].map(sec => <option key={sec} value={sec}>Section {sec}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Search Input */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                          type="text"
+                          value={studentSearchQuery}
+                          onChange={(e) => {
+                            setStudentSearchQuery(e.target.value);
+                            setIsSearchDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsSearchDropdownOpen(true)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Search student (Name / Phone / Parent / Admission No)..."
+                        />
+                        
+                        {/* Dropdown Results */}
+                        {isSearchDropdownOpen && (studentSearchQuery || studentSearchClass || studentSearchSection) && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {filteredSearchStudents.length > 0 ? (
+                              filteredSearchStudents.map(student => (
+                                <button
+                                  key={student.id}
+                                  type="button"
+                                  onClick={() => handleSelectStudentForFee(student)}
+                                  className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <p className="font-medium text-gray-900">{student.name || student.studentName}</p>
+                                      <p className="text-sm text-gray-500">
+                                        Adm: {student.admissionNo} • Class: {student.class} {student.section ? `(${student.section})` : ''}
+                                      </p>
+                                    </div>
+                                    <div className="text-right text-sm text-gray-500">
+                                      <p>Parent: {student.parentName || 'N/A'}</p>
+                                      <p>{student.parentPhone ? student.parentPhone.replace(/.(?=.{4})/g, '*') : 'N/A'}</p>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-4 py-3 text-gray-500 text-center">No students found</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Selected Student Card */
+                    <div className="bg-white border border-blue-200 rounded-lg p-4 relative">
+                      <button
+                        type="button"
+                        onClick={clearSelectedStudentForFee}
+                        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                      <div className="flex gap-4 items-center">
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xl">
+                          {(selectedStudentForFee.name || selectedStudentForFee.studentName || 'S').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-lg font-bold text-gray-900">{selectedStudentForFee.name || selectedStudentForFee.studentName}</h4>
+                          <div className="flex gap-4 text-sm text-gray-600 mt-1">
+                            <span className="flex items-center gap-1"><Users className="w-4 h-4" /> Class {selectedStudentForFee.class} {selectedStudentForFee.section ? `(${selectedStudentForFee.section})` : ''}</span>
+                            <span className="flex items-center gap-1"><FileText className="w-4 h-4" /> Adm: {selectedStudentForFee.admissionNo}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Total Pending Dues</p>
+                          <p className={`text-xl font-bold ${selectedStudentLedger && selectedStudentLedger.dueAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            ₹{selectedStudentLedger ? selectedStudentLedger.dueAmount.toLocaleString() : '0'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Details Section */}
+                <div className={`transition-opacity ${!selectedStudentForFee ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                  <h4 className="text-gray-900 font-medium mb-3">2. Payment Details</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <div>
+                      <label className="block text-gray-700 mb-2">Fee Type *</label>
+                      <select
+                        value={collectionForm.feeType}
+                        onChange={(e) => handleFeeTypeChange(e.target.value)}
+                        required={!!selectedStudentForFee}
+                        disabled={!selectedStudentForFee}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select Fee Type</option>
+                        <option value="Admission Fee">Admission Fee</option>
+                        <option value="Annual Fee">Annual Fee</option>
+                        <option value="Monthly Fee">Monthly Fee</option>
+                        <option value="Quarterly Fee">Quarterly Fee</option>
+                        <option value="Transport Fee">Transport Fee</option>
+                        <option value="Daycare Fee">Daycare Fee</option>
+                        <option value="Activity Fee">Activity Fee</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">Select a fee type to auto-fill the base amount.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 mb-2">Total Fee (₹) *</label>
+                      <input
+                        type="number"
+                        value={collectionForm.amount}
+                        readOnly
+                        required={!!selectedStudentForFee}
+                        className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-600 cursor-not-allowed"
+                        placeholder="Auto-calculated"
+                      />
+                    </div>
 
                   <div>
-                    <label className="block text-gray-700 mb-2">Admission No *</label>
-                    <input
-                      type="text"
-                      value={collectionForm.admissionNo}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, admissionNo: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="ADM2024001"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2">Class *</label>
-                    <select
-                      value={collectionForm.class}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, class: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select Class</option>
-                      {uniqueClasses.map(cls => (
-                        <option key={cls} value={cls}>{cls}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2">Fee Type *</label>
-                    <select
-                      value={collectionForm.feeType}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, feeType: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select Fee Type</option>
-                      <option value="Admission Fee">Admission Fee</option>
-                      <option value="Annual Fee">Annual Fee</option>
-                      <option value="Monthly Fee">Monthly Fee</option>
-                      <option value="Quarterly Fee">Quarterly Fee</option>
-                      <option value="Transport Fee">Transport Fee</option>
-                      <option value="Daycare Fee">Daycare Fee</option>
-                      <option value="Activity Fee">Activity Fee</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2">Amount (₹) *</label>
+                    <label className="block text-gray-700 mb-2">Amount Paying Now (₹) *</label>
                     <input
                       type="number"
-                      value={collectionForm.amount}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, amount: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="15000"
+                      value={collectionForm.paidAmount}
+                      onChange={(e) => setCollectionForm({ ...collectionForm, paidAmount: e.target.value })}
+                      required={!!selectedStudentForFee}
+                      disabled={!selectedStudentForFee}
+                      className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-bold text-blue-900 bg-blue-50"
+                      placeholder="0"
                     />
                   </div>
 
@@ -861,11 +1115,11 @@ export function FeeModule() {
                 </div>
 
                 {/* Calculation Display */}
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 shadow-sm mt-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div>
-                      <p className="text-blue-700 mb-1">Base Amount</p>
-                      <p className="text-blue-900">₹{(parseFloat(collectionForm.amount) || 0).toLocaleString()}</p>
+                      <p className="text-blue-700 mb-1">Total Fee</p>
+                      <p className="text-blue-900 font-semibold">₹{(parseFloat(collectionForm.amount) || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-green-700 mb-1">Discount</p>
@@ -875,9 +1129,15 @@ export function FeeModule() {
                       <p className="text-red-700 mb-1">Late Fee</p>
                       <p className="text-red-900">+ ₹{(parseFloat(collectionForm.lateFee) || 0).toLocaleString()}</p>
                     </div>
-                    <div>
-                      <p className="text-purple-700 mb-1">Total Amount</p>
-                      <p className="text-purple-900">₹{calculateTotalAmount().toLocaleString()}</p>
+                    <div className="border-l border-blue-200 pl-4">
+                      <p className="text-blue-800 font-medium mb-1">Net Payable</p>
+                      <p className="text-blue-900 font-bold text-lg">₹{calculateNetPayable().toLocaleString()}</p>
+                    </div>
+                    <div className="border-l border-indigo-200 pl-4">
+                      <p className="text-indigo-800 font-medium mb-1">Balance</p>
+                      <p className={`font-bold text-lg ${calculateBalance() > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        ₹{calculateBalance().toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -893,13 +1153,20 @@ export function FeeModule() {
                   />
                 </div>
 
-                <div className="flex gap-3">
+                </div>
+
+                <div className="flex gap-3 mt-6">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    disabled={!selectedStudentForFee}
+                    className={`px-4 py-2 text-white rounded-lg flex items-center gap-2 transition-colors ${
+                      !selectedStudentForFee 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
                   >
                     <Check className="w-4 h-4" />
-                    Process Payment & Generate Invoice
+                    Collect Payment
                   </button>
                   <button
                     type="button"
@@ -914,51 +1181,119 @@ export function FeeModule() {
           )}
 
           {/* Recent Payments */}
-          <div>
-            <h3 className="text-gray-900 mb-4">Recent Payments</h3>
-            <div className="space-y-4">
-              {payments.map((payment) => (
-                <div key={payment.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-gray-900 mb-1">{payment.studentName}</h3>
-                      <p className="text-gray-600">{payment.admissionNo} | Class {payment.class}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => downloadReceiptPDF(payment)}
-                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download PDF
-                      </button>
-                    </div>
-                  </div>
+          <div className="mt-12">
+            <h3 className="text-gray-900 font-bold text-xl mb-6 flex items-center gap-2">
+              <Receipt className="w-6 h-6 text-blue-600" />
+              Recent Payments History
+            </h3>
+            <div className="space-y-6">
+              {payments.map((payment) => {
+                const student = studentsData.find(s => s.id === payment.studentId || s.admissionNo === payment.admissionNo);
+                const displayName = payment.studentName || student?.name || student?.studentName || 'Unknown Student';
+                const displayClass = payment.class || student?.class || 'N/A';
+                const displayId = payment.admissionNo || student?.admissionNo || 'N/A';
 
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-gray-600 mb-1">Receipt No</p>
-                      <p className="text-gray-900">{payment.receiptNo}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-gray-600 mb-1">Fee Type</p>
-                      <p className="text-gray-900">{payment.feeType}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-gray-600 mb-1">Amount</p>
-                      <p className="text-gray-900">₹{payment.totalAmount.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-gray-600 mb-1">Payment Mode</p>
-                      <p className="text-gray-900">{payment.paymentMode.toUpperCase()}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-gray-600 mb-1">Date</p>
-                      <p className="text-gray-900">{payment.paymentDate}</p>
+                return (
+                  <div key={payment.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all duration-300">
+                    <div className="p-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                        <div className="flex gap-4 items-center">
+                          <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-inner">
+                            <Users className="w-7 h-7" />
+                          </div>
+                          <div>
+                            <h4 className="text-gray-900 font-bold text-xl tracking-tight">{displayName}</h4>
+                            <div className="flex items-center gap-3 mt-1.5">
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-100/50 text-blue-700 text-xs font-bold rounded-lg uppercase tracking-wider">
+                                <TrendingUp className="w-3.5 h-3.5" />
+                                Class {displayClass}
+                              </span>
+                              <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                              <span className="text-gray-500 font-medium text-sm">ID: {displayId}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => downloadReceiptPDF(payment)}
+                            className="px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-[0_4px_12px_rgba(22,163,74,0.2)] hover:shadow-[0_6px_16px_rgba(22,163,74,0.3)] flex items-center gap-2 font-bold text-sm active:scale-95"
+                          >
+                            <Download className="w-4 h-4" />
+                            Download Receipt
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+                        {/* Box 1: Student Name */}
+                        <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 hover:bg-white transition-all">
+                          <div className="flex items-center gap-2 text-blue-600 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <Users className="w-3.5 h-3.5" />
+                            Student Name
+                          </div>
+                          <p className="text-gray-900 font-bold text-sm truncate">{displayName}</p>
+                        </div>
+
+                        {/* Box 2: Class & ID */}
+                        <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 hover:bg-white transition-all">
+                          <div className="flex items-center gap-2 text-gray-500 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <TrendingUp className="w-3.5 h-3.5" />
+                            Class / ID
+                          </div>
+                          <p className="text-gray-900 font-bold text-sm">
+                            {displayClass} <span className="text-gray-400 font-normal mx-1">|</span> {displayId}
+                          </p>
+                        </div>
+
+                        {/* Box 3: Receipt No */}
+                        <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 hover:bg-white transition-all">
+                          <div className="flex items-center gap-2 text-gray-400 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <FileText className="w-3.5 h-3.5" />
+                            Receipt No
+                          </div>
+                          <p className="text-gray-900 font-black font-mono text-sm">{payment.receiptNo}</p>
+                        </div>
+                        
+                        {/* Box 4: Fee Category */}
+                        <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 hover:bg-white transition-all">
+                          <div className="flex items-center gap-2 text-gray-400 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <Tag className="w-3.5 h-3.5" />
+                            Fee Category
+                          </div>
+                          <p className="text-gray-900 font-bold text-sm">{payment.feeType || 'General Fee'}</p>
+                        </div>
+
+                        {/* Box 5: Amount */}
+                        <div className="bg-emerald-50/70 rounded-2xl p-4 border border-emerald-100 group hover:bg-white hover:border-emerald-300 transition-all duration-300">
+                          <div className="flex items-center gap-2 text-emerald-600 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <Wallet className="w-3.5 h-3.5" />
+                            Paid Amount
+                          </div>
+                          <p className="text-emerald-700 font-black text-xl">₹{(payment.totalAmount || payment.amount || 0).toLocaleString()}</p>
+                        </div>
+
+                        {/* Box 6: Method */}
+                        <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 hover:bg-white transition-all">
+                          <div className="flex items-center gap-2 text-gray-400 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            Method
+                          </div>
+                          <p className="text-gray-900 font-bold text-sm uppercase">{(payment.paymentMode || 'cash')}</p>
+                        </div>
+
+                        {/* Box 7: Date */}
+                        <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 hover:bg-white transition-all">
+                          <div className="flex items-center gap-2 text-gray-400 text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                            <Calendar className="w-3.5 h-3.5" />
+                            Payment Date
+                          </div>
+                          <p className="text-gray-900 font-bold text-sm">{payment.paymentDate}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1072,11 +1407,11 @@ export function FeeModule() {
                         <td className="px-4 py-3 text-gray-900">{student.studentName}</td>
                         <td className="px-4 py-3 text-gray-700">{student.admissionNo}</td>
                         <td className="px-4 py-3 text-gray-700">Class {student.class}</td>
-                        <td className="px-4 py-3 text-right text-gray-900">₹{student.totalFee.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-green-700">₹{student.paidAmount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-gray-900">₹{(student.totalFee || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-green-700">₹{(student.paidAmount || 0).toLocaleString()}</td>
                         <td className="px-4 py-3 text-right">
                           <span className={`${student.dueAmount > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                            ₹{student.dueAmount.toLocaleString()}
+                            ₹{(student.dueAmount || 0).toLocaleString()}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-700">{student.lastPaymentDate}</td>

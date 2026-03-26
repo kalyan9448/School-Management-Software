@@ -1,4 +1,4 @@
-﻿// Centralized Data Service for All Dashboards
+// Centralized Data Service for All Dashboards
 // This service manages all data operations across the application
 
 // ==================== INTERFACES ====================
@@ -213,6 +213,9 @@ export interface FeePayment {
   id: string;
   school_id?: string;
   studentId: string;
+  studentName: string;
+  admissionNo: string;
+  class: string;
   receiptNo: string;
   amount: number;
   paymentDate: string;
