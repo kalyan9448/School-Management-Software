@@ -4,8 +4,10 @@ import { Teacher, teacherService } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 export interface SubjectMapping {
+    id?: string;
     name: string;
     teacher: string;
+    teacherEmail: string;
     periods: number;
 }
 
@@ -20,10 +22,11 @@ interface SubjectMappingFormProps {
         section: string;
         subject: string;
         teacher: string;
+        teacherEmail?: string;
         periods: number;
-        originalSubject?: string; // Used for editing an existing subject mapping
+        originalId?: string;
     } | null;
-    onSave: (data: { class: string; section: string; subject: string; teacher: string; periods: number }, originalSubject?: string) => void;
+    onSave: (data: { class: string; section: string; subject: string; teacher: string; teacherEmail: string; periods: number }, originalId?: string) => void;
     onCancel: () => void;
 }
 
@@ -33,6 +36,7 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
         section: initialData?.section || '',
         subject: initialData?.subject || '',
         teacher: initialData?.teacher || '',
+        teacherEmail: initialData?.teacherEmail || '',
         periods: initialData?.periods?.toString() || '',
     });
 
@@ -74,13 +78,27 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
             alert('Please fill in all required fields.');
             return;
         }
+
+        // If teacherEmail is missing, try to find it from the teachers list as a fallback
+        let email = formData.teacherEmail;
+        if (!email) {
+            const selectedTeacher = teachers.find(t => t.name === formData.teacher);
+            email = selectedTeacher?.email || '';
+        }
+
+        if (!email) {
+            alert('Could not determine teacher email. Please re-select the teacher.');
+            return;
+        }
+
         onSave({
             class: formData.class,
             section: formData.section,
             subject: formData.subject,
             teacher: formData.teacher,
+            teacherEmail: email,
             periods: parseInt(formData.periods, 10),
-        }, initialData?.originalSubject);
+        }, initialData?.originalId);
     };
 
     return (
@@ -169,7 +187,15 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                 </label>
                                 <select
                                     value={formData.teacher}
-                                    onChange={(e) => setFormData({ ...formData, teacher: e.target.value })}
+                                    onChange={(e) => {
+                                        const teacherName = e.target.value;
+                                        const selectedTeacher = teachers.find(t => t.name === teacherName);
+                                        setFormData({ 
+                                            ...formData, 
+                                            teacher: teacherName,
+                                            teacherEmail: selectedTeacher?.email || ''
+                                        });
+                                    }}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                 >
                                     <option value="">Select Teacher</option>

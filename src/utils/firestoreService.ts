@@ -1298,15 +1298,38 @@ export const timetableService = {
         return slots.sort((a, b) => a.startTime.localeCompare(b.startTime));
     },
 
+    getByTeacherAndDay: async (teacherEmail: string, day: string): Promise<TimetableSlot[]> => {
+        const slots = await fetchCollection<TimetableSlot>(
+            'timetable',
+            where('teacherId', '==', teacherEmail),
+            where('day', '==', day),
+        );
+        return slots.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    },
+
     save: async (slots: TimetableSlot[]): Promise<void> => {
-        // Delete all existing timetable entries and rewrite
+        // Build deterministic IDs and upsert each slot.
+        // Using setDocById (merge:true) is idempotent and preserves school_id;
+        // avoids createDoc which generates random IDs and orphans old docs.
+        const normalised = slots.map(s => ({
+            ...s,
+            id: s.id || `${s.class}-${s.section}-${s.day}-${s.startTime}`.replace(/\s+/g, '_'),
+        }));
+
+        // Delete docs that exist in Firestore but are NOT in the new set
+        // (handles removed slots).  Only fetch school-scoped docs to stay tenant-safe.
         const existing = await timetableService.getAll();
-        for (const s of existing) {
-            await deleteDocById('timetable', s.id);
+        const newIds = new Set(normalised.map(s => s.id));
+        for (const e of existing) {
+            if (!newIds.has(e.id)) {
+                await deleteDocById('timetable', e.id);
+            }
         }
-        for (const s of slots) {
+
+        // Upsert every slot with its deterministic ID
+        for (const s of normalised) {
             const { id, ...rest } = s;
-            await createDoc<TimetableSlot>('timetable', rest);
+            await setDocById<TimetableSlot>('timetable', id, { id, ...rest });
         }
     },
 
@@ -1771,6 +1794,7 @@ export const subjectMappingService = {
             section: mapping.section || '',
             subjectName: mapping.subjectName || '',
             teacherName: mapping.teacherName || '',
+            teacherEmail: mapping.teacherEmail || '',
             periods: mapping.periods || 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),

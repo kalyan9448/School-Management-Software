@@ -50,16 +50,39 @@ export function TimetableManagement() {
         // Fetch all subject-teacher mappings for this school and active year
         const mappings = await subjectMappingService.getAll(schoolId, activeYear?.id);
 
+        // Also fetch all teachers to build a name→email lookup
+        const allTeachers = await teacherService.getAll();
+        const teacherEmailByName: Record<string, string> = {};
+        for (const t of allTeachers) {
+            if (t.name && t.email) {
+                teacherEmailByName[t.name.toLowerCase()] = t.email;
+            }
+        }
+
         // Filter mappings specifically for the selected class and section
         const filtered = mappings.filter(m => 
             m.className === selectedClass && m.section === selectedSection
         );
 
-        const mapped = filtered.map(m => ({
-            subject: m.subjectName,
-            teacher: m.teacherName,
-            teacherEmail: m.teacherName // We store name in mapping, using it as fallback
-        }));
+        const mapped = filtered.map(m => {
+            // Resolve teacher email: use mapping's teacherEmail first,
+            // then look up by teacher name in the teachers collection.
+            let email = m.teacherEmail || '';
+            if (!email && m.teacherName) {
+                email = teacherEmailByName[m.teacherName.toLowerCase()] || '';
+            }
+            return {
+                subject: m.subjectName,
+                teacher: m.teacherName,
+                teacherEmail: email,
+            };
+        });
+
+        // Warn about any mappings with missing teacher emails so admins can fix them.
+        const missing = mapped.filter(m => !m.teacherEmail);
+        if (missing.length > 0) {
+            console.warn('[TimetableManagement] These subject mappings have no teacher email:', missing.map(m => `${m.subject} (${m.teacher})`));
+        }
         
         setAvailableMappings(mapped);
     };
@@ -116,12 +139,35 @@ export function TimetableManagement() {
                 !(s.class === selectedClass && s.section === selectedSection)
             );
 
-            // Combine with current class slots
-            await timetableService.save([...otherSlots, ...timetableSlots]);
+            // Build name→email lookup from teachers collection to fix any
+            // old slots that stored teacher name instead of email in teacherId
+            const allTeachers = await teacherService.getAll();
+            const emailByName: Record<string, string> = {};
+            for (const t of allTeachers) {
+                if (t.name && t.email) emailByName[t.name.toLowerCase()] = t.email;
+            }
+
+            // Auto-fix teacherId: if it's not an email (no '@'), look up the email
+            const fixTeacherId = (slot: TimetableSlot): TimetableSlot => {
+                if (slot.teacherId && !slot.teacherId.includes('@')) {
+                    const resolved = emailByName[slot.teacherId.toLowerCase()];
+                    if (resolved) {
+                        return { ...slot, teacherId: resolved };
+                    }
+                }
+                return slot;
+            };
+
+            const fixedOther = otherSlots.map(fixTeacherId);
+            const fixedCurrent = timetableSlots.map(fixTeacherId);
+
+            // Combine with current class slots and save
+            await timetableService.save([...fixedOther, ...fixedCurrent]);
 
             setMessage({ type: 'success', text: 'Timetable saved successfully!' });
             setTimeout(() => setMessage(null), 3000);
         } catch (error) {
+            console.error('Failed to save timetable:', error);
             setMessage({ type: 'error', text: 'Failed to save timetable.' });
         } finally {
             setIsSaving(false);

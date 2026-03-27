@@ -110,7 +110,10 @@ export function TeacherDashboardNew() {
 
   // State for dynamic data
   const [myClasses, setMyClasses] = useState<ClassInfo[]>([]);
-  const [todaySchedule, setTodaySchedule] = useState<{ time: string, class: string, subject: string, status: string }[]>([]);
+  const [todaySchedule, setTodaySchedule] = useState<{ startTime: string, endTime: string, class: string, subject: string }[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [scheduleDebug, setScheduleDebug] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [allStudents, setAllStudents] = useState<LocalStudent[]>([]);
   const [students, setStudents] = useState<LocalStudent[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -127,6 +130,12 @@ export function TeacherDashboardNew() {
   const [dashboardWeekLessons, setDashboardWeekLessons] = useState<any[]>([]);
   const [lessonLogs, setLessonLogs] = useState<any[]>([]);
   const [lessonsLoading, setLessonsLoading] = useState(false);
+
+  // Update currentTime every minute for period highlighting
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (user?.email) {
@@ -199,20 +208,115 @@ export function TeacherDashboardNew() {
 
   useEffect(() => {
     async function loadData() {
-      try {
-        if (!user?.email) return;
+      if (!user?.email) return;
 
+      // Ensure school_id is in sessionStorage before ANY Firestore call.
+      // AuthContext sets it on login but may race with React rendering.
+      if (user.school_id && !sessionStorage.getItem('active_school_id')) {
+        sessionStorage.setItem('active_school_id', user.school_id);
+      }
+
+      // ── 1. Load today's timetable (independent of teacher record) ──────────
+      setScheduleLoading(true);
+      setScheduleDebug('Loading...');
+      try {
+        const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        const schoolId = sessionStorage.getItem('active_school_id');
+        console.log('[Timetable] teacher email:', user.email, '| today:', today, '| school_id:', schoolId);
+
+        if (!schoolId) {
+          setScheduleDebug(`ERROR: No school_id in session. user.school_id=${user.school_id || 'EMPTY'}`);
+          setTodaySchedule([]);
+          setScheduleLoading(false);
+          return;
+        }
+
+        // Also get teacher name for matching old data where teacherId = teacher name
+        let teacherName = user.name || '';
+        try {
+          const teacherDoc = await teacherService.getByEmail(user.email);
+          if (teacherDoc) teacherName = teacherDoc.name || teacherName;
+        } catch { /* ignore */ }
+        console.log('[Timetable] teacher name:', teacherName);
+
+        // Fetch ALL timetable docs for this school (avoids composite index issues).
+        const allSchoolSlots = await timetableService.getAll();
+        console.log('[Timetable] ALL school timetable docs:', allSchoolSlots.length, allSchoolSlots);
+
+        const uniqueTeacherIds = [...new Set(allSchoolSlots.map(s => s.teacherId))];
+        const uniqueTeacherNames = [...new Set(allSchoolSlots.map(s => s.teacherName))];
+        console.log('[Timetable] Unique teacherIds in timetable:', uniqueTeacherIds);
+        console.log('[Timetable] Unique teacherNames in timetable:', uniqueTeacherNames);
+
+        if (allSchoolSlots.length === 0) {
+          setScheduleDebug(`No timetable data found for school_id="${schoolId}". Go to Admin → Academic Structure → Timetable and save a timetable first.`);
+          setTodaySchedule([]);
+          setScheduleLoading(false);
+          return;
+        }
+
+        // Match by teacherId (email) OR teacherName OR teacherId contains name
+        // This handles both correct data (teacherId=email) and old data (teacherId=name)
+        const emailLower = user.email.toLowerCase();
+        const nameLower = teacherName.toLowerCase();
+        const teacherSlots = allSchoolSlots.filter(s => {
+          const tid = (s.teacherId || '').toLowerCase();
+          const tname = (s.teacherName || '').toLowerCase();
+          return tid === emailLower           // correct: teacherId has email
+              || tname === emailLower          // edge case: name field has the email
+              || tid === nameLower             // old data: teacherId has name instead of email
+              || tname === nameLower;          // fallback: match by teacherName
+        });
+        console.log('[Timetable] Slots for this teacher:', teacherSlots.length, teacherSlots);
+
+        if (teacherSlots.length === 0) {
+          setScheduleDebug(
+            `Found ${allSchoolSlots.length} timetable slots but NONE match your email "${user.email}" or name "${teacherName}". ` +
+            `TeacherIds in DB: [${uniqueTeacherIds.join(', ')}]. TeacherNames: [${uniqueTeacherNames.join(', ')}]. ` +
+            `Admin needs to re-save the timetable with correct subject-teacher mappings.`
+          );
+          setTodaySchedule([]);
+          setScheduleLoading(false);
+          return;
+        }
+
+        const todaySlots = teacherSlots.filter(s => s.day === today);
+        console.log('[Timetable] Slots for today (' + today + '):', todaySlots.length, todaySlots);
+
+        if (todaySlots.length === 0) {
+          setScheduleDebug(
+            `You have ${teacherSlots.length} total slots but none on ${today}. ` +
+            `Your scheduled days: [${[...new Set(teacherSlots.map(s => s.day))].join(', ')}]`
+          );
+        } else {
+          setScheduleDebug('');
+        }
+
+        todaySlots.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+
+        setTodaySchedule(todaySlots.map(slot => ({
+          startTime: slot.startTime || '',
+          endTime: slot.endTime || '',
+          class: `${slot.class}-${slot.section}`,
+          subject: slot.subject || '',
+        })));
+      } catch (schedErr: any) {
+        console.error('[Timetable] FAILED to load schedule:', schedErr);
+        setScheduleDebug(`ERROR: ${schedErr?.message || schedErr}`);
+        setTodaySchedule([]);
+      } finally {
+        setScheduleLoading(false);
+      }
+
+      // ── 2. Load teacher record, classes, and students ──────────────────────
+      try {
         let teacher = await teacherService.getByEmail(user.email);
-        if (!teacher) {
-          // Fallback for demo teacher if not found by email but is a teacher role
-          if (user.role === 'teacher') {
-            const allTeachers = await teacherService.getAll();
-            if (allTeachers.length > 0) teacher = allTeachers[0];
-          }
+        if (!teacher && user.role === 'teacher') {
+          const allTeachers = await teacherService.getAll();
+          if (allTeachers.length > 0) teacher = allTeachers[0];
         }
 
         if (teacher) {
-          // Populate myClasses dynamically
           const classesInfo: ClassInfo[] = await Promise.all(teacher.classes.map(async (c: any, i: number) => {
             const studentsInClass = await studentService.getByClass(c.class, c.section);
             return {
@@ -221,61 +325,37 @@ export function TeacherDashboardNew() {
               section: c.section,
               subject: c.subject,
               students: studentsInClass.length,
-              time: '09:00 AM - 10:00 AM', // Placeholder times as we don't have timetable yet
+              time: '',
             };
           }));
           setMyClasses(classesInfo);
 
-          // Populate todaySchedule dynamically based on real timetable data
-          const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-          const teacherSlots = await timetableService.getByTeacher(user.email);
-          const todaySlots = teacherSlots.filter(s => s.day === today);
-
-          if (todaySlots.length > 0) {
-            const schedules = todaySlots.map(slot => ({
-              time: slot.startTime,
-              class: `${slot.class}-${slot.section}`,
-              subject: slot.subject,
-              status: 'upcoming'
-            }));
-            setTodaySchedule(schedules);
-          } else {
-            // Fallback or empty state if no slots for today
-            setTodaySchedule([]);
-          }
-
-          // Populate allStudents dynamically
-          let allStds: LocalStudent[] = [];
-          // Use a set to avoid duplicate students if they take multiple subjects from same teacher
-          const studentIds = new Set();
-
+          const allStds: LocalStudent[] = [];
+          const studentIds = new Set<string>();
           for (const c of teacher.classes) {
             const stds = await studentService.getByClass(c.class, c.section);
             stds.forEach((s: any) => {
               if (!studentIds.has(s.id)) {
                 studentIds.add(s.id);
-                allStds.push({
-                  id: s.id,
-                  name: s.name,
-                  rollNo: s.rollNo,
-                  attendance: null,
-                  class: s.class,
-                  section: s.section
-                });
+                allStds.push({ id: s.id, name: s.name, rollNo: s.rollNo, attendance: null, class: s.class, section: s.section });
               }
             });
           }
           setAllStudents(allStds);
         }
+      } catch (teacherErr) {
+        console.error('Failed to load teacher data:', teacherErr);
+      }
 
-        // Load SaaS Performance Data
+      // ── 3. Load SaaS Performance Data ─────────────────────────────────────
+      try {
         setTrends(await performanceAnalyticsService.getMonthlyTrends(user.email));
         setInsightTriggers(await performanceAnalyticsService.getInsightTriggers(user.email));
         if (selectedClass) {
           setClassDelta(await performanceAnalyticsService.calculateClassDelta(selectedClass.id));
         }
-      } catch (err) {
-        console.error('Error loading teacher data:', err);
+      } catch (perfErr) {
+        console.error('Failed to load performance data:', perfErr);
       }
     }
     loadData();
@@ -533,6 +613,9 @@ export function TeacherDashboardNew() {
   const renderDashboard = () => {
     const presentCount = dashboardPresentCount;
     const weekLessons = dashboardWeekLessons;
+    const totalStudentsCount = myClasses.reduce((sum, cls) => sum + cls.students, 0);
+    const attendancePercentage = allStudents.length > 0 ? ((presentCount / allStudents.length) * 100).toFixed(0) : '0';
+    const lessonsRemaining = todaySchedule.length - weekLessons.length;
 
     return (
       <div className="space-y-6">
@@ -555,7 +638,7 @@ export function TeacherDashboardNew() {
               <div className="flex-1">
                 <p className="text-gray-500 text-sm mb-1">My Classes</p>
                 <h3 className="text-3xl font-bold text-gray-900 mb-1">{myClasses.length}</h3>
-                <p className="text-gray-600 text-sm">Active classes</p>
+                <p className="text-gray-600 text-sm">{totalStudentsCount} Students Total</p>
               </div>
               <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
                 <BookOpen className="w-6 h-6 text-purple-600" />
@@ -571,8 +654,13 @@ export function TeacherDashboardNew() {
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="text-gray-500 text-sm mb-1">Present Today</p>
-                <h3 className="text-3xl font-bold text-gray-900 mb-1">{presentCount}</h3>
-                <p className="text-gray-600 text-sm">Students</p>
+                <div className="flex items-baseline gap-1">
+                  <h3 className="text-3xl font-bold text-gray-900">{presentCount}</h3>
+                  <span className="text-gray-500 font-medium">/ {allStudents.length}</span>
+                </div>
+                <p className="text-green-600 text-sm font-medium mt-1">
+                  {presentCount} students are present out of {allStudents.length}
+                </p>
               </div>
               <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -592,7 +680,9 @@ export function TeacherDashboardNew() {
               <div className="flex-1">
                 <p className="text-gray-500 text-sm mb-1">Lessons Logged</p>
                 <h3 className="text-3xl font-bold text-gray-900 mb-1">{weekLessons.length}</h3>
-                <p className="text-gray-600 text-sm">Today</p>
+                <p className="text-orange-600 text-sm font-medium">
+                  {lessonsRemaining > 0 ? `${lessonsRemaining} Remaining for today` : 'All caught up!'}
+                </p>
               </div>
               <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center">
                 <FileText className="w-6 h-6 text-orange-600" />
@@ -604,103 +694,106 @@ export function TeacherDashboardNew() {
 
         {/* Today's Schedule */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Today's Schedule</h3>
-          <div className="space-y-3">
-            {todaySchedule.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-16 text-center">
-                    <Clock className="w-5 h-5 text-purple-600 mx-auto mb-1" />
-                    <p className="text-sm text-gray-600">{item.time}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-900">{item.subject}</p>
-                    <p className="text-gray-600 text-sm">{item.class}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      // Parse class name to extract class and section
-                      // Format: "Class 6-A" -> class: "Class 6", section: "A"
-                      const classMatch = item.class.match(/^(Class \d+)-([A-Z])$/);
-                      if (classMatch) {
-                        // Find the matching ClassInfo object
-                        const matchingClass = myClasses.find(
-                          c => c.class === classMatch[1] &&
-                            c.section === classMatch[2] &&
-                            c.subject === item.subject
-                        );
-                        if (matchingClass) {
-                          setSelectedLessonClass(matchingClass);
-                        }
-                        setSelectedSubject(item.subject);
-                      }
-                      setShowLessonForm(false);
-                      setCurrentView('lesson-log');
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Log Lesson
-                  </button>
-                  <button
-                    onClick={() => {
-                      // Parse class name to extract class and section
-                      // Format: "Class 6-A" -> class: "Class 6", section: "A"
-                      const classMatch = item.class.match(/^(Class \d+)-([A-Z])$/);
-                      if (classMatch) {
-                        setAttendanceClassFilter(classMatch[1]); // "Class 6"
-                        setAttendanceSectionFilter(classMatch[2]); // "A"
-                        setAttendanceSubjectFilter(item.subject); // Set subject if needed
-                      }
-                      setCurrentView('attendance');
-                    }}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    Mark Attendance
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-gray-900">Today's Schedule</h3>
+            <span className="text-xs text-gray-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
           </div>
+          {/* Debug banner — shows diagnostic info when schedule fails to load */}
+          {scheduleDebug && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-800 text-sm">
+              <p className="font-semibold mb-1">⚠ Schedule Debug Info:</p>
+              <p>{scheduleDebug}</p>
+            </div>
+          )}
+          {scheduleLoading ? (
+            <div className="flex items-center justify-center py-8 gap-3 text-gray-400">
+              <Clock className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading schedule…</span>
+            </div>
+          ) : todaySchedule.length > 0 ? (
+            <div className="space-y-3">
+              {todaySchedule.map((item, index) => {
+                const nowHHMM = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+                const isOngoing = nowHHMM >= item.startTime && nowHHMM < item.endTime;
+                const isPast = nowHHMM >= item.endTime;
+                return (
+                <div
+                  key={index}
+                  className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${
+                    isOngoing
+                      ? 'bg-green-50 border-green-400 ring-2 ring-green-200'
+                      : isPast
+                        ? 'bg-gray-100 border-gray-200 opacity-70'
+                        : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-28 text-center">
+                      <Clock className={`w-5 h-5 mx-auto mb-1 ${isOngoing ? 'text-green-600 animate-pulse' : 'text-purple-600'}`} />
+                      <p className={`text-sm font-medium ${isOngoing ? 'text-green-700' : 'text-gray-600'}`}>
+                        {item.startTime} – {item.endTime}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className={`font-semibold ${isOngoing ? 'text-green-800' : 'text-gray-900'}`}>{item.subject}</p>
+                        {isOngoing && (
+                          <span className="px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded-full">ONGOING</span>
+                        )}
+                      </div>
+                      <p className="text-gray-600 text-sm">{item.class}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const classMatch = item.class.match(/^(.+)-([A-Za-z0-9]+)$/);
+                        if (classMatch) {
+                          const matchingClass = myClasses.find(
+                            c => c.class === classMatch[1] &&
+                              c.section === classMatch[2] &&
+                              c.subject === item.subject
+                          );
+                          if (matchingClass) {
+                            setSelectedLessonClass(matchingClass);
+                          }
+                          setSelectedSubject(item.subject);
+                        }
+                        setShowLessonForm(false);
+                        setCurrentView('lesson-log');
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      Log Lesson
+                    </button>
+                    <button
+                      onClick={() => {
+                        const classMatch = item.class.match(/^(.+)-([A-Za-z0-9]+)$/);
+                        if (classMatch) {
+                          setAttendanceClassFilter(classMatch[1]);
+                          setAttendanceSectionFilter(classMatch[2]);
+                          setAttendanceSubjectFilter(item.subject);
+                        }
+                        setCurrentView('attendance');
+                      }}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                    >
+                      Mark Attendance
+                    </button>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+              <p className="font-semibold text-lg">No schedule today</p>
+              <p className="text-sm">You have no classes scheduled for today.</p>
+            </div>
+          )}
         </div>
 
-        {/* My Classes */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">My Classes</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {myClasses.map((cls) => (
-              <div key={cls.id} className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h4 className="text-gray-900">
-                      {cls.class} - Section {cls.section}
-                    </h4>
-                    <p className="text-gray-600">{cls.subject}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-gray-900">{cls.students}</p>
-                    <p className="text-gray-600 text-sm">students</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectedClass(cls);
-                      setCurrentView('attendance');
-                    }}
-                    className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                  >
-                    Attendance
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* Today's Logged Lessons */}
         <div className="bg-white rounded-xl shadow-md p-6">

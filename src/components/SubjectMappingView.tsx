@@ -28,13 +28,14 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
             acc[className] = { class: className, subjects: [] };
           }
           acc[className].subjects.push({
-            id: m.id, // Need to add id to SubjectMapping interface or handle it
+            id: m.id,
             name: m.subjectName,
             teacher: m.teacherName,
+            teacherEmail: m.teacherEmail,
             periods: m.periods
-          } as any);
+          });
           return acc;
-        }, {});
+        }, {} as Record<string, ClassData>);
 
         setClassDataList(Object.values(grouped));
       } catch (err) {
@@ -46,7 +47,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
 
   // TODO: Persist classDataList changes to Firestore when a subject mapping service is available
 
-  const handleSaveMapping = async (data: { class: string; section: string; subject: string; teacher: string; periods: number }, originalId?: string) => {
+  const handleSaveMapping = async (data: { class: string; section: string; subject: string; teacher: string; teacherEmail: string; periods: number }, originalId?: string) => {
     const schoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
     const activeYear = await academicYearService.getCurrent(schoolId);
     
@@ -60,6 +61,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
         await subjectMappingService.update(originalId, {
           subjectName: data.subject,
           teacherName: data.teacher,
+          teacherEmail: data.teacherEmail,
           periods: data.periods
         });
       } else {
@@ -70,6 +72,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
           section: data.section,
           subjectName: data.subject,
           teacherName: data.teacher,
+          teacherEmail: data.teacherEmail,
           periods: data.periods
         });
       }
@@ -113,6 +116,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
       originalId: subject.id,
       subject: subject.name,
       teacher: subject.teacher,
+      teacherEmail: subject.teacherEmail,
       periods: subject.periods,
     });
     setView('form');

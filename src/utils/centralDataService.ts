@@ -110,6 +110,7 @@ export interface SubjectMappingRecord {
   section: string;
   subjectName: string;
   teacherName: string;
+  teacherEmail: string;
   periods: number;
   created_at?: string;
   updated_at?: string;
