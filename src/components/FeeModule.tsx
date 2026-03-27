@@ -228,7 +228,8 @@ export function FeeModule() {
         student.parentPhone?.includes(query) ||
         student.parentName?.toLowerCase().includes(query);
         
-      const matchesClass = !studentSearchClass || student.class === studentSearchClass;
+      const matchesClass = !studentSearchClass || 
+        (student.class?.replace(/^Class\s+/i, '') === studentSearchClass.replace(/^Class\s+/i, ''));
       const matchesSection = !studentSearchSection || student.section === studentSearchSection;
       
       return matchesQuery && matchesClass && matchesSection;
@@ -274,7 +275,8 @@ export function FeeModule() {
   const handleFeeTypeChange = (feeType: string) => {
     let amount = 0;
     if (selectedStudentForFee) {
-      const classStructure = feeStructures.find(s => s.class === selectedStudentForFee.class);
+      const studentClass = selectedStudentForFee.class?.replace(/^Class\s+/i, '');
+      const classStructure = feeStructures.find(s => s.class?.replace(/^Class\s+/i, '') === studentClass);
       if (classStructure) {
         switch (feeType) {
           case 'Admission Fee': amount = classStructure.admissionFee; break;
@@ -1399,7 +1401,9 @@ export function FeeModule() {
                     .filter(s => {
                       const matchesSearch = s.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         s.admissionNo.toLowerCase().includes(searchTerm.toLowerCase());
-                      const matchesClass = selectedClass === 'all' || s.class === selectedClass;
+                      const studentClassNormalized = s.class.replace(/^Class\s+/i, '');
+                      const selectedClassNormalized = selectedClass.replace(/^Class\s+/i, '');
+                      const matchesClass = selectedClass === 'all' || studentClassNormalized === selectedClassNormalized;
                       return matchesSearch && matchesClass;
                     })
                     .map((student, index) => (

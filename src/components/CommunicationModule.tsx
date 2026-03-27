@@ -1,132 +1,131 @@
 import { useState, useEffect } from 'react';
-import { Send, MessageSquare, Bell, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, X, Info } from 'lucide-react';
+import { Send, MessageSquare, Bell, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, X, Info, Users } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { NotificationService } from '../services/student/studentDataService';
-import { announcementService, notificationService } from '../utils/centralDataService';
+import { announcementService, notificationService, Announcement, Class } from '../utils/centralDataService';
+import { createDoc, classService } from '../utils/firestoreService';
 
-interface Announcement {
-  id: string;
-  title: string;
-  message: string;
-  date: string;
-  targetRole: string;
-  type: 'announcement' | 'reminder' | 'event' | 'holiday';
-}
+
 
 export function CommunicationModule() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'messages' | 'calendar'>('messages');
   const [showForm, setShowForm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   // Load announcements on mount
   useEffect(() => {
-    const loadAnnouncements = async () => {
+    const loadData = async () => {
       try {
-        const data = await announcementService.getAll();
-        if (data && data.length > 0) {
-          setAnnouncements(data);
-        }
+        const [annData, clsData] = await Promise.all([
+          announcementService.getAll(),
+          classService.getAll()
+        ]);
+        if (annData) setAnnouncements(annData);
+        if (clsData) setClasses(clsData);
       } catch (error) {
-        console.error('Failed to load announcements:', error);
+        console.error('Failed to load communication data:', error);
       }
     };
-    loadAnnouncements();
+    loadData();
   }, []);
 
-  const [formData, setFormData] = useState({
+  const initialFormState = {
     title: '',
     message: '',
-    targetRole: 'all',
-    type: 'announcement' as 'announcement' | 'reminder' | 'event' | 'holiday',
-  });
+    targetAudience: 'all' as 'all' | 'teachers' | 'parents' | 'students' | 'specific-class',
+    class: '',
+    section: '',
+    type: 'general' as 'general' | 'urgent' | 'event' | 'holiday' | 'exam',
+  };
+
+  const [formData, setFormData] = useState(initialFormState);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newAnnouncement: Announcement = {
-      id: Date.now().toString(),
-      ...formData,
-      date: new Date().toISOString().split('T')[0],
-    };
-
+    setIsLoading(true);
     try {
-      await announcementService.create(newAnnouncement);
-      setAnnouncements([newAnnouncement, ...announcements]);
-    } catch (error) {
-      console.error('Failed to create announcement:', error);
-    }
-
-    // Send to student dashboard if applicable
-    if (formData.targetRole === 'students' || formData.targetRole === 'all') {
-      const studentNotifType = formData.type === 'announcement' ? 'announcement' : 
-                               formData.type === 'reminder' ? 'reminder' : 
-                               formData.type === 'event' ? 'reminder' : 'reminder';
-      
-      await NotificationService.add({
-        type: studentNotifType as any,
+      // 1. Save as Announcement (matching announcementService expectation)
+      const announcementData: Announcement = {
+        id: Date.now().toString(),
         title: formData.title,
         message: formData.message,
-        timestamp: new Date().toISOString(),
-        read: false,
-        priority: 'medium',
-        color: formData.type === 'holiday' ? '#10b981' : '#6366f1'
-      });
-    }
+        type: formData.type,
+        postedBy: user?.email || 'Admin',
+        postedDate: new Date().toISOString().split('T')[0],
+        targetAudience: formData.targetAudience,
+        class: formData.targetAudience === 'specific-class' ? formData.class : undefined,
+        section: formData.targetAudience === 'specific-class' ? formData.section : undefined,
+        priority: formData.type === 'urgent' ? 'high' : 'medium',
+      };
 
-    // --- Feature 2: Teacher Notification Bridge ---
-    if (formData.targetRole === 'teachers' || formData.targetRole === 'all') {
-      try {
+      await announcementService.create(announcementData);
+
+      // 2. Create Notifications (fan-out using the new 'all' pattern)
+      const rolesToNotify = formData.targetAudience === 'all'
+        ? ['teacher', 'parent', 'student']
+        : formData.targetAudience === 'specific-class'
+          ? ['student', 'parent']
+          : [formData.targetAudience.replace(/s$/, '')]; // Handle 'teachers' -> 'teacher' etc.
+
+      for (const role of rolesToNotify) {
         await notificationService.create({
-          id: Date.now().toString(),
+          userId: 'all', // Broadcast to all users of this role
+          recipientRole: role,
+          class: formData.targetAudience === 'specific-class' ? formData.class : undefined,
+          section: formData.targetAudience === 'specific-class' ? formData.section : undefined,
+          type: 'announcement', // General type for these notifications
           title: formData.title,
           message: formData.message,
-          type: formData.type,
-          from: 'Admin',
           date: new Date().toISOString(),
-          read: false,
-          recipientRole: 'teacher',
+          read: false
         });
-      } catch (error) {
-        console.error('Failed to create teacher notification:', error);
       }
-    }
 
-    // --- Feature 5: Parent Notification Bridge ---
-    if (formData.targetRole === 'parents' || formData.targetRole === 'all') {
-      try {
-        await notificationService.create({
-          id: Date.now().toString(),
+      // Also send to student dashboard if applicable (old system, kept for compatibility if needed)
+      if (formData.targetAudience === 'students' || formData.targetAudience === 'all') {
+        const studentNotifType = formData.type === 'general' ? 'announcement' :
+                                 formData.type === 'urgent' ? 'reminder' :
+                                 formData.type === 'event' ? 'reminder' : 'reminder';
+
+        await NotificationService.add({
+          type: studentNotifType as any,
           title: formData.title,
           message: formData.message,
-          type: formData.type,
-          from: 'Admin',
-          date: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
           read: false,
-          recipientRole: 'parent',
+          priority: 'medium',
+          color: formData.type === 'holiday' ? '#10b981' : '#6366f1'
         });
-      } catch (error) {
-        console.error('Failed to create parent notification:', error);
       }
-    }
 
-    setFormData({
-      title: '',
-      message: '',
-      targetRole: 'all',
-      type: 'announcement',
-    });
-    setShowForm(false);
+      setAnnouncements(prev => [announcementData, ...prev]);
+      setFormData(initialFormState);
+      alert('Message sent successfully to ' + formData.targetAudience);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message');
+    } finally {
+      setIsLoading(false);
+      setShowForm(false);
+    }
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'announcement':
+      case 'general':
         return <Bell className="w-5 h-5" />;
       case 'reminder':
+      case 'urgent':
         return <MessageSquare className="w-5 h-5" />;
       case 'event':
-        return <CalendarIcon className="w-5 h-5" />;
       case 'holiday':
+      case 'exam':
         return <CalendarIcon className="w-5 h-5" />;
       default:
         return <Bell className="w-5 h-5" />;
@@ -136,10 +135,13 @@ export function CommunicationModule() {
   const getTypeStyle = (type: string) => {
     switch (type) {
       case 'announcement':
+      case 'general':
         return 'bg-blue-100 text-blue-700';
       case 'reminder':
+      case 'urgent':
         return 'bg-yellow-100 text-yellow-700';
       case 'event':
+      case 'exam':
         return 'bg-purple-100 text-purple-700';
       case 'holiday':
         return 'bg-green-100 text-green-700';
@@ -157,7 +159,7 @@ export function CommunicationModule() {
   };
   const getEventsForDay = (day: number) => {
     const dateStr = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return announcements.filter(a => a.date === dateStr && (a.type === 'event' || a.type === 'holiday'));
+    return announcements.filter(a => a.postedDate === dateStr && (a.type === 'event' || a.type === 'holiday' || a.type === 'exam'));
   };
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -221,15 +223,15 @@ export function CommunicationModule() {
         </div>
         <div className="bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4">
           <p className="text-blue-700 mb-1">Announcements</p>
-          <p className="text-blue-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'announcement').length}</p>
+          <p className="text-blue-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'general' || a.type === 'urgent').length}</p>
         </div>
         <div className="bg-yellow-50 rounded-lg shadow-md border border-yellow-200 p-4">
           <p className="text-yellow-700 mb-1">Reminders</p>
-          <p className="text-yellow-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'reminder').length}</p>
+          <p className="text-yellow-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'urgent').length}</p>
         </div>
         <div className="bg-purple-50 rounded-lg shadow-md border border-purple-200 p-4">
           <p className="text-purple-700 mb-1">Events / Holidays</p>
-          <p className="text-purple-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'event' || a.type === 'holiday').length}</p>
+          <p className="text-purple-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'event' || a.type === 'holiday' || a.type === 'exam').length}</p>
         </div>
       </div>
 
@@ -264,8 +266,8 @@ export function CommunicationModule() {
               <div>
                 <label className="block text-gray-700 mb-2">Send To *</label>
                 <select
-                  value={formData.targetRole}
-                  onChange={(e) => setFormData({ ...formData, targetRole: e.target.value })}
+                  value={formData.targetAudience}
+                  onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value as any })}
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
@@ -273,9 +275,44 @@ export function CommunicationModule() {
                   <option value="students">Students Only</option>
                   <option value="parents">Parents Only</option>
                   <option value="teachers">Teachers Only</option>
-                  <option value="staff">Staff Only</option>
                 </select>
               </div>
+
+              {formData.targetAudience === 'specific-class' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 mb-2">Class *</label>
+                    <select
+                      value={formData.class}
+                      onChange={(e) => setFormData({ ...formData, class: e.target.value })}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Class</option>
+                      {Array.from(new Set(classes.map(c => c.className))).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 mb-2">Section *</label>
+                    <select
+                      value={formData.section}
+                      onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Section</option>
+                      {classes
+                        .filter(c => c.className === formData.class)
+                        .map(c => (
+                          <option key={c.id} value={c.section}>{c.section}</option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-gray-700 mb-2">Message Type *</label>
                 <select
@@ -284,16 +321,17 @@ export function CommunicationModule() {
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="announcement">Announcement</option>
-                  <option value="reminder">Reminder</option>
+                  <option value="general">General Announcement</option>
+                  <option value="urgent">Urgent Reminder</option>
                   <option value="event">Event</option>
                   <option value="holiday">Holiday</option>
+                  <option value="exam">Exam Schedule</option>
                 </select>
               </div>
             </div>
             <div className="flex gap-3">
-              <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                <Send className="w-4 h-4" /> Send Message
+              <button type="submit" disabled={isLoading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {isLoading ? 'Sending...' : <><Send className="w-4 h-4" /> Send Message</>}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
                 Cancel
@@ -322,14 +360,14 @@ export function CommunicationModule() {
                     </div>
                     <p className="text-gray-600 mb-3">{announcement.message}</p>
                     <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span>📅 {announcement.date}</span>
-                      <span>👥 Sent to: {
-                        announcement.targetRole === 'all' ? 'All Users' :
-                        announcement.targetRole === 'students' ? 'Students Only' :
-                        announcement.targetRole === 'teachers' ? 'Teachers Only' :
-                        announcement.targetRole === 'parents' ? 'Parents Only' :
-                        announcement.targetRole
-                      }</span>
+                      <span>📅 {announcement.postedDate}</span>
+                      <div className="flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        <span>Sent to: {
+                          announcement.targetAudience === 'all' ? 'All Users' :
+                          announcement.targetAudience.charAt(0).toUpperCase() + announcement.targetAudience.slice(1)
+                        }</span>
+                      </div>
                     </div>
                   </div>
                 </div>

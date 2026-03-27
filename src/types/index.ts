@@ -22,7 +22,7 @@ export interface User {
     password_reset_required?: boolean;
     // Teacher specific
     subjects?: string[];
-    classes?: string[];
+    classes?: (string | { class: string; section: string; subject: string })[];
     employee_id?: string;
     department?: string;
     // Student specific

@@ -5,35 +5,18 @@ import { AcademicYear, getActiveAcademicYearId } from '../utils/classUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { auth, db } from '../services/firebase';
 import { apiClient } from '../services/apiClient';
-import { userService, studentService, schoolService, admissionService, academicYearService } from '../utils/centralDataService';
+import { userService, studentService, schoolService, admissionService, academicYearService, type Student as GlobalStudent } from '../utils/centralDataService';
 import { doc, setDoc } from 'firebase/firestore';
 
-interface Student {
-  id: string;
-  admissionNo: string;
-  name: string;
-  dob: string;
-  gender: string;
-  bloodGroup: string;
-  fatherName?: string;
-  motherName?: string;
-  guardianName?: string;
-  fatherOccupation?: string;
-  motherOccupation?: string;
-  guardianOccupation?: string;
-  parentName: string;
-  phone: string;
-  emergencyContactNumber?: string;
-  email: string;
-  rollNo?: string;
+interface Student extends GlobalStudent {
   classApplied: string;
   classAllotted: string;
-  status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted';
   appliedDate: string;
-  admissionDate?: string;
-  academicYear?: string;
-  selectedFees?: string[];
+  dob?: string; // Admission records use 'dob' or 'dateOfBirth'
+  phone?: string; // Admission records use 'phone' or 'parentPhone'
 }
+
+
 
 interface AdmissionModuleProps {
   initialView?: 'list' | 'form';
@@ -110,10 +93,16 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     parentName: s.fatherName || s.parentName || '',
     phone: s.phone || s.parentPhone || '',
     emergencyContactNumber: s.emergencyContactNumber || '',
-    email: s.email || s.parentEmail || '',
+    email: s.email || '',
+    parentEmail: s.parentEmail || '',
     rollNo: s.rollNo || '',
     classApplied: s.classApplied || s.class || '',
     classAllotted: s.classAllotted || s.class || '',
+    class: s.class || s.classAllotted || s.classApplied || '',
+    section: s.section || 'A',
+    dateOfBirth: s.dateOfBirth || s.dob || '',
+    parentPhone: s.parentPhone || s.phone || '',
+    address: s.address || '',
     status: (s.status as Student['status']) || 'enquiry',
     appliedDate: s.appliedDate || s.admissionDate || '',
     admissionDate: s.admissionDate || '',
@@ -381,12 +370,12 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
             // --- PROVISIONING LOGIC ---
             // Only create login accounts and student record if the student is marked as "Admitted"
             if (studentData.status === 'admitted') {
-              // 0. Also create a record in the students collection
-              const createdStudent = await studentService.create({
+              // 0. Also create or update a record in the students collection
+              const studentPayload: Partial<Student> = {
                 admissionNo: studentData.admissionNo,
                 name: studentData.name,
                 dateOfBirth: studentData.dob,
-                gender: studentData.gender,
+                gender: studentData.gender as any,
                 bloodGroup: studentData.bloodGroup,
                 fatherName: studentData.fatherName || studentData.parentName,
                 motherName: studentData.motherName,
@@ -401,8 +390,23 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                 academicYear: studentData.academicYear,
                 selectedFees: studentData.selectedFees,
                 status: 'active',
-              });
-              const studentId = createdStudent.id;
+              };
+
+              // Check if student already exists in 'students' collection to avoid duplicates
+              const allStudents = await studentService.getAll();
+              const existingStudent = allStudents.find(s => 
+                s.admissionNo === studentData.admissionNo || 
+                (s.name === studentData.name && s.dateOfBirth === studentData.dob)
+              );
+
+              let studentId: string;
+              if (existingStudent) {
+                await studentService.update(existingStudent.id, studentPayload);
+                studentId = existingStudent.id;
+              } else {
+                const createdStudent = await studentService.create(studentPayload);
+                studentId = createdStudent.id;
+              }
               
               // 1. Provision Student Login Account (Only if email is provided)
               if (studentData.email) {

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { studentService, academicYearService, type Student } from '../utils/centralDataService';
+import { studentService, academicYearService, attendanceService, type Student, type AttendanceRecord } from '../utils/firestoreService';
 import { AcademicYear } from '../utils/classUtils';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { AdmissionForm } from './AdmissionForm';
@@ -21,13 +21,7 @@ function exportCSV(filename: string, headers: string[], rows: (string | number)[
   URL.revokeObjectURL(url);
 }
 
-interface AttendanceRecord {
-  studentId: string;
-  studentName: string;
-  rollNo: string;
-  parentPhone: string;
-  status: 'present' | 'absent' | 'late';
-}
+
 
 interface MonthlyAttendance {
   studentName: string;
@@ -49,8 +43,8 @@ interface StudentInformationProps {
 export function StudentInformation({
   onNavigate,
   initialTab = 'attendance',
-  initialClass = 'all',
-  initialSection = 'all'
+  initialClass = '',
+  initialSection = ''
 }: StudentInformationProps = {}) {
   const { uniqueClasses, sectionsForClass } = useAcademicClasses();
   const [activeMainTab, setActiveMainTab] = useState<'profiles' | 'attendance'>(initialTab);
@@ -125,41 +119,103 @@ export function StudentInformation({
   const studentsPerPage = 6;
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [monthlyRecords, setMonthlyRecords] = useState<AttendanceRecord[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  // Update attendance list when class/section or students change
+  // Update attendance list when class/section/date changes (Daily Attendance)
   useEffect(() => {
+    const fetchDailyAttendance = async () => {
+      if (selectedClass === 'all' || selectedSection === 'all') {
+        setAttendance([]);
+        return;
+      }
+
+      setAttendanceLoading(true);
+      try {
+        const classFiltered = students.filter(s =>
+          (s.class.toString() === selectedClass.toString()) &&
+          ((s.section || 'A') === selectedSection)
+        );
+
+        const existingRecords = await attendanceService.getByClass(selectedClass, selectedSection, selectedDate);
+
+        const records: AttendanceRecord[] = classFiltered.map(s => {
+          const existing = existingRecords.find(r => r.studentId === s.id);
+          return {
+            id: existing?.id || '',
+            studentId: s.id,
+            studentName: s.name,
+            rollNo: s.rollNo || '0',
+            parentPhone: s.phone || '', // Need parent phone for alerts
+            status: (existing?.status as any) || 'present',
+            date: selectedDate,
+            className: selectedClass,
+            section: selectedSection,
+            markedBy: existing?.markedBy || 'Teacher',
+            time: existing?.time || ''
+          } as AttendanceRecord;
+        });
+
+        setAttendance(records);
+      } catch (err) {
+        console.error('Failed to load daily attendance:', err);
+      } finally {
+        setAttendanceLoading(false);
+      }
+    };
+
+    if (students.length > 0) {
+      fetchDailyAttendance();
+    }
+  }, [selectedClass, selectedSection, selectedDate, students]);
+
+  // Fetch monthly records whenever they might be needed
+  useEffect(() => {
+    const fetchMonthlyAttendance = async () => {
+      if (attendanceTab !== 'monthly' || selectedClass === 'all' || selectedSection === 'all') return;
+
+      try {
+        const records = await attendanceService.getByMonth(selectedMonth);
+        setMonthlyRecords(records);
+      } catch (err) {
+        console.error('Failed to load monthly attendance:', err);
+      }
+    };
+
+    if (students.length > 0) {
+      fetchMonthlyAttendance();
+    }
+  }, [selectedClass, selectedSection, selectedMonth, attendanceTab, students]);
+
+  const totalWorkingDays = 24; // Consistent for summary and table
+  const monthlyAttendance: MonthlyAttendance[] = useMemo(() => {
     const classFiltered = students.filter(s =>
       (selectedClass === 'all' || s.class.toString() === selectedClass.toString()) &&
       (selectedSection === 'all' || (s.section || 'A') === selectedSection)
     );
 
-    const records: AttendanceRecord[] = classFiltered.map(s => ({
-      studentId: s.id,
-      studentName: s.name,
-      rollNo: s.rollNo || '0',
-      parentPhone: s.phone || '',
-      status: 'present' // Default to present for new daily sheet
-    }));
+    return classFiltered.map(student => {
+      const studentRecords = monthlyRecords.filter(r => r.studentId === student.id);
+      const present = studentRecords.filter(r => r.status && r.status.toLowerCase() === 'present').length;
+      const late = studentRecords.filter(r => r.status && r.status.toLowerCase() === 'late').length;
+      const absent = studentRecords.filter(r => r.status && r.status.toLowerCase() === 'absent').length;
+      
+      // Total days can be the number of records found (actual marked days)
+      // or the fixed 24 if we want to show percentage against a full month
+      const totalDaysInMonth = studentRecords.length > 0 ? studentRecords.length : totalWorkingDays;
+      const totalPresent = present + late;
 
-    setAttendance(records);
-    setCurrentPage(0); // Reset pagination on filter change
-  }, [selectedClass, selectedSection, students]);
-
-  const totalWorkingDays = 24; // Consistent for summary and table
-  const monthlyAttendance: MonthlyAttendance[] = attendance.map(record => {
-    const student = students.find(s => s.id === record.studentId);
-    const present = student?.presentDays || 0;
-    const total = student?.totalDays || totalWorkingDays;
-    return {
-      studentName: record.studentName,
-      rollNo: record.rollNo,
-      presentDays: present,
-      absentDays: total - present,
-      lateDays: 0,
-      totalDays: total,
-      percentage: total > 0 ? (present / total) * 100 : 0
-    };
-  });
+      return {
+        studentName: student.name,
+        rollNo: student.rollNo,
+        presentDays: totalPresent,
+        absentDays: absent,
+        lateDays: late,
+        totalDays: totalDaysInMonth,
+        percentage: totalDaysInMonth > 0 ? (totalPresent / totalDaysInMonth) * 100 : 0
+      };
+    });
+  }, [students, monthlyRecords, selectedClass, selectedSection]);
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -174,9 +230,9 @@ export function StudentInformation({
   });
 
   const toggleStatus = (studentId: string) => {
-    setAttendance(attendance.map(record => {
+    setAttendance((prevAttendance: AttendanceRecord[]) => prevAttendance.map(record => {
       if (record.studentId === studentId) {
-        const statuses: ('present' | 'absent' | 'late')[] = ['present', 'absent', 'late'];
+        const statuses: AttendanceRecord['status'][] = ['present', 'absent', 'late', 'half-day', 'leave'];
         const currentIndex = statuses.indexOf(record.status);
         const nextIndex = (currentIndex + 1) % statuses.length;
         return { ...record, status: statuses[nextIndex] };
@@ -189,8 +245,28 @@ export function StudentInformation({
     setAttendance(attendance.map(record => ({ ...record, status: 'present' })));
   };
 
-  const saveAttendance = () => {
-    alert(`Attendance saved for Class ${selectedClass}-${selectedSection} on ${selectedDate}`);
+  const saveAttendance = async () => {
+    if (attendance.length === 0) return;
+    
+    setAttendanceLoading(true);
+    try {
+      const recordsToSave = attendance.map(r => ({
+        ...r,
+        className: selectedClass,
+        section: selectedSection,
+        date: selectedDate,
+        markedBy: 'School Admin',
+        time: r.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      }));
+
+      await attendanceService.markAttendance(recordsToSave);
+      alert('Attendance saved successfully!');
+    } catch (err) {
+      console.error('Failed to save attendance:', err);
+      alert('Failed to save attendance.');
+    } finally {
+      setAttendanceLoading(false);
+    }
   };
 
   const sendAbsentAlerts = () => {
@@ -231,6 +307,10 @@ export function StudentInformation({
         return 'bg-red-100 text-red-700 border-red-300';
       case 'late':
         return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'half-day':
+        return 'bg-orange-100 text-orange-700 border-orange-300';
+      case 'leave':
+        return 'bg-blue-100 text-blue-700 border-blue-300';
       default:
         return 'bg-gray-100 text-gray-700 border-gray-300';
     }
@@ -767,48 +847,57 @@ export function StudentInformation({
                     <label className="block text-gray-700 mb-2">Select Class</label>
                     <select
                       value={selectedClass}
-                      onChange={(e) => setSelectedClass(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedClass(e.target.value);
+                        setSelectedSection(''); // Reset section when class changes
+                      }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="all">All Classes</option>
+                      <option value="">Select Class</option>
                       {uniqueClasses.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-gray-700 mb-2">Select Section</label>
-                    <select
-                      value={selectedSection}
-                      onChange={(e) => setSelectedSection(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="all">All Sections</option>
-                      {sectionsForClass(selectedClass).map(section => (
-                        <option key={section} value={section}>Section {section}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {selectedClass && (
+                    <div>
+                      <label className="block text-gray-700 mb-2">Select Section</label>
+                      <select
+                        value={selectedSection}
+                        onChange={(e) => setSelectedSection(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select Section</option>
+                        {sectionsForClass(selectedClass).map(section => (
+                          <option key={section} value={section}>Section {section}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-                  <div>
-                    <label className="block text-gray-700 mb-2">Select Date</label>
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+                  {selectedClass && selectedSection && (
+                    <div>
+                      <label className="block text-gray-700 mb-2">Select Date</label>
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
 
-                  <div className="flex items-end">
-                    <button
-                      onClick={markAllPresent}
-                      className="w-full px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-                    >
-                      Mark All Present
-                    </button>
-                  </div>
+                  {selectedClass && selectedSection && (
+                    <div className="flex items-end">
+                      <button
+                        onClick={markAllPresent}
+                        className="w-full px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                      >
+                        Mark All Present
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

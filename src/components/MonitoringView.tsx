@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
-import { studentService, attendanceService, classService, timetableService, userService, academicYearService } from '../utils/centralDataService';
+import { studentService, attendanceService, classService, timetableService, userService, academicYearService, teacherService } from '../utils/centralDataService';
 import { DEFAULT_YEARS } from '../utils/classUtils';
 
 interface MonitoringViewProps {
@@ -53,17 +53,38 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
         const activeYearName = activeYear?.name || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
 
         const activeClasses = await classService.getAll();
+        const allTeachers = await teacherService.getAll();
 
         // Lessons in progress simulation (based on current hour/day)
         const now = new Date();
         const isSchoolHours = now.getHours() >= 8 && now.getHours() <= 16;
-        const currentLessons = isSchoolHours ? Math.ceil(activeClasses.length * 0.7) : 0;
+        
+        // Count actual lessons in progress based on timetable
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const currentDay = dayNames[now.getDay()];
+        const currentHH = now.getHours();
+        const currentMM = now.getMinutes();
+        const currentMinutes = currentHH * 60 + currentMM;
+
+        const allTimetableSlots: any[] = await timetableService.getAll(); // Moved up for lessonsInProgressCount
+
+        const lessonsInProgressCount = activeClasses.filter(cls => {
+          const slot = allTimetableSlots.find((s: any) => {
+            if (s.class !== cls.className || s.section !== cls.section || s.day !== currentDay) return false;
+            const [sh, sm] = (s.startTime || '').split(':').map(Number);
+            const [eh, em] = (s.endTime || '').split(':').map(Number);
+            const slotStart = sh * 60 + sm;
+            const slotEnd = eh * 60 + em;
+            return currentMinutes >= slotStart && currentMinutes < slotEnd;
+          });
+          return !!slot;
+        }).length;
 
         setStats({
           activeUsers: activeU,
           studentsPresent: presentToday,
           totalStudentsCount: totalS,
-          lessonsInProgress: currentLessons,
+          lessonsInProgress: lessonsInProgressCount,
           pendingPayments: pendingP,
         });
 
@@ -92,16 +113,9 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
           { id: 'default', type: 'alert', user: 'System', action: 'Monitoring system initialized', time: 'Just now', icon: Activity, color: 'blue' }
         ]);
 
-        // 5. Get timetable for current period lookup
-        const allTimetableSlots: any[] = await timetableService.getAll();
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const currentDay = dayNames[now.getDay()];
-        const currentHH = now.getHours();
-        const currentMM = now.getMinutes();
-        const currentMinutes = currentHH * 60 + currentMM;
+
 
         const getLessonForClass = (className: string, section: string): string => {
-          if (!isSchoolHours) return 'N/A';
           const slot = allTimetableSlots.find((s: any) => {
             if (s.class !== className || s.section !== section || s.day !== currentDay) return false;
             const [sh, sm] = (s.startTime || '').split(':').map(Number);
@@ -110,31 +124,41 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
             const slotEnd = eh * 60 + em;
             return currentMinutes >= slotStart && currentMinutes < slotEnd;
           });
-          return slot?.subject || 'Free Period';
+          if (slot) return slot.subject;
+          return isSchoolHours ? 'Free Period' : 'No Lesson Scheduled';
         };
 
         const getAttendanceForClass = (className: string, section: string): string => {
+          // Calculate dynamic capacity from known students in this class/section
+          const classStudents = allStudents.filter((s: any) => s.class === className && s.section === section);
+          const capacity = classStudents.length;
+
           if (attRecords.length === 0) {
-            const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
-            const cap = cls?.currentStrength || 0;
-            return `${Math.round(cap * (avgAttendance / 100))}/${cap}`;
+            return `0/${capacity}`;
           }
+          
           const today2 = new Date().toISOString().split('T')[0];
           const todayClassRecords = attRecords.filter((r: any) => r.date === today2 && r.class === className && r.section === section);
-          const presentCount = todayClassRecords.filter((r: any) => r.status === 'present').length;
-          const totalCount = todayClassRecords.length;
-          const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
-          const capacity = totalCount > 0 ? totalCount : (cls?.currentStrength || 0);
+          const presentCount = todayClassRecords.filter((r: any) => (r.status || '').toLowerCase() === 'present').length;
+          
           return `${presentCount}/${capacity}`;
         };
 
         // 6. Generate Class Activity
         const classData = activeClasses.map((cls: any) => {
           const currentLesson = getLessonForClass(cls.className, cls.section);
-          const hasLesson = currentLesson !== 'N/A' && currentLesson !== 'Free Period';
+          const hasLesson = currentLesson !== 'Free Period' && currentLesson !== 'No Lesson Scheduled' && currentLesson !== 'N/A';
+          
+          // Resolve teacher name if it's an ID
+          let teacherName = cls.classTeacher || 'Not Assigned';
+          if (teacherName !== 'Not Assigned') {
+            const t = allTeachers.find((t: any) => t.id === teacherName || t.employeeId === teacherName);
+            if (t) teacherName = t.name;
+          }
+
           return {
             class: `${cls.className} ${cls.section}`,
-            teacher: cls.classTeacher || 'Not Assigned',
+            teacher: teacherName,
             status: isSchoolHours ? (hasLesson ? 'In Progress' : 'Free Period') : 'School Closed',
             attendance: getAttendanceForClass(cls.className, cls.section),
             lesson: currentLesson,

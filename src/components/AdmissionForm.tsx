@@ -146,7 +146,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
           formData.classAllotted || formData.classApplied,
           formData.section,
           formData.academicYear,
-          student?.id
+          student?.admissionNo || student?.id
         );
       } catch (err) {
         console.warn('Roll number uniqueness check failed (proceeding with save):', err);

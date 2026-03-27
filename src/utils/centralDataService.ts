@@ -144,6 +144,11 @@ export interface AttendanceRecord {
   time: string;
   markedBy: string;
   remarks?: string;
+  class?: string;
+  section?: string;
+  studentName?: string;
+  rollNo?: string;
+  parentPhone?: string;
 }
 
 export interface LessonLog {
@@ -360,6 +365,9 @@ export interface Notification {
   id: string;
   school_id?: string;
   userId: string;
+  recipientRole?: string;
+  class?: string;
+  section?: string;
   type: 'attendance' | 'assignment' | 'exam' | 'fee' | 'announcement' | 'general';
   title: string;
   message: string;

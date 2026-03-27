@@ -148,7 +148,7 @@ async function fetchCollection<T>(
  * Uses setDoc instead of addDoc+updateDoc to avoid a two-step write
  * that can be blocked by Firestore security rules on the update step.
  */
-async function createDoc<T extends { id: string }>(
+export async function createDoc<T extends { id: string }>(
     collectionName: string,
     data: Omit<T, 'id'> & { id?: string },
 ): Promise<T> {
@@ -430,11 +430,14 @@ export const studentService = {
         className: string,
         section: string,
         academicYear: string,
-        excludeStudentId?: string,
+        excludeIdentifier?: string,
     ): Promise<boolean> => {
         const students = await studentService.getByClass(className, section);
         return !students.find(
-            s => s.rollNo === rollNo && s.academicYear === academicYear && s.id !== excludeStudentId,
+            s => s.rollNo === rollNo && 
+                 s.academicYear === academicYear && 
+                 s.id !== excludeIdentifier && 
+                 s.admissionNo !== excludeIdentifier,
         );
     },
 
@@ -788,9 +791,18 @@ export const attendanceService = {
 
     getByClass: async (className: string, section: string, date: string): Promise<AttendanceRecord[]> => {
         const students = await studentService.getByClass(className, section);
-        const studentIds = students.map(s => s.id);
+        const studentIds = new Set(students.map(s => s.id));
+        
+        // Fetch by date and filter by student IDs in memory for maximum compatibility
         const records = await attendanceService.getByDate(date);
-        return records.filter(r => studentIds.includes(r.studentId));
+        return records.filter(r => studentIds.has(r.studentId));
+    },
+
+    getByMonth: async (month: string): Promise<AttendanceRecord[]> => {
+        // month format: YYYY-MM
+        // Fetch all attendance for the school (fetchCollection handles school_id)
+        const allRecords = await fetchCollection<AttendanceRecord>('attendance');
+        return allRecords.filter(r => r.date && r.date.startsWith(month));
     },
 
     markAttendance: async (records: Partial<AttendanceRecord>[]): Promise<void> => {
@@ -806,6 +818,8 @@ export const attendanceService = {
                 studentId: r.studentId!,
                 date: r.date!,
                 status: r.status!,
+                class: r.class || '',
+                section: r.section || '',
                 time: r.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                 markedBy: r.markedBy || 'teacher',
                 remarks: r.remarks || '',
@@ -1189,6 +1203,8 @@ export const announcementService = {
             .sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
     },
 
+
+
     getForUser: async (role: string, className?: string, section?: string): Promise<Announcement[]> => {
         const announcements = await announcementService.getActive();
         return announcements.filter(a => {
@@ -1286,22 +1302,70 @@ export const notificationService = {
         return fetchCollection<Notification>('notifications');
     },
 
-    getByUser: async (userId: string): Promise<Notification[]> => {
-        const notifications = await fetchCollection<Notification>(
+    getByUser: async (
+        userId: string, 
+        role?: string, 
+        userClass?: string, 
+        userSection?: string,
+        allClasses?: { class: string; section: string }[]
+    ): Promise<Notification[]> => {
+        // 1. Fetch personal notifications
+        const personal = await fetchCollection<Notification>(
             'notifications',
             where('userId', '==', userId),
         );
-        return notifications.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        // 2. Fetch global / class-specific notifications
+        let global: Notification[] = [];
+        if (role) {
+            const roleLower = role.toLowerCase();
+            
+            // Query A: Broad role-based notifications (sent to everyone in this role)
+            const baseQuery = await fetchCollection<Notification>(
+                'notifications',
+                where('userId', '==', 'all'),
+                where('recipientRole', '==', roleLower)
+            );
+
+            // Filter in-memory to distinguish between global and class-specific
+            global = baseQuery.filter(n => {
+                // If notification has NO class constraint, it's global for the role
+                if (!n.class) return true;
+                
+                // For Student/Parent (single class focus)
+                if (userClass && n.class === userClass) {
+                    if (!n.section || n.section === userSection) return true;
+                }
+
+                // For Teacher (multiple classes focus)
+                if (allClasses && allClasses.some(c => c.class === n.class && (!n.section || c.section === n.section))) {
+                    return true;
+                }
+
+                return false;
+            });
+        }
+
+        const combined = [...personal, ...global];
+        // Sort by date descending
+        return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     },
 
-    getUnreadCount: async (userId: string): Promise<number> => {
-        const notifications = await notificationService.getByUser(userId);
+    getUnreadCount: async (
+        userId: string, 
+        role?: string, 
+        userClass?: string, 
+        userSection?: string,
+        allClasses?: { class: string; section: string }[]
+    ): Promise<number> => {
+        const notifications = await notificationService.getByUser(userId, role, userClass, userSection, allClasses);
         return notifications.filter(n => !n.read).length;
     },
 
     create: async (notification: Partial<Notification>): Promise<Notification> => {
         return createDoc<Notification>('notifications', {
             userId: notification.userId || '',
+            recipientRole: notification.recipientRole || '',
             type: notification.type || 'general',
             title: notification.title || '',
             message: notification.message || '',

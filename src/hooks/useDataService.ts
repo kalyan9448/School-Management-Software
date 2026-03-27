@@ -1,4 +1,4 @@
-﻿// Re-export all hooks from the Firestore-backed implementation
+// Re-export all hooks from the Firestore-backed implementation
 export {
   useStudents,
   useTeachers,
@@ -18,6 +18,7 @@ export {
   useDashboardStats,
   useStudentPerformance,
   useClassStatistics,
+  useFeeInvoices,
 } from './useFirestoreData';
 
 export type {
@@ -36,4 +37,5 @@ export type {
   Enquiry,
   Event,
   Notification,
+  FeeInvoice,
 } from './useFirestoreData';

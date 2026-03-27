@@ -152,9 +152,10 @@ export function TeacherDashboardNew() {
   useEffect(() => {
     if (user?.email) {
       const loadNotifications = async () => {
-        const userNotifications = await notificationService.getByUser(user.email);
+        const teacherClasses = user.classes?.filter((c): c is { class: string; section: string; subject: string } => typeof c !== 'string') || [];
+        const userNotifications = await notificationService.getByUser(user.email, 'teacher', undefined, undefined, teacherClasses);
         setNotifications(userNotifications);
-        setUnreadCount(await notificationService.getUnreadCount(user.email));
+        setUnreadCount(await notificationService.getUnreadCount(user.email, 'teacher', undefined, undefined, teacherClasses));
       };
 
       loadNotifications();
@@ -1103,50 +1104,53 @@ export function TeacherDashboardNew() {
                 </div>
 
                 {/* Section Dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                  <select
-                    value={attendanceSectionFilter}
-                    onChange={(e) => {
-                      setAttendanceSectionFilter(e.target.value);
-                      // Update students list when section is selected
-                      if (attendanceClassFilter && e.target.value) {
-                        const filtered = allStudents.filter(
-                          student =>
-                            student.class === attendanceClassFilter &&
-                            student.section === e.target.value
-                        );
-                        setStudents(filtered);
-                      }
-                    }}
-                    disabled={!attendanceClassFilter}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Select Section</option>
-                    {getAvailableSections(attendanceClassFilter).map((section) => (
-                      <option key={section} value={section}>
-                        Section {section}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {attendanceClassFilter && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                    <select
+                      value={attendanceSectionFilter}
+                      onChange={(e) => {
+                        setAttendanceSectionFilter(e.target.value);
+                        // Update students list when section is selected
+                        if (attendanceClassFilter && e.target.value) {
+                          const filtered = allStudents.filter(
+                            student =>
+                              student.class === attendanceClassFilter &&
+                              student.section === e.target.value
+                          );
+                          setStudents(filtered);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">Select Section</option>
+                      {getAvailableSections(attendanceClassFilter).map((section) => (
+                        <option key={section} value={section}>
+                          Section {section}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Subject Dropdown (Optional filter based on teacher assignment) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                  <select
-                    value={attendanceSubjectFilter}
-                    onChange={(e) => setAttendanceSubjectFilter(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                  >
-                    <option value="">All Subjects</option>
-                    {getAvailableSubjects().map((subject) => (
-                      <option key={subject} value={subject}>
-                        {subject}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {attendanceClassFilter && attendanceSectionFilter && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                    <select
+                      value={attendanceSubjectFilter}
+                      onChange={(e) => setAttendanceSubjectFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">All Subjects</option>
+                      {getAvailableSubjects().map((subject) => (
+                        <option key={subject} value={subject}>
+                          {subject}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Dynamic Display Text */}

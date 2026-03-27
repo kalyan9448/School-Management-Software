@@ -32,7 +32,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
-import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useStudentPerformance, useAssignments, useExams, useExamResults } from '../hooks/useDataService';
+import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults } from '../hooks/useDataService';
 
 type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions';
 type ReportPeriod = 'weekly' | 'monthly';
@@ -142,7 +142,12 @@ export function ParentDashboardNew() {
     } : undefined
   );
 
-  const { notifications: dynamicNotifications } = useNotifications(user?.id);
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(
+    user?.email || undefined, 
+    'parent',
+    selectedChild?.class,
+    selectedChild?.section
+  );
 
   // Additional dynamic data for progress, fees, etc.
   const { payments: feeRecords } = useFeePayments(selectedChild ? { studentId: selectedChild.id } : undefined);
@@ -150,6 +155,7 @@ export function ParentDashboardNew() {
   const { assignments } = useAssignments(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
   const { exams } = useExams(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
   const { results: examResults } = useExamResults(selectedChild ? { studentId: selectedChild.id } : undefined);
+  const { invoices: feeInvoices } = useFeeInvoices(selectedChild ? { studentId: selectedChild.id } : undefined);
 
   // Demo data fallback / merging
   const todayDate = new Date().toISOString().split('T')[0];
@@ -227,32 +233,32 @@ export function ParentDashboardNew() {
     });
   }, [examResults, exams]);
 
-  const notifications = dynamicNotifications;
+
 
   const payments = feeRecords || [];
 
-  // Determine pending fees dynamically using fee structure if we had one
-  // For now, if we have payments we show them. We map payments to 'paid' status.
+  // Determine pending fees dynamically using fee invoices
   const paidFees = payments.map(p => ({
     id: p.id,
-    feeHead: p.components?.[0]?.name || 'School Fee',
+    feeHead: p.components?.map(c => c.name).join(', ') || 'School Fee',
     amount: p.amount,
     dueDate: p.academicYear,
-    status: 'paid',
+    status: 'paid' as const,
     paidDate: p.paymentDate,
     receiptNo: p.receiptNo
   }));
 
-  // A generic pending fee for demo if paid fees are 0
-  const pendingFees = payments.length === 0 ? [{
-    id: 'pending-1',
-    feeHead: 'Tuition Fee',
-    amount: 5000,
-    dueDate: new Date().getFullYear().toString() + '-04-05',
-    status: 'pending',
-  }] : [];
+  const pendingFees = (feeInvoices || [])
+    .filter(inv => inv.status === 'pending' || inv.status === 'overdue' || inv.status === 'partial')
+    .map(inv => ({
+      id: inv.id,
+      feeHead: inv.items.map(i => i.componentName).join(', ') || 'School Fee',
+      amount: inv.totalBalance,
+      dueDate: inv.dueDate,
+      status: (inv.status === 'partial' ? 'pending' : inv.status) as 'pending' | 'overdue',
+    }));
 
-  const unreadCount = notifications.filter((n: any) => !n.read).length;
+
 
   const totalDue = pendingFees.reduce((sum, f) => sum + f.amount, 0);
 

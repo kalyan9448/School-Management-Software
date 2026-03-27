@@ -501,7 +501,13 @@ export const useEvents = (filters?: {
 };
 
 // Hook for notifications
-export const useNotifications = (userId?: string) => {
+export const useNotifications = (
+  userId?: string, 
+  role?: string, 
+  userClass?: string, 
+  userSection?: string,
+  allClasses?: { class: string; section: string }[]
+) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -515,9 +521,9 @@ export const useNotifications = (userId?: string) => {
     }
     setLoading(true);
     try {
-      const data = await dataService.notification.getByUser(userId);
+      const data = await dataService.notification.getByUser(userId, role, userClass, userSection, allClasses);
       setNotifications(data);
-      setUnreadCount(await dataService.notification.getUnreadCount(userId));
+      setUnreadCount(await dataService.notification.getUnreadCount(userId, role, userClass, userSection, allClasses));
     } catch (err) {
       console.error('useNotifications error:', err);
       setNotifications([]);
@@ -525,7 +531,7 @@ export const useNotifications = (userId?: string) => {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, role, userClass, userSection, allClasses]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

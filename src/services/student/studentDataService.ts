@@ -11,6 +11,7 @@ import {
   getDoc,
   setDoc,
 } from "firebase/firestore";
+import { notificationService } from "../../utils/centralDataService";
 
 import {
   type HomeworkTopic,
@@ -427,7 +428,39 @@ export const NotificationService = {
     return updated;
   },
   fetchNotifications: async (): Promise<Notification[]> => {
-    return NotificationService.getAll();
+    try {
+      // 1. Fetch personal + role-based notifications from Firestore
+      const userEmail = auth.currentUser?.email;
+      const profile = await StudentProfile.get();
+      const firestoreNotifs = userEmail 
+        ? await notificationService.getByUser(userEmail, 'student', profile.grade || undefined, (profile as any).section || undefined)
+        : [];
+
+      // 2. Fetch local storage notifications (current system)
+      const localNotifs = await getData<Notification[]>("notifications", []);
+
+      // 3. Map Firestore notifications to the Student Portal's interface
+      const mappedFirestoreNotifs: Notification[] = firestoreNotifs.map(fn => ({
+        id: Math.abs(fn.id.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0)), // Generate a numeric ID from hash
+        type: fn.type === 'announcement' ? 'announcement' : 
+              fn.type === 'assignment' ? 'homework' : 'reminder',
+        title: fn.title,
+        message: fn.message,
+        timestamp: fn.date || new Date().toISOString(), // Use date from Firestore, fallback to now
+        read: fn.read,
+        priority: 'medium',
+        icon: fn.type === 'announcement' ? '📢' : '📚',
+        color: fn.type === 'announcement' ? '#6366f1' : '#3b82f6'
+      }));
+
+      // Combine and sort by timestamp (descending)
+      return [...mappedFirestoreNotifs, ...localNotifs].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+    } catch (error) {
+      console.error("Failed to fetch notifications for student:", error);
+      return getData<Notification[]>("notifications", []);
+    }
   },
 };
 
