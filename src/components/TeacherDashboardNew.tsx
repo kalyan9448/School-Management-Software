@@ -378,21 +378,19 @@ export function TeacherDashboardNew() {
     async function loadAttendance() {
       try {
         if (attendanceClassFilter && attendanceSectionFilter && attendanceDate) {
-          // ... existing attendance logic ...
-          const classStudents = allStudents.filter(
-            student =>
-              student.class === attendanceClassFilter &&
-              student.section === attendanceSectionFilter
-          );
+          // Fetch previously saved attendance for this date
           const previouslyMarked = await attendanceService.getByDate(attendanceDate);
-          const studentsWithAttendance: LocalStudent[] = classStudents.map(student => {
+          // Update allStudents with saved attendance status so the UI shows it
+          setAllStudents(prev => prev.map(student => {
+            if (student.class !== attendanceClassFilter || student.section !== attendanceSectionFilter) {
+              return student;
+            }
             const existingRecord = previouslyMarked.find((r: any) => r.studentId === student.id);
             return {
               ...student,
-              attendance: (existingRecord ? existingRecord.status : null) as any,
+              attendance: existingRecord ? existingRecord.status as any : null,
             };
-          });
-          setStudents(studentsWithAttendance);
+          }));
         }
       } catch (err) {
         console.error('Error loading attendance:', err);
@@ -565,27 +563,31 @@ export function TeacherDashboardNew() {
       return;
     }
 
-    // Save to data store
-    await attendanceService.markAttendance(attendanceRecords as any);
+    try {
+      // Save to Firestore (handles dedup + parent notifications inside)
+      await attendanceService.markAttendance(attendanceRecords as any);
 
-    alert(`✅ Attendance saved successfully!\n${attendanceRecords.length} students marked for ${attendanceClassFilter} - Section ${attendanceSectionFilter}`);
+      alert(`✅ Attendance saved successfully!\n${attendanceRecords.length} students marked for ${attendanceClassFilter} - Section ${attendanceSectionFilter}`);
 
-    // Reset attendance status for the saved students
-    setAllStudents(prevStudents =>
-      prevStudents.map(s => {
-        if (s.class === attendanceClassFilter && s.section === attendanceSectionFilter) {
-          return { ...s, attendance: null };
-        }
-        return s;
-      })
-    );
+      // Reload saved attendance from Firestore so UI reflects the persisted state.
+      // This proves data was saved correctly and prevents re-prompting.
+      const freshRecords = await attendanceService.getByDate(attendanceDate);
+      setAllStudents(prev => prev.map(s => {
+        if (s.class !== attendanceClassFilter || s.section !== attendanceSectionFilter) return s;
+        const saved = freshRecords.find(r => r.studentId === s.id);
+        return { ...s, attendance: saved ? saved.status as any : s.attendance };
+      }));
 
-    // Reset filters
-    setAttendanceClassFilter('');
-    setAttendanceSectionFilter('');
-    setAttendanceSubjectFilter('');
-
-    setCurrentView('dashboard');
+      // Update dashboard present count
+      const todayDate = new Date().toISOString().split('T')[0];
+      if (attendanceDate === todayDate) {
+        const todayRecords = await attendanceService.getByDate(todayDate);
+        setDashboardPresentCount(todayRecords.filter(a => a.status === 'present').length);
+      }
+    } catch (err) {
+      console.error('Error saving attendance:', err);
+      alert('❌ Failed to save attendance. Please try again.');
+    }
   };
 
   // Load dashboard stats asynchronously

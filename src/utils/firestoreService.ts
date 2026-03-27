@@ -793,10 +793,26 @@ export const attendanceService = {
             };
 
             if (existing.length > 0) {
-                await updateDocById('attendance', existing[0].id, data);
+                // Update existing record (prevents duplicates)
+                const prev = existing[0];
+                await updateDocById('attendance', prev.id, data);
+
+                // Notify parent if status changed (e.g. present→absent correction)
+                if (prev.status !== r.status) {
+                    const student = await studentService.getById(r.studentId!);
+                    if (student?.parentId) {
+                        await notificationService.create({
+                            userId: student.parentId,
+                            type: 'attendance',
+                            title: r.status === 'present' ? 'Attendance Updated' : 'Attendance Alert',
+                            message: `${student.name} attendance updated to ${r.status} for ${r.date}`,
+                            date: r.date!,
+                        });
+                    }
+                }
             } else {
-                const created = await createDoc<AttendanceRecord>('attendance', data);
-                // Notify parent
+                await createDoc<AttendanceRecord>('attendance', data);
+                // Notify parent on new attendance
                 const student = await studentService.getById(r.studentId!);
                 if (student?.parentId) {
                     await notificationService.create({
@@ -806,6 +822,19 @@ export const attendanceService = {
                         message: `${student.name} marked ${r.status} at ${data.time}`,
                         date: r.date!,
                     });
+                }
+                // Also try notification via parentEmail if parentId is not set
+                if (!student?.parentId && student?.parentEmail) {
+                    const parentUsers = await fetchCollection<User>('users', where('email', '==', student.parentEmail));
+                    if (parentUsers.length > 0) {
+                        await notificationService.create({
+                            userId: parentUsers[0].id,
+                            type: 'attendance',
+                            title: r.status === 'present' ? 'Child Arrived at School' : 'Attendance Alert',
+                            message: `${student.name} marked ${r.status} at ${data.time}`,
+                            date: r.date!,
+                        });
+                    }
                 }
             }
         }
