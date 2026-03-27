@@ -161,8 +161,11 @@ export interface LessonLog {
   notes: string;
   teacherId: string;
   teacherName: string;
+  time?: string;
   attachments?: string[];
 }
+
+
 
 export interface Assignment {
   id: string;
@@ -397,6 +400,8 @@ import {
   auditLogService,
   admissionService,
   subjectMappingService,
+  studentNoteService,
+  StudentNote,
 } from './firestoreService';
 
 export {
@@ -428,7 +433,10 @@ export {
   auditLogService,
   admissionService,
   subjectMappingService,
+  studentNoteService,
 };
+
+export type { StudentNote };
 
 // Default export — same shape as before
 export default {
@@ -457,4 +465,5 @@ export default {
   studentEnrollment: studentEnrollmentService,
   feeInvoice: feeInvoiceService,
   auditLog: auditLogService,
+  studentNote: studentNoteService,
 };

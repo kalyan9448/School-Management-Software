@@ -35,7 +35,10 @@ import {
   teacherService,
   timetableService,
   notificationService,
+  studentNoteService,
   Notification,
+  TimetableSlot,
+  StudentNote,
 } from '../utils/centralDataService';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
@@ -130,6 +133,15 @@ export function TeacherDashboardNew() {
   const [dashboardWeekLessons, setDashboardWeekLessons] = useState<any[]>([]);
   const [lessonLogs, setLessonLogs] = useState<any[]>([]);
   const [lessonsLoading, setLessonsLoading] = useState(false);
+  const [allTimetableSlots, setAllTimetableSlots] = useState<TimetableSlot[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>('');
+  
+  // Student Notes state
+  const [selectedNoteStudentId, setSelectedNoteStudentId] = useState<string>('');
+  const [selectedNoteType, setSelectedNoteType] = useState<'Achievement' | 'Concern' | 'Behavior'>('Behavior');
+  const [noteContent, setNoteContent] = useState<string>('');
+  const [recentNotes, setRecentNotes] = useState<StudentNote[]>([]);
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   // Update currentTime every minute for period highlighting
   useEffect(() => {
@@ -185,10 +197,67 @@ export function TeacherDashboardNew() {
 
     loadLessonLogs();
 
+    const loadRecentNotes = async () => {
+      if (!user?.email) return;
+      try {
+        const notes = await studentNoteService.getByTeacher(user.email);
+        if (isMounted) setRecentNotes(notes);
+      } catch (error) {
+        console.error('Error loading recent notes:', error);
+      }
+    };
+    loadRecentNotes();
+
     return () => {
       isMounted = false;
     };
   }, [user?.email]);
+
+  const handleSaveNote = async () => {
+    if (!selectedNoteStudentId || !noteContent) {
+      alert('Please select a student and enter note content.');
+      return;
+    }
+
+    setIsSavingNote(true);
+    try {
+      const student = allStudents.find(s => s.id === selectedNoteStudentId);
+      if (!student) throw new Error('Student not found');
+
+      const newNote = await studentNoteService.create({
+        studentId: selectedNoteStudentId,
+        studentName: student.name,
+        teacherId: user?.email || '',
+        teacherName: user?.name || '',
+        type: selectedNoteType,
+        content: noteContent,
+        date: new Date().toISOString(),
+      });
+
+      // Send notification to parent
+      const parentUser = await studentService.getParentByStudentId(selectedNoteStudentId);
+      if (parentUser && parentUser.email) {
+        await notificationService.create({
+          userId: parentUser.email,
+          type: 'announcement',
+          title: `New Teacher Note for ${student.name}`,
+          message: `${user?.name} has added a new ${selectedNoteType.toLowerCase()} note for ${student.name}: ${noteContent}`,
+          date: new Date().toISOString(),
+          read: false,
+        });
+      }
+
+      setRecentNotes(prev => [newNote, ...prev]);
+      setNoteContent('');
+      setSelectedNoteStudentId('');
+      alert('✅ Note saved and parent notified!');
+    } catch (error) {
+      console.error('Error saving note:', error);
+      alert('❌ Failed to save note. Please try again.');
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
 
   const handleMarkAsRead = async (id: string) => {
     await notificationService.markAsRead(id);
@@ -295,11 +364,15 @@ export function TeacherDashboardNew() {
         todaySlots.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
         setTodaySchedule(todaySlots.map(slot => ({
+          id: slot.id, // Include slot ID
           startTime: slot.startTime || '',
           endTime: slot.endTime || '',
           class: `${slot.class}-${slot.section}`,
           subject: slot.subject || '',
         })));
+
+        // Store all slots for dynamic population in Lesson Log form
+        setAllTimetableSlots(teacherSlots);
       } catch (schedErr: any) {
         console.error('[Timetable] FAILED to load schedule:', schedErr);
         setScheduleDebug(`ERROR: ${schedErr?.message || schedErr}`);
@@ -317,7 +390,16 @@ export function TeacherDashboardNew() {
         }
 
         if (teacher) {
-          const classesInfo: ClassInfo[] = await Promise.all(teacher.classes.map(async (c: any, i: number) => {
+          // Deduplicate classes to avoid redundant student fetching and list items
+          const seenClasses = new Set<string>();
+          const uniqueTeacherClasses = teacher.classes.filter((c: any) => {
+            const key = `${c.class}-${c.section}-${c.subject}`;
+            if (seenClasses.has(key)) return false;
+            seenClasses.add(key);
+            return true;
+          });
+
+          const classesInfo: ClassInfo[] = await Promise.all(uniqueTeacherClasses.map(async (c: any, i: number) => {
             const studentsInClass = await studentService.getByClass(c.class, c.section);
             return {
               id: `${c.class}-${c.section}-${c.subject}-${i}`,
@@ -332,7 +414,14 @@ export function TeacherDashboardNew() {
 
           const allStds: LocalStudent[] = [];
           const studentIds = new Set<string>();
-          for (const c of teacher.classes) {
+          
+          // Deduplicate by class-section for student aggregation to prevent double-counting students in same class with different subjects
+          const seenClassSections = new Set<string>();
+          for (const c of uniqueTeacherClasses) {
+            const classKey = `${c.class}-${c.section}`;
+            if (seenClassSections.has(classKey)) continue;
+            seenClassSections.add(classKey);
+
             const stds = await studentService.getByClass(c.class, c.section);
             stds.forEach((s: any) => {
               if (!studentIds.has(s.id)) {
@@ -368,6 +457,7 @@ export function TeacherDashboardNew() {
     notes: '',
     teachingDepth: 'Moderate' as 'Basic' | 'Moderate' | 'Advanced',
     aiSuggestions: [] as string[],
+    time: '09:00',
   });
 
   const [showAiSuggestions, setShowAiSuggestions] = useState(false);
@@ -392,7 +482,13 @@ export function TeacherDashboardNew() {
             };
           }));
         }
-      } catch (err) {
+      } catch (err) {  // Reset slot selection when lesson date changes
+  useEffect(() => {
+    setSelectedSlotId('');
+    setSelectedLessonClass(null);
+    setSelectedSubject('');
+    setLessonForm(prev => ({ ...prev, time: '09:00' }));
+  }, [lessonDate]);
         console.error('Error loading attendance:', err);
       }
     }
@@ -615,7 +711,7 @@ export function TeacherDashboardNew() {
   const renderDashboard = () => {
     const presentCount = dashboardPresentCount;
     const weekLessons = dashboardWeekLessons;
-    const totalStudentsCount = myClasses.reduce((sum, cls) => sum + cls.students, 0);
+    const totalStudentsCount = allStudents.length;
     const attendancePercentage = allStudents.length > 0 ? ((presentCount / allStudents.length) * 100).toFixed(0) : '0';
     const lessonsRemaining = todaySchedule.length - weekLessons.length;
 
@@ -749,17 +845,21 @@ export function TeacherDashboardNew() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
-                        const classMatch = item.class.match(/^(.+)-([A-Za-z0-9]+)$/);
-                        if (classMatch) {
-                          const matchingClass = myClasses.find(
-                            c => c.class === classMatch[1] &&
-                              c.section === classMatch[2] &&
-                              c.subject === item.subject
-                          );
-                          if (matchingClass) {
-                            setSelectedLessonClass(matchingClass);
-                          }
-                          setSelectedSubject(item.subject);
+                        const slotId = (item as any).id;
+                        setSelectedSlotId(slotId);
+                        const slot = allTimetableSlots.find(s => s.id === slotId);
+                        if (slot) {
+                          const cls = myClasses.find(c => c.class === slot.class && c.section === slot.section);
+                          setSelectedLessonClass(cls || {
+                            id: `${slot.class}-${slot.section}-${slot.subject}`,
+                            class: slot.class,
+                            section: slot.section,
+                            subject: slot.subject,
+                            students: 0,
+                            time: `${slot.startTime} - ${slot.endTime}`
+                          });
+                          setSelectedSubject(slot.subject);
+                          setLessonForm(prev => ({ ...prev, time: slot.startTime }));
                         }
                         setShowLessonForm(false);
                         setCurrentView('lesson-log');
@@ -1287,6 +1387,7 @@ export function TeacherDashboardNew() {
         notes: lessonForm.notes,
         teacherId: user?.email || 'teacher',
         teacherName: user?.name || 'Teacher',
+        time: lessonForm.time,
       });
 
       setLessonLogs((prevLessons) => [lesson, ...prevLessons]);
@@ -1300,6 +1401,7 @@ export function TeacherDashboardNew() {
         notes: '',
         teachingDepth: 'Moderate',
         aiSuggestions: [],
+        time: '09:00',
       });
 
       setShowLessonForm(false);
@@ -1548,40 +1650,46 @@ export function TeacherDashboardNew() {
         {/* Class Context Information */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Class Selection */}
-            <div>
-              <label className="block text-gray-700 font-semibold mb-2">📋 Class *</label>
+            {/* Slot Selection */}
+            <div className="md:col-span-2">
+              <label className="block text-gray-700 font-semibold mb-2">🏷 Timetable Slot *</label>
               <select
-                value={selectedLessonClass?.id || ''}
+                value={selectedSlotId}
                 onChange={(e) => {
-                  const cls = myClasses.find(c => c.id === e.target.value);
-                  setSelectedLessonClass(cls || null);
+                  const slotId = e.target.value;
+                  setSelectedSlotId(slotId);
+                  const slot = allTimetableSlots.find(s => s.id === slotId);
+                  if (slot) {
+                    const cls = myClasses.find(c => c.class === slot.class && c.section === slot.section);
+                    setSelectedLessonClass(cls || {
+                      id: `${slot.class}-${slot.section}-${slot.subject}`,
+                      class: slot.class,
+                      section: slot.section,
+                      subject: slot.subject,
+                      students: 0,
+                      time: `${slot.startTime} - ${slot.endTime}`
+                    });
+                    setSelectedSubject(slot.subject);
+                    setLessonForm(prev => ({ ...prev, time: slot.startTime }));
+                  }
                 }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
               >
-                <option value="">Select class...</option>
-                {myClasses.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.class} - Sec {cls.section}
-                  </option>
-                ))}
+                <option value="">Select a slot from your timetable...</option>
+                {(() => {
+                  const dayName = new Date(lessonDate).toLocaleDateString('en-US', { weekday: 'long' });
+                  const slotsForDay = allTimetableSlots.filter(s => s.day === dayName);
+                  if (slotsForDay.length === 0) return <option disabled>No classes scheduled for {dayName}</option>;
+                  return slotsForDay.sort((a,b) => a.startTime.localeCompare(b.startTime)).map(slot => (
+                    <option key={slot.id} value={slot.id}>
+                      {slot.startTime} - {slot.endTime} | {slot.class}-{slot.section} | {slot.subject}
+                    </option>
+                  ));
+                })()}
               </select>
-            </div>
-
-            {/* Subject Selection */}
-            <div>
-              <label className="block text-gray-700 font-semibold mb-2">📖 Subject *</label>
-              <select
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
-              >
-                {subjects.filter(s => s !== 'All Subjects').map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))}
-              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Showing available slots for {new Date(lessonDate).toLocaleDateString('en-US', { weekday: 'long' })}
+              </p>
             </div>
 
             {/* Date Selection */}
@@ -1601,7 +1709,8 @@ export function TeacherDashboardNew() {
               <label className="block text-gray-700 font-semibold mb-2">⏰ Time</label>
               <input
                 type="time"
-                defaultValue="09:00"
+                value={lessonForm.time}
+                onChange={(e) => setLessonForm({ ...lessonForm, time: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
               />
             </div>
@@ -1818,14 +1927,15 @@ export function TeacherDashboardNew() {
             onClick={() => {
               setShowLessonForm(false);
               // Reset form
-              setLessonForm({
-                topic: '',
-                objectives: [],
-                studentsNeedingAttention: [],
-                notes: '',
-                teachingDepth: 'Moderate',
-                aiSuggestions: [],
-              });
+                setLessonForm({
+                  topic: '',
+                  objectives: [],
+                  studentsNeedingAttention: [],
+                  notes: '',
+                  teachingDepth: 'Moderate',
+                  aiSuggestions: [],
+                  time: '09:00',
+                });
             }}
             className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
           >
@@ -1866,12 +1976,16 @@ export function TeacherDashboardNew() {
           <h3 className="text-gray-900 mb-4">Add New Note</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-gray-700 mb-2">Select Student</label>
-              <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-                <option>Select a student...</option>
-                {students.map((student) => (
+              <label className="block text-gray-700 mb-2">Select Student *</label>
+              <select 
+                value={selectedNoteStudentId}
+                onChange={(e) => setSelectedNoteStudentId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Select a student...</option>
+                {allStudents.sort((a, b) => a.name.localeCompare(b.name)).map((student) => (
                   <option key={student.id} value={student.id}>
-                    {student.name}
+                    {student.name} ({student.class}-{student.section})
                   </option>
                 ))}
               </select>
@@ -1879,60 +1993,127 @@ export function TeacherDashboardNew() {
             <div>
               <label className="block text-gray-700 mb-2">Note Type</label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <label className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200 cursor-pointer">
-                  <input type="radio" name="noteType" className="w-4 h-4" />
-                  <span className="text-gray-700">Achievement</span>
-                </label>
-                <label className="flex items-center gap-2 p-3 bg-orange-50 rounded-lg border border-orange-200 cursor-pointer">
-                  <input type="radio" name="noteType" className="w-4 h-4" />
-                  <span className="text-gray-700">Concern</span>
-                </label>
-                <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer">
-                  <input type="radio" name="noteType" className="w-4 h-4" />
-                  <span className="text-gray-700">Behavior</span>
-                </label>
+                {(['Achievement', 'Concern', 'Behavior'] as const).map((type) => (
+                  <label 
+                    key={type}
+                    className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedNoteType === type 
+                        ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-200 shadow-sm' 
+                        : type === 'Achievement' ? 'bg-green-50 border-green-200' :
+                          type === 'Concern' ? 'bg-orange-50 border-orange-200' :
+                          'bg-blue-50 border-blue-200'
+                    }`}
+                  >
+                    <input 
+                      type="radio" 
+                      name="noteType" 
+                      className="w-4 h-4 text-purple-600 focus:ring-purple-500" 
+                      checked={selectedNoteType === type}
+                      onChange={() => setSelectedNoteType(type)}
+                    />
+                    <span className="text-gray-700 font-bold">{type}</span>
+                  </label>
+                ))}
               </div>
             </div>
             <div>
-              <label className="block text-gray-700 mb-2">Note</label>
+              <label className="block text-gray-700 mb-2">Detailed Note *</label>
               <textarea
                 rows={4}
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
                 placeholder="Enter your observation or note..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
               ></textarea>
             </div>
-            <button className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-              Save Note
+            <button 
+              onClick={handleSaveNote}
+              disabled={isSavingNote || !selectedNoteStudentId || !noteContent}
+              className={`w-full md:w-auto px-8 py-3.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all flex items-center justify-center gap-2 font-black shadow-lg shadow-purple-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isSavingNote ? (
+                <>
+                  <Clock className="w-5 h-5 animate-spin" />
+                  Saving Note...
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Save Note & Notify Parent
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {/* Recent Notes */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Recent Notes</h3>
-          <div className="space-y-3">
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-gray-900">Aarav Patel</p>
-                <span className="px-2 py-1 bg-green-600 text-white rounded text-xs">
-                  Achievement
-                </span>
+          <h3 className="text-gray-900 mb-6">Recent Notes & Observations</h3>
+          <div className="space-y-4">
+            {recentNotes.length > 0 ? (
+              recentNotes.map((note) => (
+                <div 
+                  key={note.id}
+                  className={`p-5 rounded-2xl border-2 transition-all hover:shadow-md ${
+                    note.type === 'Achievement' ? 'bg-green-50/50 border-green-100' :
+                    note.type === 'Concern' ? 'bg-orange-50/50 border-orange-100' :
+                    'bg-blue-50/50 border-blue-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${
+                        note.type === 'Achievement' ? 'bg-green-500' :
+                        note.type === 'Concern' ? 'bg-orange-500' :
+                        'bg-blue-500'
+                      }`}>
+                        {note.studentName.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 leading-none mb-1">{note.studentName}</p>
+                        <p className="text-xs text-gray-500 font-medium">Student Performance Note</p>
+                      </div>
+                    </div>
+                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${
+                      note.type === 'Achievement' ? 'bg-green-600 text-white' :
+                      note.type === 'Concern' ? 'bg-orange-600 text-white' :
+                      'bg-blue-600 text-white'
+                    }`}>
+                      {note.type}
+                    </span>
+                  </div>
+                  <p className="text-gray-700 mb-4 leading-relaxed font-medium pl-1">
+                    {note.content}
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100/50">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded-md border border-gray-100">
+                        <Calendar className="w-3.5 h-3.5 text-purple-500" />
+                        <span className="font-bold">{new Date(note.date).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded-md border border-gray-100">
+                        <Clock className="w-3.5 h-3.5 text-purple-500" />
+                        <span className="font-bold">{new Date(note.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-[10px] font-bold text-purple-600">
+                        {note.teacherName.charAt(0)}
+                      </div>
+                      <span className="font-bold">By {note.teacherName}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-16 bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-200">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <MessageSquare className="w-10 h-10 text-gray-300" />
+                </div>
+                <h4 className="text-gray-900 font-bold mb-1">No notes recorded yet</h4>
+                <p className="text-gray-500 text-sm max-w-xs mx-auto">Start recording student observations to track progress and keep parents informed.</p>
               </div>
-              <p className="text-gray-700 mb-2">
-                Excellent participation in today's circle time. Answered all questions correctly.
-              </p>
-              <p className="text-gray-600 text-sm">Today, 10:30 AM</p>
-            </div>
-            <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-gray-900">Arjun Singh</p>
-                <span className="px-2 py-1 bg-orange-600 text-white rounded text-xs">Concern</span>
-              </div>
-              <p className="text-gray-700 mb-2">
-                Struggling with color recognition. Needs additional practice and attention.
-              </p>
-              <p className="text-gray-600 text-sm">Today, 11:45 AM</p>
-            </div>
+            )}
           </div>
         </div>
       </div>

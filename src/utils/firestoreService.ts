@@ -50,6 +50,18 @@ export type {
 } from './centralDataService';
 import { getActiveAcademicYearId } from './classUtils';
 
+export interface StudentNote {
+  id: string;
+  school_id?: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  type: 'Achievement' | 'Concern' | 'Behavior';
+  content: string;
+  date: string;
+}
+
 // Re-export new production interfaces from types
 export type {
     SchoolSettings,
@@ -464,6 +476,13 @@ export const studentService = {
     delete: async (id: string): Promise<boolean> => {
         await deleteDocById('students', id);
         return true;
+    },
+
+    getParentByStudentId: async (studentId: string): Promise<User | null> => {
+        const student = await studentService.getById(studentId);
+        if (!student || !student.parentEmail) return null;
+        const parentUsers = await fetchCollection<User>('users', where('email', '==', student.parentEmail));
+        return parentUsers.length > 0 ? parentUsers[0] : null;
     },
 };
 
@@ -895,6 +914,7 @@ export const lessonService = {
             notes: lesson.notes || '',
             teacherId: lesson.teacherId || '',
             teacherName: lesson.teacherName || '',
+            time: lesson.time,
             attachments: lesson.attachments || [],
         });
     },
@@ -1376,6 +1396,40 @@ export const timetableService = {
 
     deleteSlot: async (id: string): Promise<void> => {
         await deleteDocById('timetable', id);
+    },
+};
+
+// ==================== STUDENT NOTE SERVICE ====================
+
+export const studentNoteService = {
+    getAll: async (): Promise<StudentNote[]> => {
+        return fetchCollection<StudentNote>('student_notes');
+    },
+
+    getByStudent: async (studentId: string): Promise<StudentNote[]> => {
+        return fetchCollection<StudentNote>(
+            'student_notes',
+            where('studentId', '==', studentId)
+        );
+    },
+
+    getByTeacher: async (teacherId: string): Promise<StudentNote[]> => {
+        return fetchCollection<StudentNote>(
+            'student_notes',
+            where('teacherId', '==', teacherId)
+        );
+    },
+
+    create: async (note: Partial<StudentNote>): Promise<StudentNote> => {
+        return createDoc<StudentNote>('student_notes', {
+            studentId: note.studentId || '',
+            studentName: note.studentName || '',
+            teacherId: note.teacherId || '',
+            teacherName: note.teacherName || '',
+            type: note.type || 'Behavior',
+            content: note.content || '',
+            date: note.date || new Date().toISOString(),
+        });
     },
 };
 
