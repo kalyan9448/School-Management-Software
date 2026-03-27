@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { INDIAN_STATES, STATE_CITY_MAPPING } from '../data/locationData';
-import { schoolService, organizationService, announcementService } from '../utils/centralDataService';
+import { schoolService, organizationService, announcementService, statisticsService } from '../utils/centralDataService';
 import {
   Building2,
   Building,
@@ -54,6 +54,7 @@ import {
   School,
   MapPin,
   ShieldCheck,
+  Heart,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
 
@@ -114,11 +115,13 @@ interface School {
   phone?: string;
   email?: string;
   principal?: string;
+  principalEmail?: string;
+  principalName?: string;
   principalAddress?: string;
   principalGmail?: string;
   subscriptionStart?: string;
-  plan?: string;
   schoolCode?: string;
+  plan?: string;
 }
 
 interface Subscription {
@@ -457,6 +460,13 @@ export function SuperAdminDashboard() {
       } catch (err: any) {
         console.error('Failed to load announcements:', err);
         errors.push('Announcements: ' + (err?.message || 'Failed to load'));
+      }
+
+      try {
+        const stats = await statisticsService.getPlatformStats();
+        setPlatformStats(stats);
+      } catch (err: any) {
+        console.error('Failed to load platform stats:', err);
       }
 
       // Reconcile org-school links: fix schools whose organizationId is missing
@@ -1000,10 +1010,31 @@ export function SuperAdminDashboard() {
     reason: '',
   });
 
+  const [platformStats, setPlatformStats] = useState({
+    totalStudents: 0,
+    totalTeachers: 0,
+    totalParents: 0
+  });
+
+  const [schoolStats, setSchoolStats] = useState({
+    activeStudents: 0,
+    activeTeachers: 0,
+    activeParents: 0
+  });
+
   // Handler Functions
-  const handleViewSchoolDetails = (school: School) => {
+  const handleViewSchoolDetails = async (school: School) => {
     setSelectedSchool(school);
+    // Reset school stats first to avoid showing stale data from previous school
+    setSchoolStats({ activeStudents: 0, activeTeachers: 0, activeParents: 0 });
     setCurrentView('school-details');
+
+    try {
+      const stats = await statisticsService.getSchoolStats(school.id);
+      setSchoolStats(stats);
+    } catch (err: any) {
+      console.error('Failed to load school stats:', err);
+    }
   };
 
   const handleToggleSchoolStatus = (school: School) => {
@@ -1681,7 +1712,55 @@ export function SuperAdminDashboard() {
                 )}
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-blue-600" />
+                <School className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-indigo-600">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 mb-1">Total Students</p>
+                <h3 className="text-gray-900 mb-1">{platformStats.totalStudents}</h3>
+                <p className="text-green-600 flex items-center gap-1">
+                  <TrendingUp className="w-4 h-4" />
+                  Across {activeSchools} schools
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-indigo-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-teal-600">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 mb-1">Total Teachers</p>
+                <h3 className="text-gray-900 mb-1">{platformStats.totalTeachers}</h3>
+                <p className="text-teal-600 flex items-center gap-1">
+                  <GraduationCap className="w-4 h-4" />
+                  Staff Members
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
+                <GraduationCap className="w-6 h-6 text-teal-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-pink-600">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 mb-1">Total Parents</p>
+                <h3 className="text-gray-900 mb-1">{platformStats.totalParents}</h3>
+                <p className="text-pink-600 flex items-center gap-1">
+                  <Heart className="w-4 h-4" fill="currentColor" />
+                  Family Accounts
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-pink-600" />
               </div>
             </div>
           </div>
@@ -1693,7 +1772,7 @@ export function SuperAdminDashboard() {
                 <h3 className="text-gray-900 mb-1">₹{totalMRR.toLocaleString()}</h3>
                 <p className="text-green-600 flex items-center gap-1">
                   <TrendingUp className="w-4 h-4" />
-                  {paidSubscriptions} active subscription{paidSubscriptions !== 1 ? 's' : ''}
+                  {paidSubscriptions} active plans
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -1709,7 +1788,7 @@ export function SuperAdminDashboard() {
                 <h3 className="text-gray-900 mb-1">{systemHealth}%</h3>
                 <p className={`flex items-center gap-1 ${systemHealth >= 90 ? 'text-green-600' : systemHealth >= 70 ? 'text-orange-600' : 'text-red-600'}`}>
                   {systemHealth >= 90 ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                  {systemHealth >= 90 ? 'All systems operational' : `${schools.length - activeSchools} school${schools.length - activeSchools !== 1 ? 's' : ''} inactive`}
+                  {systemHealth >= 90 ? 'All systems operational' : `${schools.length - activeSchools} schools inactive`}
                 </p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -2944,8 +3023,9 @@ export function SuperAdminDashboard() {
       return sum + 20;
     }, 0);
 
-    const totalStudents = schools.reduce((sum, s) => sum + (s.activeStudents || s.students || 0), 0);
-    const totalTeachers = schools.reduce((sum, s) => sum + (s.activeTeachers || s.teachers || 0), 0);
+    const totalStudents = platformStats.totalStudents;
+    const totalTeachers = platformStats.totalTeachers;
+    const totalParents = platformStats.totalParents;
 
     return (
     <div className="space-y-6">
@@ -2989,7 +3069,7 @@ export function SuperAdminDashboard() {
             </span>
           </div>
           <h3 className="text-gray-900 mb-1">Total Users</h3>
-          <p className="text-gray-600">{totalStudents} students, {totalTeachers} teachers</p>
+          <p className="text-gray-600">{totalStudents} students, {totalTeachers} teachers, {totalParents} parents</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -3929,8 +4009,8 @@ export function SuperAdminDashboard() {
     if (!selectedSchool) return null;
 
     const usagePercentage = {
-      students: selectedSchool.maxStudents ? Math.round((selectedSchool.students / selectedSchool.maxStudents) * 100) : 0,
-      teachers: selectedSchool.maxTeachers ? Math.round((selectedSchool.teachers / selectedSchool.maxTeachers) * 100) : 0,
+      students: selectedSchool.maxStudents ? Math.round((schoolStats.activeStudents / selectedSchool.maxStudents) * 100) : 0,
+      teachers: selectedSchool.maxTeachers ? Math.round((schoolStats.activeTeachers / selectedSchool.maxTeachers) * 100) : 0,
       storage: selectedSchool.maxStorage ? Math.round((parseFloat(selectedSchool.storage) / parseFloat(selectedSchool.maxStorage)) * 100) : 0,
     };
 
@@ -4267,7 +4347,7 @@ export function SuperAdminDashboard() {
                 <Users className="w-5 h-5 text-blue-600" />
               </div>
               <p className="text-2xl text-gray-900 font-semibold mb-1">{selectedSchool.maxStudents || 'Unlimited'}</p>
-              <p className="text-sm text-gray-600">Current: {selectedSchool.students}</p>
+              <p className="text-sm text-gray-600">Current: {schoolStats.activeStudents}</p>
               {selectedSchool.maxStudents && (
                 <div className="mt-3">
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -4287,7 +4367,7 @@ export function SuperAdminDashboard() {
                 <GraduationCap className="w-5 h-5 text-green-600" />
               </div>
               <p className="text-2xl text-gray-900 font-semibold mb-1">{selectedSchool.maxTeachers || 'Unlimited'}</p>
-              <p className="text-sm text-gray-600">Current: {selectedSchool.teachers}</p>
+              <p className="text-sm text-gray-600">Current: {schoolStats.activeTeachers}</p>
               {selectedSchool.maxTeachers && (
                 <div className="mt-3">
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -4344,17 +4424,17 @@ export function SuperAdminDashboard() {
             <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
               <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Students</p>
-              <p className="text-3xl text-gray-900 font-bold">{selectedSchool.activeStudents || selectedSchool.students}</p>
+              <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeStudents}</p>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
               <GraduationCap className="w-8 h-8 text-green-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Teachers</p>
-              <p className="text-3xl text-gray-900 font-bold">{selectedSchool.activeTeachers || selectedSchool.teachers}</p>
+              <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeTeachers}</p>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
               <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Parents</p>
-              <p className="text-3xl text-gray-900 font-bold">{selectedSchool.activeParents || 0}</p>
+              <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeParents}</p>
             </div>
           </div>
         </div>

@@ -321,6 +321,17 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // SUBJECT MAPPINGS
+    // =========================================================================
+    
+    match /subject_mappings/{mappingId} {
+      allow read:   if canReadSchoolData();
+      allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
+      allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
+      allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
+    }
+
+    // =========================================================================
     // LESSONS (lesson logs created by teachers)
     // =========================================================================
 

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Edit, Eye, CheckCircle, Clock, XCircle, UserPlus, Calendar, Phone, Mail, Grid3x3, List, Users } from 'lucide-react';
 import { AdmissionForm } from './AdmissionForm';
-import { AcademicYear, DEFAULT_YEARS, getActiveAcademicYearId } from '../utils/classUtils';
+import { AcademicYear, getActiveAcademicYearId } from '../utils/classUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { auth, db } from '../services/firebase';
 import { apiClient } from '../services/apiClient';
-import { userService, studentService, schoolService, admissionService } from '../utils/centralDataService';
+import { userService, studentService, schoolService, admissionService, academicYearService } from '../utils/centralDataService';
 import { doc, setDoc } from 'firebase/firestore';
 
 interface Student {
@@ -32,7 +32,7 @@ interface Student {
   appliedDate: string;
   admissionDate?: string;
   academicYear?: string;
-
+  selectedFees?: string[];
 }
 
 interface AdmissionModuleProps {
@@ -44,7 +44,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
   const [view, setView] = useState<'list' | 'form'>(initialView);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(initialData || null);
-  const [selectedYear, setSelectedYear] = useState<string>(getActiveAcademicYearId());
+  const [selectedYear, setSelectedYear] = useState<string>('');
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('admitted');
   const [students, setStudents] = useState<Student[]>([]);
@@ -118,6 +118,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     appliedDate: s.appliedDate || s.admissionDate || '',
     admissionDate: s.admissionDate || '',
     academicYear: s.academicYear || '',
+    selectedFees: s.selectedFees || [],
   });
 
   const loadLegacyAdmissionsFromStudents = async () => {
@@ -133,8 +134,35 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
 
   // Load data
   useEffect(() => {
-    // Load academic years
-    setAcademicYears(DEFAULT_YEARS);
+    const loadAcademicYears = async () => {
+      try {
+        const firestoreYears = await academicYearService.getAll();
+        if (firestoreYears.length > 0) {
+          const mappedYears = firestoreYears.map(y => ({
+            id: y.id,
+            name: y.name,
+            startDate: y.startDate,
+            endDate: y.endDate,
+            status: y.isCurrent ? 'active' : (y.status || 'upcoming'),
+            isCurrent: y.isCurrent
+          } as AcademicYear));
+          
+          setAcademicYears(mappedYears);
+
+          // Set default selected year to the active one
+          const activeYear = mappedYears.find(y => y.isCurrent);
+          if (activeYear && !selectedYear) {
+            setSelectedYear(activeYear.name);
+          } else if (mappedYears.length > 0 && !selectedYear) {
+            setSelectedYear(mappedYears[0].name);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load academic years in AdmissionModule:", error);
+      }
+    };
+
+    loadAcademicYears();
 
     if (view === 'list') {
       loadAdmissions();
@@ -371,6 +399,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                 rollNo: studentData.rollNo,
                 admissionDate: studentData.admissionDate || new Date().toISOString().split('T')[0],
                 academicYear: studentData.academicYear,
+                selectedFees: studentData.selectedFees,
                 status: 'active',
               });
               const studentId = createdStudent.id;
@@ -621,7 +650,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
 
           {/* Refresh Button */}
           <button
-            onClick={loadAdmissions}
+            onClick={() => loadAdmissions()}
             disabled={loading}
             className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
             title="Refresh Data"
@@ -690,7 +719,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
               className="w-full pl-4 pr-10 py-3 border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white font-medium text-gray-700"
             >
               {academicYears.map(year => (
-                <option key={year.id} value={year.id}>{year.name} {year.status === 'active' ? '(Current)' : ''}</option>
+                <option key={year.id} value={year.name}>{year.name} {year.isCurrent ? '(Current)' : ''}</option>
               ))}
             </select>
             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">

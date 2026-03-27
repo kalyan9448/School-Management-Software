@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Copy, ArrowRightLeft, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Copy, ArrowRightLeft, Calendar, CheckCircle } from 'lucide-react';
 import { StudentPromotionTool } from './StudentPromotionTool.tsx';
 import SubjectMappingView from './SubjectMappingView';
 import { TimetableManagement } from './TimetableManagement';
-import { AcademicYear, ClassSection, DEFAULT_YEARS } from '../utils/classUtils';
-import { Teacher, classService, teacherService } from '../utils/centralDataService';
+import { AcademicYear, ClassSection } from '../utils/classUtils';
+import { Teacher, classService, teacherService, academicYearService, studentService } from '../utils/centralDataService';
+import { useAuth } from '../contexts/AuthContext';
 
 const CLASS_OPTIONS = [
   'Playgroup', 'Nursery', 'LKG', 'UKG',
@@ -20,11 +21,13 @@ export function AcademicStructureView() {
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [classSections, setClassSections] = useState<ClassSection[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const { user } = useAuth();
 
   // Modal state
   const [showAddYearModal, setShowAddYearModal] = useState(false);
   const [showAddClassModal, setShowAddClassModal] = useState(false);
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
 
   const [newYearName, setNewYearName] = useState('');
   const [newYearStart, setNewYearStart] = useState('');
@@ -38,40 +41,123 @@ export function AcademicStructureView() {
   const [newCapacity, setNewCapacity] = useState('30');
   const [selectedClassNameForSection, setSelectedClassNameForSection] = useState('');
 
-  useEffect(() => {
-    const loadData = async () => {
-      // Load academic years (use defaults)
-      setAcademicYears(DEFAULT_YEARS);
+  const loadData = async () => {
+    const schoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
+    
+    let allFirestoreYears: any[] = [];
+    // Load academic years from Firestore
+    try {
+      // Fallback for legacy data with empty school_id, but strictly prefer schoolId
+      allFirestoreYears = await academicYearService.getAll();
+      
+      // --- SELF-HEALING DATA FIX ---
+      let activeFound = false;
+      const fixedYears = await Promise.all(allFirestoreYears.map(async (y) => {
+          let needsUpdate = false;
+          let currentUpdates: any = {};
+          
+          if (!y.school_id && schoolId) {
+              currentUpdates.school_id = schoolId;
+              needsUpdate = true;
+          }
+          if (y.isCurrent) {
+              if (activeFound) {
+                  currentUpdates.isCurrent = false;
+                  currentUpdates.status = 'upcoming';
+                  needsUpdate = true;
+              } else {
+                  activeFound = true;
+              }
+          }
+          
+          if (needsUpdate) {
+              await academicYearService.update(y.id, currentUpdates);
+              return { ...y, ...currentUpdates };
+          }
+          return y;
+      }));
+      // ------------------------------
 
-      // Load classes from Firestore, fall back to defaults
-      try {
-        const firestoreClasses = await classService.getAll();
-        if (firestoreClasses.length > 0) {
-          setClassSections(firestoreClasses.map(c => ({
+      const firestoreYears = fixedYears.filter(y => y.school_id === schoolId || !y.school_id);
+      
+      if (firestoreYears.length > 0) {
+        // Map Firestore AcademicYear to local AcademicYear
+        const today = new Date().setHours(0,0,0,0);
+        
+        setAcademicYears(firestoreYears.map(y => {
+          const start = new Date(y.startDate).getTime();
+          const end = new Date(y.endDate).getTime();
+          
+          let timeStatus: 'active' | 'upcoming' | 'completed' = 'upcoming';
+          if (today > end) timeStatus = 'completed';
+          else if (today >= start && today <= end) timeStatus = 'active'; // Ongoing
+
+          return {
+            id: y.id,
+            name: y.name,
+            startDate: y.startDate,
+            endDate: y.endDate,
+            status: timeStatus,
+            isCurrent: !!y.isCurrent
+          };
+        }));
+      } else {
+        setAcademicYears([]);
+      }
+    } catch (error) {
+      console.error("Failed to load academic years:", error);
+      setAcademicYears([]);
+    }
+
+    // Load classes and students from Firestore to calculate dynamic occupancy
+    try {
+      const [firestoreClasses, allStudents] = await Promise.all([
+        classService.getAll(),
+        studentService.getAll()
+      ]);
+
+      // Find the active academic year name to filter students
+      const activeYear = allFirestoreYears.find((y: any) => y.isCurrent);
+      const activeYearName = activeYear?.name;
+
+      if (firestoreClasses.length > 0) {
+        setClassSections(firestoreClasses.map(c => {
+          // Count students matching this class, section, and the active academic year
+          const studentCount = allStudents.filter(s => 
+            s.class === c.className && 
+            s.section === c.section &&
+            (!activeYearName || s.academicYear === activeYearName)
+          ).length;
+
+          return {
             id: c.id,
             className: c.className,
             section: c.section,
             classTeacher: c.classTeacher || 'Unassigned',
-            students: c.currentStrength ?? 0,
+            students: studentCount,
             capacity: c.capacity ?? 30,
-          })));
-        } else {
-          setClassSections([]);
-        }
-      } catch {
+          };
+        }));
+      } else {
         setClassSections([]);
       }
+    } catch (error) {
+      console.error("Failed to load classes or calculate student counts:", error);
+      setClassSections([]);
+    }
 
-      // Load teachers from Firestore
-      try {
-        const firestoreTeachers = await teacherService.getAll();
-        setTeachers(firestoreTeachers);
-      } catch {
-        setTeachers([]);
-      }
-    };
+    // Load teachers from Firestore
+    try {
+      const firestoreTeachers = await teacherService.getAll();
+      setTeachers(firestoreTeachers);
+    } catch {
+      setTeachers([]);
+    }
+  };
+
+  useEffect(() => {
     loadData();
-  }, []);
+  }, [user]);
 
   const handleAddAcademicYear = async () => {
     if (!newYearName || !newYearStart || !newYearEnd) {
@@ -79,53 +165,73 @@ export function AcademicStructureView() {
       return;
     }
 
-    if (editingYearId) {
-      // Update existing year
-      const updatedYears = academicYears.map(year => 
-        year.id === editingYearId 
-          ? { ...year, name: newYearName, startDate: newYearStart, endDate: newYearEnd }
-          : year
-      );
-      setAcademicYears(updatedYears);
-    } else {
-      // Create new year
-      const newYear: AcademicYear = {
-        id: newYearName,
-        name: newYearName,
-        startDate: newYearStart,
-        endDate: newYearEnd,
-        status: 'upcoming'
-      };
+    try {
+      if (editingYearId) {
+        // Update existing year in Firestore
+        await academicYearService.update(editingYearId, {
+          name: newYearName,
+          startDate: newYearStart,
+          endDate: newYearEnd
+        });
 
-      const updatedYears = [...academicYears, newYear];
-      setAcademicYears(updatedYears);
+        const updatedYears = academicYears.map(year =>
+          year.id === editingYearId
+            ? { ...year, name: newYearName, startDate: newYearStart, endDate: newYearEnd }
+            : year
+        );
+        setAcademicYears(updatedYears);
+      } else {
+        const schoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
+        // Create new year in Firestore
+        const createdYear = await academicYearService.create({
+          school_id: schoolId,
+          name: newYearName,
+          startDate: newYearStart,
+          endDate: newYearEnd,
+          status: 'upcoming',
+          isCurrent: false
+        });
 
-      // Duplicate structure if a base year is selected
-      if (baseYearId) {
-        // Clone existing classes into Firestore for the new year
-        const baseClasses = classSections;
-        for (const cls of baseClasses) {
-          await classService.create({
-            className: cls.className,
-            section: cls.section,
-            classTeacher: cls.classTeacher,
-            capacity: cls.capacity,
-            currentStrength: 0,
-            subjects: [],
-          });
+        const newYear: AcademicYear = {
+          id: createdYear.id,
+          name: createdYear.name,
+          startDate: createdYear.startDate,
+          endDate: createdYear.endDate,
+          status: 'upcoming'
+        };
+
+        setAcademicYears(prev => [...prev, newYear]);
+
+        // Duplicate structure if a base year is selected
+        if (baseYearId) {
+          // Clone existing classes into Firestore for the new year
+          const baseClasses = classSections;
+          for (const cls of baseClasses) {
+            await classService.create({
+              className: cls.className,
+              section: cls.section,
+              classTeacher: cls.classTeacher,
+              capacity: cls.capacity,
+              currentStrength: 0,
+              subjects: [],
+            });
+          }
         }
       }
-    }
 
-    setShowAddYearModal(false);
-    setEditingYearId(null);
-    setNewYearName('');
-    setNewYearStart('');
-    setNewYearEnd('');
-    setBaseYearId('');
+      setShowAddYearModal(false);
+      setEditingYearId(null);
+      setNewYearName('');
+      setNewYearStart('');
+      setNewYearEnd('');
+      setBaseYearId('');
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to save academic year: " + (error.message || "Unknown error"));
+    }
   };
 
-  const handleDeleteAcademicYear = (id: string) => {
+  const handleDeleteAcademicYear = async (id: string) => {
     const yearToDelete = academicYears.find(y => y.id === id);
     if (!yearToDelete) return;
 
@@ -135,8 +241,32 @@ export function AcademicStructureView() {
     }
 
     if (window.confirm(`Are you sure you want to delete ${yearToDelete.name}? This will remove all associated data.`)) {
-      const updatedYears = academicYears.filter(y => y.id !== id);
-      setAcademicYears(updatedYears);
+      try {
+        await academicYearService.delete(id);
+        const updatedYears = academicYears.filter(y => y.id !== id);
+        setAcademicYears(updatedYears);
+      } catch (error: any) {
+        console.error(error);
+        alert("Failed to delete academic year: " + (error.message || "Unknown error"));
+      }
+    }
+  };
+
+  const handleSetActiveYear = async (id: string) => {
+    const schoolId = user?.school_id || sessionStorage.getItem('active_school_id');
+    if (!schoolId) {
+      alert("No active school found. Please log in again.");
+      return;
+    }
+
+    try {
+      await academicYearService.setCurrent(id, schoolId);
+      
+      // Re-fetch all data to ensure student counts and active year flags are updated
+      await loadData();
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to set active academic year: " + (error.message || "Unknown error"));
     }
   };
 
@@ -187,6 +317,27 @@ export function AcademicStructureView() {
     }
   };
 
+  const handleEditSectionClick = (section: ClassSection) => {
+    setEditingSectionId(section.id);
+    setSelectedClassNameForSection(section.className);
+    setNewSectionName(section.section);
+    setNewClassTeacher(section.classTeacher === 'Unassigned' ? '' : section.classTeacher);
+    setNewCapacity(section.capacity.toString());
+    setShowAddSectionModal(true);
+  };
+
+  const handleDeleteSection = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete ${name}?`)) {
+      try {
+        await classService.delete(id);
+        setClassSections(prev => prev.filter(s => s.id !== id));
+      } catch (error: any) {
+        console.error(error);
+        alert("Failed to delete section: " + (error.message || "Unknown error"));
+      }
+    }
+  };
+
   const handleAddSection = async () => {
     if (!newSectionName || !selectedClassNameForSection) {
       alert("Please fill section name.");
@@ -195,34 +346,53 @@ export function AcademicStructureView() {
 
     try {
       const capacity = parseInt(newCapacity) || 30;
-      const created = await classService.create({
-        className: selectedClassNameForSection,
-        section: newSectionName,
-        classTeacher: newClassTeacher || '',
-        capacity,
-        currentStrength: 0,
-        subjects: [],
-      });
+      
+      if (editingSectionId) {
+        await classService.update(editingSectionId, {
+          className: selectedClassNameForSection,
+          section: newSectionName,
+          classTeacher: newClassTeacher || '',
+          capacity
+        });
+        
+        setClassSections(prev => prev.map(s => s.id === editingSectionId ? {
+          ...s,
+          className: selectedClassNameForSection,
+          section: newSectionName,
+          classTeacher: newClassTeacher || 'Unassigned',
+          capacity
+        } : s));
+      } else {
+        const created = await classService.create({
+          className: selectedClassNameForSection,
+          section: newSectionName,
+          classTeacher: newClassTeacher || '',
+          capacity,
+          currentStrength: 0,
+          subjects: [],
+        });
 
-      const newClassSection: ClassSection = {
-        id: created.id,
-        className: selectedClassNameForSection,
-        section: newSectionName,
-        classTeacher: newClassTeacher || 'Unassigned',
-        students: 0,
-        capacity,
-      };
+        const newClassSection: ClassSection = {
+          id: created.id,
+          className: selectedClassNameForSection,
+          section: newSectionName,
+          classTeacher: newClassTeacher || 'Unassigned',
+          students: 0,
+          capacity,
+        };
 
-      setClassSections(prev => [...prev, newClassSection]);
+        setClassSections(prev => [...prev, newClassSection]);
+      }
 
       setShowAddSectionModal(false);
+      setEditingSectionId(null);
       setNewSectionName('');
       setNewClassTeacher('');
       setNewCapacity('30');
       setSelectedClassNameForSection('');
     } catch (error: any) {
       console.error(error);
-      alert("Failed to add section: " + (error.message || "Unknown error"));
+      alert("Failed to save section: " + (error.message || "Unknown error"));
     }
   };
 
@@ -318,27 +488,31 @@ export function AcademicStructureView() {
 
             <div className="grid gap-4">
               {academicYears.map((year) => (
-                <div key={year.id} className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:border-purple-300 transition-colors">
+                <div key={year.id} className={`bg-white rounded-xl shadow-sm p-6 border transition-colors ${year.isCurrent ? 'border-purple-500 ring-1 ring-purple-100' : 'border-gray-200 hover:border-purple-300'}`}>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${year.status === 'active' ? 'bg-green-100 text-green-600' :
-                        year.status === 'upcoming' ? 'bg-purple-100 text-purple-600' :
+                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${year.isCurrent ? 'bg-purple-100 text-purple-600' :
                           'bg-gray-100 text-gray-500'
                         }`}>
                         <BookOpen className="w-6 h-6" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <h4 className="text-lg font-semibold text-gray-900">{year.name}</h4>
+                          {year.isCurrent && (
+                            <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-purple-600 text-white shadow-sm flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> Default
+                            </span>
+                          )}
                           <span
                             className={`px-3 py-0.5 rounded-full text-xs font-medium ${year.status === 'active'
                               ? 'bg-green-100 text-green-700 border border-green-200'
                               : year.status === 'upcoming'
-                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
                                 : 'bg-gray-100 text-gray-700 border border-gray-200'
                               }`}
                           >
-                            {year.status.charAt(0).toUpperCase() + year.status.slice(1)}
+                            {year.status === 'active' ? 'Ongoing' : year.status.charAt(0).toUpperCase() + year.status.slice(1)}
                           </span>
                         </div>
                         <p className="text-gray-500 mt-1">
@@ -347,6 +521,16 @@ export function AcademicStructureView() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 self-start sm:self-auto">
+                      {!year.isCurrent && (
+                        <button 
+                          onClick={() => handleSetActiveYear(year.id)}
+                          className="p-2 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-1" 
+                          title="Set as Default System Year"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium hidden sm:inline">Set Default</span>
+                        </button>
+                      )}
                       <button 
                         onClick={() => handleEditYear(year)}
                         className="p-2 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors" 
@@ -420,10 +604,18 @@ export function AcademicStructureView() {
                     {sections.map((classSection) => (
                       <div key={classSection.id} className="bg-white rounded-xl shadow-sm p-5 border border-gray-200 hover:border-purple-300 transition-all relative group hover:shadow-md">
                         <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="p-1.5 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors" title="Edit Section">
+                          <button 
+                            onClick={() => handleEditSectionClick(classSection)}
+                            className="p-1.5 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors" 
+                            title="Edit Section"
+                          >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button className="p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" title="Delete Section">
+                          <button 
+                            onClick={() => handleDeleteSection(classSection.id, `Section ${classSection.section}`)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" 
+                            title="Delete Section"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -656,8 +848,8 @@ export function AcademicStructureView() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">Add Section to {selectedClassNameForSection}</h3>
-              <p className="text-sm text-gray-500 mt-1">Create a new section for this class.</p>
+              <h3 className="text-xl font-bold text-gray-900">{editingSectionId ? 'Edit Section' : `Add Section to ${selectedClassNameForSection}`}</h3>
+              <p className="text-sm text-gray-500 mt-1">{editingSectionId ? 'Update details for this class section.' : 'Create a new section for this class.'}</p>
             </div>
             <div className="p-6 space-y-4">
               <div>
@@ -705,7 +897,14 @@ export function AcademicStructureView() {
             </div>
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
               <button
-                onClick={() => setShowAddSectionModal(false)}
+                onClick={() => {
+                  setShowAddSectionModal(false);
+                  setEditingSectionId(null);
+                  setNewSectionName('');
+                  setNewClassTeacher('');
+                  setNewCapacity('30');
+                  setSelectedClassNameForSection('');
+                }}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-200 bg-gray-100 rounded-lg transition-colors font-medium"
               >
                 Cancel
@@ -714,8 +913,17 @@ export function AcademicStructureView() {
                 onClick={handleAddSection}
                 className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-lg shadow-sm transition-all font-medium flex items-center gap-2"
               >
-                <Plus className="w-4 h-4" />
-                Add Section
+                {editingSectionId ? (
+                  <>
+                    <Edit className="w-4 h-4" />
+                    Update Section
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Add Section
+                  </>
+                )}
               </button>
             </div>
           </div>

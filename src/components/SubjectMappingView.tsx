@@ -1,96 +1,99 @@
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { SubjectMappingForm, ClassData, SubjectMapping } from './SubjectMappingForm';
-import { subjectService } from '../utils/centralDataService';
+import { subjectService, subjectMappingService, academicYearService, SubjectMappingRecord } from '../utils/centralDataService';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editData, setEditData] = useState<any>(null);
 
   const [classDataList, setClassDataList] = useState<ClassData[]>([]);
+  const { user } = useAuth();
 
   // Load mappings from Firestore
   useEffect(() => {
     const loadMappings = async () => {
+      const schoolId = user?.school_id || sessionStorage.getItem('active_school_id');
+      if (!schoolId) return;
+
       try {
-        const subjects = await subjectService.getAll();
-        // subjectService returns Subject[], map to ClassData[] if possible
-        // For now, initialize empty until subject mapping service is available
-        if (subjects.length === 0) {
-          setClassDataList([]);
-        }
+        const activeYear = await academicYearService.getCurrent(schoolId);
+        const mappings = await subjectMappingService.getAll(schoolId, activeYear?.id);
+
+        // Group mappings by class + section
+        const grouped = mappings.reduce((acc: Record<string, ClassData>, m: SubjectMappingRecord) => {
+          const className = `${m.className} ${m.section}`;
+          if (!acc[className]) {
+            acc[className] = { class: className, subjects: [] };
+          }
+          acc[className].subjects.push({
+            id: m.id, // Need to add id to SubjectMapping interface or handle it
+            name: m.subjectName,
+            teacher: m.teacherName,
+            periods: m.periods
+          } as any);
+          return acc;
+        }, {});
+
+        setClassDataList(Object.values(grouped));
       } catch (err) {
         console.error('Failed to load subject mappings:', err);
       }
     };
     loadMappings();
-  }, []);
+  }, [user]);
 
   // TODO: Persist classDataList changes to Firestore when a subject mapping service is available
 
-  const handleSaveMapping = (data: { class: string; section: string; subject: string; teacher: string; periods: number }, originalSubject?: string) => {
-    const className = `${data.class} ${data.section}`;
-    const newSubject: SubjectMapping = {
-      name: data.subject,
-      teacher: data.teacher,
-      periods: data.periods,
-    };
+  const handleSaveMapping = async (data: { class: string; section: string; subject: string; teacher: string; periods: number }, originalId?: string) => {
+    const schoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
+    const activeYear = await academicYearService.getCurrent(schoolId);
+    
+    if (!activeYear) {
+      alert("No active academic year found. Please set an active academic year in the 'Academic Years' tab first.");
+      return;
+    }
 
-    setClassDataList((prevData) => {
-      // Find if we are editing an existing subject
-      if (originalSubject) {
-        return prevData.map((classItem) => {
-          if (classItem.class === className) {
-            return {
-              ...classItem,
-              subjects: classItem.subjects.map((subject) =>
-                subject.name === originalSubject ? newSubject : subject
-              ),
-            };
-          }
-          return classItem;
+    try {
+      if (originalId) {
+        await subjectMappingService.update(originalId, {
+          subjectName: data.subject,
+          teacherName: data.teacher,
+          periods: data.periods
+        });
+      } else {
+        await subjectMappingService.create({
+          school_id: schoolId,
+          academic_year_id: activeYear?.id || '',
+          className: data.class,
+          section: data.section,
+          subjectName: data.subject,
+          teacherName: data.teacher,
+          periods: data.periods
         });
       }
-
-      // Add a new subject mapping
-      const existingClassIndex = prevData.findIndex((item) => item.class === className);
-      if (existingClassIndex >= 0) {
-        // Class exists, add subject to it
-        const updatedData = [...prevData];
-        // Ensure subject name is unique per class
-        const subjectExists = updatedData[existingClassIndex].subjects.some(s => s.name === newSubject.name);
-        if (subjectExists) {
-          alert("This subject is already mapped for this class. Please edit the existing mapping or choose a different subject.");
-          return prevData;
-        }
-
-        updatedData[existingClassIndex].subjects.push(newSubject);
-        return updatedData;
-      } else {
-        // Class doesn't exist, create new class with subject
-        return [...prevData, { class: className, subjects: [newSubject] }];
-      }
-    });
+      
+      // Reload mappings to ensure UI is in sync with Firestore
+      window.location.reload(); // Simple way to refresh state
+    } catch (err) {
+      console.error('Failed to save mapping:', err);
+      alert('Failed to save mapping. Please try again.');
+    }
 
     setView('list');
     setEditData(null);
   };
 
-  const handleDeleteMapping = (className: string, subjectName: string) => {
-    if (confirm(`Are you sure you want to remove ${subjectName} from ${className}?`)) {
-      setClassDataList((prevData) => {
-        return prevData
-          .map((classItem) => {
-            if (classItem.class === className) {
-              return {
-                ...classItem,
-                subjects: classItem.subjects.filter((subject) => subject.name !== subjectName),
-              };
-            }
-            return classItem;
-          })
-          .filter((classItem) => classItem.subjects.length > 0); // Remove classes with no subjects
-      });
+  const handleDeleteMapping = async (mappingId: string) => {
+    if (confirm(`Are you sure you want to remove this mapping?`)) {
+      try {
+        await subjectMappingService.delete(mappingId);
+        window.location.reload();
+      } catch (err) {
+        console.error('Failed to delete mapping:', err);
+        alert('Failed to delete mapping. Please try again.');
+      }
     }
   };
 
@@ -99,7 +102,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
     setView('form');
   };
 
-  const handleEdit = (classData: ClassData, subject: SubjectMapping) => {
+  const handleEdit = (classData: ClassData, subject: any) => {
     const parts = classData.class.split(' ');
     const sectionName = parts.pop() || '';
     const className = parts.join(' ');
@@ -107,7 +110,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
     setEditData({
       class: className,
       section: sectionName,
-      originalSubject: subject.name,
+      originalId: subject.id,
       subject: subject.name,
       teacher: subject.teacher,
       periods: subject.periods,
@@ -247,7 +250,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
                                 <Edit className="w-4 h-4 text-blue-600" />
                               </button>
                               <button
-                                onClick={() => handleDeleteMapping(classData.class, subject.name)}
+                                onClick={() => handleDeleteMapping((subject as any).id)}
                                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                                 title="Remove Mapping"
                               >

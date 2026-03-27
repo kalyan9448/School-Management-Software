@@ -46,7 +46,9 @@ export type {
     DayOfWeek,
     TimetableSlot,
     Admission,
+    SubjectMappingRecord,
 } from './centralDataService';
+import { getActiveAcademicYearId } from './classUtils';
 
 // Re-export new production interfaces from types
 export type {
@@ -78,6 +80,7 @@ import type {
     Notification,
     TimetableSlot,
     Admission,
+    SubjectMappingRecord,
 } from './centralDataService';
 
 import type {
@@ -426,7 +429,7 @@ export const studentService = {
     create: async (student: Partial<Student>): Promise<Student> => {
         const allStudents = await studentService.getAll();
         const rollNo = student.rollNo ||
-            await studentService.getNextRollNumber(student.class || '', student.section || 'A', student.academicYear || '2024-2025');
+            await studentService.getNextRollNumber(student.class || '', student.section || 'A', student.academicYear || getActiveAcademicYearId());
 
         const newStudent: Omit<Student, 'id'> & { id?: string } = {
             admissionNo: student.admissionNo || `KVS${new Date().getFullYear()}${String(allStudents.length + 1).padStart(3, '0')}`,
@@ -444,7 +447,7 @@ export const studentService = {
             parentId: student.parentId || '',
             address: student.address || '',
             admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],
-            academicYear: student.academicYear || '2024-2025',
+            academicYear: student.academicYear || getActiveAcademicYearId(),
             status: student.status || 'active',
             photo: student.photo || '',
             bloodGroup: student.bloodGroup || '',
@@ -587,6 +590,14 @@ export const classService = {
             currentStrength: classData.currentStrength || 0,
             subjects: classData.subjects || [],
         });
+    },
+
+    update: async (id: string, updates: Partial<Class>): Promise<void> => {
+        await updateDocById('classes', id, updates);
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('classes', id);
     },
 };
 
@@ -967,7 +978,7 @@ export const feeService = {
             transactionId: payment.transactionId,
             collectedBy: payment.collectedBy || '',
             components: payment.components || [],
-            academicYear: payment.academicYear || '2024-2025',
+            academicYear: payment.academicYear || getActiveAcademicYearId(),
         });
 
         // Notify parent
@@ -1024,6 +1035,10 @@ export const announcementService = {
             expiryDate: announcement.expiryDate,
             attachments: announcement.attachments || [],
         });
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('announcements', id);
     },
 };
 
@@ -1243,6 +1258,30 @@ export const statisticsService = {
                 : 0,
         };
     },
+
+    getPlatformStats: async () => {
+        const studentSnap = await getDocs(collection(db, 'students'));
+        const teacherSnap = await getDocs(collection(db, 'teachers'));
+        const parentSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'parent')));
+
+        return {
+            totalStudents: studentSnap.size,
+            totalTeachers: teacherSnap.size,
+            totalParents: parentSnap.size
+        };
+    },
+
+    getSchoolStats: async (schoolId: string) => {
+        const studentSnap = await getDocs(query(collection(db, 'students'), where('school_id', '==', schoolId)));
+        const teacherSnap = await getDocs(query(collection(db, 'teachers'), where('school_id', '==', schoolId)));
+        const parentSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'parent'), where('school_id', '==', schoolId)));
+
+        return {
+            activeStudents: studentSnap.docs.filter(d => (d.data() as any).status === 'active').length || studentSnap.size,
+            activeTeachers: teacherSnap.docs.filter(d => (d.data() as any).status === 'active').length || teacherSnap.size,
+            activeParents: parentSnap.size
+        };
+    },
 };
 
 // ==================== QUIZ SERVICE (from dataStore) ====================
@@ -1375,6 +1414,10 @@ export const academicYearService = {
             }
         }
         await updateDocById('academic_years', id, { isCurrent: true, status: 'active', updated_at: new Date().toISOString() });
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('academic_years', id);
     },
 };
 
@@ -1577,6 +1620,43 @@ export const auditLogService = {
             userAgent: entry.userAgent,
             created_at: new Date().toISOString(),
         });
+    },
+};
+
+// ==================== SUBJECT MAPPING SERVICE ====================
+
+export const subjectMappingService = {
+    getAll: async (schoolId: string, academicYearId?: string): Promise<SubjectMappingRecord[]> => {
+        const constraints: any[] = [where('school_id', '==', schoolId)];
+        if (academicYearId) {
+            constraints.push(where('academic_year_id', '==', academicYearId));
+        }
+        return fetchCollection<SubjectMappingRecord>('subject_mappings', ...constraints);
+    },
+
+    create: async (mapping: Partial<SubjectMappingRecord>): Promise<SubjectMappingRecord> => {
+        return createDoc<SubjectMappingRecord>('subject_mappings', {
+            school_id: mapping.school_id || '',
+            academic_year_id: mapping.academic_year_id || '',
+            className: mapping.className || '',
+            section: mapping.section || '',
+            subjectName: mapping.subjectName || '',
+            teacherName: mapping.teacherName || '',
+            periods: mapping.periods || 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        });
+    },
+
+    update: async (id: string, mapping: Partial<SubjectMappingRecord>): Promise<void> => {
+        await updateDocById('subject_mappings', id, {
+            ...mapping,
+            updated_at: new Date().toISOString(),
+        });
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('subject_mappings', id);
     },
 };
 

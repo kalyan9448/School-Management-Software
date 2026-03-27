@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
-import { studentService, attendanceService, classService, timetableService, userService } from '../utils/centralDataService';
+import { studentService, attendanceService, classService, timetableService, userService, academicYearService } from '../utils/centralDataService';
 import { DEFAULT_YEARS } from '../utils/classUtils';
 
 interface MonitoringViewProps {
@@ -47,8 +47,10 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
         }
 
         // 3. Fetch Academic Structure for Classes
-        const academicYears = DEFAULT_YEARS;
-        const activeYearId = academicYears.find((y: any) => y.status === 'active')?.id || '2024-2025';
+        const firestoreYears = await academicYearService.getAll();
+        const activeYear = firestoreYears.find((y: any) => y.isCurrent) || firestoreYears[0];
+        const activeYearId = activeYear?.id || "";
+        const activeYearName = activeYear?.name || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
 
         const activeClasses = await classService.getAll();
 
@@ -114,7 +116,7 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
         const getAttendanceForClass = (className: string, section: string): string => {
           if (attRecords.length === 0) {
             const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
-            const cap = cls?.students || 0;
+            const cap = cls?.currentStrength || 0;
             return `${Math.round(cap * (avgAttendance / 100))}/${cap}`;
           }
           const today2 = new Date().toISOString().split('T')[0];
@@ -122,7 +124,7 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
           const presentCount = todayClassRecords.filter((r: any) => r.status === 'present').length;
           const totalCount = todayClassRecords.length;
           const cls = activeClasses.find((c: any) => c.className === className && c.section === section);
-          const capacity = totalCount > 0 ? totalCount : (cls?.students || 0);
+          const capacity = totalCount > 0 ? totalCount : (cls?.currentStrength || 0);
           return `${presentCount}/${capacity}`;
         };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
-import { studentService } from '../utils/centralDataService';
+import { studentService, academicYearService, feeService } from '../utils/centralDataService';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AdmissionFormProps {
@@ -40,10 +40,65 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     rollNo: student?.rollNo || '',
     status: student?.status || (student ? 'admitted' : 'enquiry'),
     admissionDate: student?.admissionDate || new Date().toISOString().split('T')[0],
-    academicYear: student?.academicYear || '2024-2025',
+    academicYear: student?.academicYear || '',
+    selectedFees: student?.selectedFees || ['Admission Fee', 'Annual Fee', 'Monthly Fee'], // Default common fees
   });
 
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [feeStructures, setFeeStructures] = useState<any[]>([]);
+  const [selectedFeeStructure, setSelectedFeeStructure] = useState<any>(null);
 
+
+
+  // Fetch academic years
+  useEffect(() => {
+    const fetchYears = async () => {
+      const resolvedSchoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
+      if (!resolvedSchoolId) return;
+
+      try {
+        const years = await academicYearService.getBySchool(resolvedSchoolId);
+        setAcademicYears(years);
+
+        // Auto-select current active year for new admissions
+        if (!student && !formData.academicYear) {
+          const activeYear = years.find(y => y.isCurrent);
+          if (activeYear) {
+            setFormData(prev => ({ ...prev, academicYear: activeYear.name }));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch academic years:', err);
+      }
+    };
+    
+    const fetchFeeStructures = async () => {
+      try {
+        const structures = await feeService.getAllStructures();
+        setFeeStructures(structures);
+      } catch (err) {
+        console.error('Failed to fetch fee structures:', err);
+      }
+    };
+
+    fetchYears();
+    fetchFeeStructures();
+  }, [user, student]);
+
+  // Update selected fee structure when class changes
+  useEffect(() => {
+    const selectedClass = formData.classAllotted || formData.classApplied;
+    if (selectedClass && feeStructures.length > 0) {
+      // Normalize class name for matching (removes 'Class ' prefix if present)
+      const normalizedSelected = selectedClass.replace(/^Class\s+/i, '').trim();
+      const structure = feeStructures.find(s => 
+        s.class.replace(/^Class\s+/i, '').trim() === normalizedSelected
+      );
+      setSelectedFeeStructure(structure || null);
+    } else {
+      setSelectedFeeStructure(null);
+    }
+  }, [formData.classAllotted, formData.classApplied, feeStructures]);
 
   // Auto-suggest roll number when class, section or academic year changes
   useEffect(() => {
@@ -121,6 +176,26 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
       [e.target.name]: e.target.value,
     });
   };
+
+  const toggleFee = (feeName: string) => {
+    setFormData(prev => {
+      const current = prev.selectedFees || [];
+      const updated = current.includes(feeName)
+        ? current.filter((f: string) => f !== feeName)
+        : [...current, feeName];
+      return { ...prev, selectedFees: updated };
+    });
+  };
+
+  const feeTypes = [
+    { id: 'Admission Fee', label: 'Admission Fee', field: 'admissionFee' },
+    { id: 'Annual Fee', label: 'Annual Fee', field: 'annualFee' },
+    { id: 'Monthly Fee', label: 'Monthly Fee', field: 'monthlyFee' },
+    { id: 'Quarterly Fee', label: 'Quarterly Fee', field: 'quarterlyFee' },
+    { id: 'Transport Fee', label: 'Transport Fee', field: 'transportFee' },
+    { id: 'Daycare Fee', label: 'Daycare Fee', field: 'daycareFee' },
+    { id: 'Activity Fee', label: 'Activity Fee', field: 'activityFee' },
+  ];
 
 
 
@@ -405,15 +480,23 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-gray-700 mb-2">Academic Year *</label>
-              <input
-                type="text"
+              <select
                 name="academicYear"
                 value={formData.academicYear}
                 onChange={handleChange}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., 2024-2025"
-              />
+              >
+                <option value="">Select Academic Year</option>
+                {academicYears.map(year => (
+                  <option key={year.id} value={year.name}>
+                    {year.name} {year.isCurrent ? '(Active)' : ''}
+                  </option>
+                ))}
+              </select>
+              {academicYears.length === 0 && (
+                <p className="mt-1 text-xs text-orange-600 italic">No academic years found. Please define them in Academic Structure.</p>
+              )}
             </div>
             <div>
               <label className="block text-gray-700 mb-2">Admission Date</label>
@@ -502,6 +585,111 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
               </select>
             </div>
           </div>
+
+          {/* Fee Preview Section */}
+          {selectedFeeStructure && (
+            <div className="mt-8 p-6 bg-blue-50 rounded-2xl border-2 border-blue-100 animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-blue-900 font-bold flex items-center gap-2">
+                  <span className="p-1.5 bg-blue-600 text-white rounded-lg">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </span>
+                  Fee Summary for {selectedFeeStructure.class}
+                </h4>
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
+                  Dynamic Estimate
+                </span>
+              </div>
+
+              {/* Fee Selectors */}
+              <div className="mb-6 bg-white/50 p-4 rounded-xl border border-blue-200">
+                <p className="text-blue-800 text-xs font-bold uppercase mb-3">Select Applicable Fees:</p>
+                <div className="flex flex-wrap gap-2">
+                  {feeTypes.map(fee => (
+                    <button
+                      key={fee.id}
+                      type="button"
+                      onClick={() => toggleFee(fee.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                        formData.selectedFees?.includes(fee.id)
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                          : 'bg-white text-blue-600 border border-blue-200 hover:border-blue-400'
+                      }`}
+                    >
+                      {formData.selectedFees?.includes(fee.id) ? (
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-current rounded-sm"></div>
+                      )}
+                      {fee.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-3">
+                  <div className={`flex justify-between items-center text-sm ${!formData.selectedFees?.includes('Admission Fee') && 'opacity-30 grayscale'}`}>
+                    <span className="text-blue-700">Admission Fee</span>
+                    <span className="font-bold text-blue-900">₹{selectedFeeStructure.admissionFee?.toLocaleString()}</span>
+                  </div>
+                  <div className={`flex justify-between items-center text-sm ${!formData.selectedFees?.includes('Annual Fee') && 'opacity-30 grayscale'}`}>
+                    <span className="text-blue-700">Annual Fee</span>
+                    <span className="font-bold text-blue-900">₹{selectedFeeStructure.annualFee?.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-x border-blue-200 px-6">
+                  <div className={`flex justify-between items-center text-sm ${!formData.selectedFees?.includes('Monthly Fee') && 'opacity-30 grayscale'}`}>
+                    <span className="text-blue-700">Monthly Tuition</span>
+                    <span className="font-bold text-blue-900">₹{selectedFeeStructure.monthlyFee?.toLocaleString()}</span>
+                  </div>
+                  <div className={`flex justify-between items-center text-sm ${!formData.selectedFees?.includes('Quarterly Fee') && 'opacity-30 grayscale'}`}>
+                    <span className="text-blue-700">Quarterly Fee</span>
+                    <span className="font-bold text-blue-900">₹{selectedFeeStructure.quarterlyFee?.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-blue-700">Other Selected</span>
+                    <span className="font-bold text-blue-900">₹{(
+                      (formData.selectedFees?.includes('Transport Fee') ? (selectedFeeStructure.transportFee || 0) : 0) + 
+                      (formData.selectedFees?.includes('Daycare Fee') ? (selectedFeeStructure.daycareFee || 0) : 0) + 
+                      (formData.selectedFees?.includes('Activity Fee') ? (selectedFeeStructure.activityFee || 0) : 0)
+                    ).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-blue-200">
+                    <span className="text-blue-900 font-bold">Total Payable</span>
+                    <span className="text-xl font-black text-blue-600">
+                      ₹{(
+                        (formData.selectedFees?.includes('Admission Fee') ? (selectedFeeStructure.admissionFee || 0) : 0) +
+                        (formData.selectedFees?.includes('Annual Fee') ? (selectedFeeStructure.annualFee || 0) : 0) +
+                        (formData.selectedFees?.includes('Monthly Fee') ? ((selectedFeeStructure.monthlyFee || 0) * 12) : 0) +
+                        (formData.selectedFees?.includes('Quarterly Fee') ? ((selectedFeeStructure.quarterlyFee || 0) * 4) : 0) +
+                        (formData.selectedFees?.includes('Transport Fee') ? ((selectedFeeStructure.transportFee || 0) * 12) : 0) +
+                        (formData.selectedFees?.includes('Daycare Fee') ? ((selectedFeeStructure.daycareFee || 0) * 12) : 0) +
+                        (formData.selectedFees?.includes('Activity Fee') ? ((selectedFeeStructure.activityFee || 0) * 12) : 0)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {formData.classApplied && !selectedFeeStructure && (
+            <div className="mt-8 p-4 bg-orange-50 rounded-2xl border-2 border-orange-100 flex items-center gap-3 text-orange-800 italic text-sm">
+              <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              No specific fee structure defined for {formData.classApplied} yet.
+            </div>
+          )}
         </div>
 
 

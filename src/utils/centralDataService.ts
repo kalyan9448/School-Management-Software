@@ -44,6 +44,7 @@ export interface Student {
   address: string;
   admissionDate: string;
   academicYear?: string;
+  selectedFees?: string[];
   status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted' | 'active' | 'inactive' | 'transferred';
   photo?: string;
   bloodGroup?: string;
@@ -91,6 +92,19 @@ export interface Teacher {
   photo?: string;
   address?: string;
   status: 'active' | 'inactive';
+}
+
+export interface SubjectMappingRecord {
+  id: string;
+  school_id: string;
+  academic_year_id: string;
+  className: string;
+  section: string;
+  subjectName: string;
+  teacherName: string;
+  periods: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Class {
@@ -295,6 +309,7 @@ export interface Admission {
   appliedDate: string;
   admissionDate: string;
   academicYear: string;
+  selectedFees?: string[];
 }
 
 export interface Enquiry {
@@ -372,6 +387,7 @@ import {
   feeInvoiceService,
   auditLogService,
   admissionService,
+  subjectMappingService,
 } from './firestoreService';
 
 export {
@@ -402,9 +418,10 @@ export {
   feeInvoiceService,
   auditLogService,
   admissionService,
+  subjectMappingService,
 };
 
-// Default export â€” same shape as before
+// Default export — same shape as before
 export default {
   user: userService,
   school: schoolService,
@@ -427,6 +444,7 @@ export default {
   statistics: statisticsService,
   schoolSettings: schoolSettingsService,
   academicYear: academicYearService,
+  subjectMapping: subjectMappingService,
   studentEnrollment: studentEnrollmentService,
   feeInvoice: feeInvoiceService,
   auditLog: auditLogService,

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { studentService, type Student } from '../utils/centralDataService';
-import { AcademicYear, DEFAULT_YEARS } from '../utils/classUtils';
+import { studentService, academicYearService, type Student } from '../utils/centralDataService';
+import { AcademicYear } from '../utils/classUtils';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { AdmissionForm } from './AdmissionForm';
 
@@ -46,8 +46,8 @@ interface StudentInformationProps {
   initialSection?: string;
 }
 
-export function StudentInformation({ 
-  onNavigate, 
+export function StudentInformation({
+  onNavigate,
   initialTab = 'attendance',
   initialClass = 'all',
   initialSection = 'all'
@@ -72,10 +72,30 @@ export function StudentInformation({
   const [view, setView] = useState<'list' | 'edit'>('list'); // 'list' for student list/attendance, 'edit' for AdmissionForm
 
   useEffect(() => {
-    const years = DEFAULT_YEARS;
-    setAcademicYears(years);
-    const active = years.find((y) => y.status === 'active')?.id || years[0]?.id || '';
-    if (!selectedAcademicYear) setSelectedAcademicYear(active);
+    const loadAcademicYears = async () => {
+      try {
+        const firestoreYears = await academicYearService.getAll();
+        if (firestoreYears.length > 0) {
+          const years = firestoreYears.map((y: any) => ({
+            id: y.id,
+            name: y.name,
+            startDate: y.startDate,
+            endDate: y.endDate,
+            status: y.isCurrent ? 'active' : (y.status || 'upcoming'),
+            isCurrent: y.isCurrent
+          } as AcademicYear));
+          setAcademicYears(years);
+
+          if (!selectedAcademicYear) {
+            const active = years.find((y: any) => y.status === 'active')?.name || years[0]?.name || '';
+            setSelectedAcademicYear(active);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load academic years in StudentInformation:", error);
+      }
+    };
+    loadAcademicYears();
   }, [selectedAcademicYear]);
 
   // Robust student loading function
@@ -147,7 +167,7 @@ export function StudentInformation({
       student.class.includes(searchTerm);
 
     const matchesClass = profileClassFilter === 'all' || student.class === profileClassFilter;
-    const studentYear = student.academicYear || '2024-2025';
+    const studentYear = student.academicYear || academicYears.find(y => y.status === 'active')?.name || '';
     const matchesYear = selectedAcademicYear === 'all' || studentYear === selectedAcademicYear;
 
     return matchesSearch && matchesClass && matchesYear;
@@ -514,7 +534,7 @@ export function StudentInformation({
                 >
                   <option value="all">All Academic Years</option>
                   {academicYears.map(year => (
-                    <option key={year.id} value={year.id}>{year.name}</option>
+                    <option key={year.id} value={year.name}>{year.name} {(year as any).isCurrent ? '(Current)' : ''}</option>
                   ))}
                 </select>
               </div>
@@ -661,7 +681,7 @@ export function StudentInformation({
                             <span className={`px-3 py-1 rounded-full text-sm font-medium ${getFeeStatusBadge(student.feeStatus ?? 'pending')}`}>
                               {student.feeStatus === 'paid' ? '✓ Paid' : student.feeStatus === 'partial' ? '◐ Partial' : '⊘ Pending'}
                             </span>
-                            { (student.dueFee ?? 0) > 0 && (
+                            {(student.dueFee ?? 0) > 0 && (
                               <span className="text-xs text-red-600">
                                 ₹{(student.dueFee ?? 0).toLocaleString()} due
                               </span>

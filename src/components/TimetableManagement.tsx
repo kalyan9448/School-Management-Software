@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Clock, Users, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
-import { timetableService, subjectService, teacherService, TimetableSlot, DayOfWeek } from '../utils/centralDataService';
+import { timetableService, subjectService, teacherService, subjectMappingService, academicYearService, TimetableSlot, DayOfWeek } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
+import { useAuth } from '../contexts/AuthContext';
 
 export function TimetableManagement() {
     const [selectedClass, setSelectedClass] = useState('');
@@ -9,6 +10,7 @@ export function TimetableManagement() {
     const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+    const { user } = useAuth();
 
     // Available subjects and teachers for the selected class (from subject mappings)
     const [availableMappings, setAvailableMappings] = useState<{ subject: string, teacher: string, teacherEmail: string }[]>([]);
@@ -42,26 +44,23 @@ export function TimetableManagement() {
     };
 
     const loadMappings = async () => {
-        // Fetch subject-teacher mappings for this class from Firestore
-        const allSubjects = await subjectService.getAll();
-        const allTeachers = await teacherService.getAll();
+        const schoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
+        const activeYear = await academicYearService.getCurrent(schoolId);
+        
+        // Fetch all subject-teacher mappings for this school and active year
+        const mappings = await subjectMappingService.getAll(schoolId, activeYear?.id);
 
-        // Filter teachers assigned to this class and build mappings
-        const classTeachers = allTeachers.filter(t =>
-            t.classes?.some((c: string) => c === `${selectedClass} ${selectedSection}` || c === selectedClass)
+        // Filter mappings specifically for the selected class and section
+        const filtered = mappings.filter(m => 
+            m.className === selectedClass && m.section === selectedSection
         );
 
-        const mapped: { subject: string; teacher: string; teacherEmail: string }[] = [];
-        for (const teacher of classTeachers) {
-            for (const subjectName of (teacher.subjects || [])) {
-                const subjectObj = allSubjects.find(s => s.name === subjectName || s.code === subjectName);
-                mapped.push({
-                    subject: subjectObj?.name || subjectName,
-                    teacher: teacher.name,
-                    teacherEmail: teacher.email || ''
-                });
-            }
-        }
+        const mapped = filtered.map(m => ({
+            subject: m.subjectName,
+            teacher: m.teacherName,
+            teacherEmail: m.teacherName // We store name in mapping, using it as fallback
+        }));
+        
         setAvailableMappings(mapped);
     };
 
