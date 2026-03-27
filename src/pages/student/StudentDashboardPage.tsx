@@ -161,269 +161,234 @@ export function Dashboard() {
         </div>
       </motion.div>
 
-      <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6">
+      <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-4 space-y-3">
         <WelcomeBanner />
 
-        {/* Today's Topics */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold text-gray-900">Today's Classes</h2>
-            <Badge variant="secondary">{allClasses.length} classes</Badge>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {allClasses && allClasses.length > 0 ? (
-              allClasses.map((classItem: any, index: number) => {
-                const Icon = iconMap[classItem.icon];
-                return (
-                  <motion.div
-                    key={classItem.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 + index * 0.05 }}
-                  >
-                    <Card
-                      className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => navigate(`/subject-detail/${classItem.id}`, { state: { classData: classItem } })}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className={`${classItem.color} p-3 rounded-xl`}>
-                          <Icon className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <h3 className="font-semibold text-gray-900">{classItem.subject}</h3>
-                            <span className="text-sm text-gray-500">{classItem.time}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {classItem.topics && classItem.topics.length > 0 && classItem.topics.map((topic: any, i: number) => (
-                              <Badge key={i} variant="outline" className="text-xs">
-                                {topic}
-                              </Badge>
-                            ))}
-                          </div>
-                          <p className="text-sm text-gray-600">👨‍🏫 {classItem.teacher}</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400" />
-                      </div>
-                    </Card>
-                  </motion.div>
-                );
-              })
-            ) : (
-              <div className="text-center text-gray-500">
-                No classes scheduled for today.
+        {/* Classes and Homework row */}
+        <div className="md:grid md:grid-cols-2 md:gap-3 space-y-3 md:space-y-0">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 rounded-xl">
+                    <Calendar className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Today's Classes</h2>
+                </div>
+                <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 px-3 py-1 font-medium">
+                  {allClasses.length}
+                </Badge>
               </div>
-            )}
-          </div>
-        </motion.div>
 
-        {/* Daily Tasks by Subject */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold text-gray-900">Homework - Topics of the Day</h2>
-            <Badge variant="secondary">
-              {hwTopics.length} subjects
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {dailyTasksBySubject && dailyTasksBySubject.length > 0 ? (
-              dailyTasksBySubject.map((subjectData, subjectIndex) => {
-                const SubjectIcon = iconMap[subjectData.icon];
-                const homeworkTopic = hwTopics.find((ht: any) => ht.subject === subjectData.subject);
-
-                return (
-                  <motion.div
-                    key={subjectData.subject}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.15 + subjectIndex * 0.05 }}
-                  >
-                    <Card
-                      className="p-5 hover:shadow-md transition-all cursor-pointer border-[#E6ECF5]"
-                      onClick={() => {
-                        if (homeworkTopic) {
-                          navigate(`/homework/${homeworkTopic.id}`);
-                        }
-                      }}
-                    >
-                      {/* Subject Header */}
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className={`${subjectData.color} p-3 rounded-xl`}>
-                          <SubjectIcon className="w-5 h-5 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{subjectData.subject}</h3>
-                          <p className="text-sm text-gray-600">👨‍🏫 {subjectData.teacher}</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400" />
-                      </div>
-
-                      {/* Topic of the Day */}
-                      <div className="mb-3 p-3 bg-[#FAFBFF] rounded-lg border border-[#E6ECF5]">
-                        <p className="text-xs text-[#7A869A] mb-1 font-medium">📚 Topic of the Day</p>
-                        <p className="text-sm text-[#1A1A1A] font-medium">
-                          {homeworkTopic?.topic || "AI Homework Available"}
-                        </p>
-                      </div>
-
-                      {/* Status Badge */}
-                      {homeworkTopic && (
-                        <div className="flex items-center gap-2 mb-3">
-                          {(() => {
-                            const status = homeworkTopic.status;
-                            const statusConfig = {
-                              pending: { label: "Pending", color: "bg-gray-100 text-gray-700 border-gray-200", icon: Circle },
-                              "in-progress": { label: "In Progress", color: "bg-blue-100 text-blue-700 border-blue-200", icon: Clock },
-                              completed: { label: "Completed", color: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle2 },
-                            };
-                            const statusInfo = statusConfig[status];
-                            const StatusIcon = statusInfo.icon;
-
-                            return (
-                              <Badge
-                                variant="outline"
-                                className={`text-xs font-medium border ${statusInfo.color}`}
-                              >
-                                <StatusIcon className="w-3 h-3 mr-1" />
-                                {statusInfo.label}
-                              </Badge>
-                            );
-                          })()}
-                        </div>
-                      )}
-
-                      {/* Progress Indicators */}
-                      {homeworkTopic && (
-                        <div className="space-y-2">
-                          <div>
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="text-[#7A869A]">
-                                Flashcards {homeworkTopic.flashcardsCompleted && "✓"}
-                              </span>
-                              <span className="text-[#1A1A1A] font-medium">
-                                {homeworkTopic.flashcardProgress}%
-                              </span>
+              <div className={`flex-1 ${(!allClasses || allClasses.length === 0) ? "flex items-center justify-center py-6" : ""}`}>
+                {allClasses && allClasses.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {allClasses.map((classItem: any, index: number) => {
+                      const Icon = iconMap[classItem.icon];
+                      return (
+                        <motion.div
+                          key={classItem.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 + index * 0.05 }}
+                        >
+                          <Card
+                            className="p-4 hover:shadow-md transition-shadow cursor-pointer bg-white border-gray-100"
+                            onClick={() => navigate(`/subject-detail/${classItem.id}`, { state: { classData: classItem } })}
+                          >
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-center justify-between">
+                                <div className={`${classItem.color} p-2 rounded-lg shadow-sm`}>
+                                  <Icon className="w-5 h-5 text-white" />
+                                </div>
+                                <span className="text-[10px] font-bold text-gray-400">{classItem.time}</span>
+                              </div>
+                              <div>
+                                <h3 className="font-bold text-gray-900 text-sm mb-1">{classItem.subject}</h3>
+                                <p className="text-[10px] text-gray-500">👨‍🏫 {classItem.teacher}</p>
+                              </div>
                             </div>
-                            <Progress
-                              value={homeworkTopic.flashcardProgress}
-                              className="h-1.5 bg-gray-100"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="text-[#7A869A]">
-                                Questions {homeworkTopic.questionsCompleted && "✓"}
-                              </span>
-                              <span className="text-[#1A1A1A] font-medium">
-                                {homeworkTopic.questionsAttempted}/{homeworkTopic.totalQuestions}
-                              </span>
-                            </div>
-                            <Progress
-                              value={homeworkTopic.questionsProgress}
-                              className="h-1.5 bg-gray-100"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </Card>
-                  </motion.div>
-                );
-              })
-            ) : (
-              <div className="text-center text-gray-500">
-                No daily tasks available.
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 py-10 px-8 max-w-sm w-full mx-auto">
+                    <Calendar className="w-12 h-12 mb-4 opacity-20" />
+                    <p className="text-sm font-medium text-center">No classes today.</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </motion.div>
+            </Card>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 rounded-xl">
+                    <BookOpen className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Homework</h2>
+                </div>
+                <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 px-3 py-1 font-medium">
+                  {hwTopics.length}
+                </Badge>
+              </div>
+
+              <div className={`flex-1 ${(!dailyTasksBySubject || dailyTasksBySubject.length === 0) ? "flex items-center justify-center py-6" : ""}`}>
+                {dailyTasksBySubject && dailyTasksBySubject.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {dailyTasksBySubject.map((subjectData, subjectIndex) => {
+                      const SubjectIcon = iconMap[subjectData.icon];
+                      const homeworkTopic = hwTopics.find((ht: any) => ht.subject === subjectData.subject);
+
+                      return (
+                        <motion.div
+                          key={subjectData.subject}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.15 + subjectIndex * 0.05 }}
+                        >
+                          <Card
+                            className="p-4 hover:shadow-md transition-all cursor-pointer border-gray-100 bg-white"
+                            onClick={() => {
+                              if (homeworkTopic) {
+                                navigate(`/homework/${homeworkTopic.id}`);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className={`${subjectData.color} p-2 rounded-lg shadow-sm`}>
+                                <SubjectIcon className="w-4 h-4 text-white" />
+                              </div>
+                              <h3 className="font-bold text-gray-900 text-xs truncate flex-1">{subjectData.subject}</h3>
+                            </div>
+                            <div className="p-2 bg-indigo-50/50 rounded-lg text-[10px] font-semibold text-indigo-700 mb-2 truncate">
+                              {homeworkTopic?.topic || "Check tasks"}
+                            </div>
+                            <div className="flex items-center justify-between text-[9px] text-gray-500 uppercase tracking-wider font-bold">
+                              <span>Progress</span>
+                              <span className="text-indigo-600">{homeworkTopic?.flashcardProgress || 0}%</span>
+                            </div>
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 py-10 px-8 max-w-sm w-full mx-auto">
+                    <BookOpen className="w-12 h-12 mb-4 opacity-20" />
+                    <p className="text-sm font-medium text-center">No daily tasks.</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </motion.div>
+        </div>
 
         {/* Pending Tasks */}
-        {/* Pending Tasks + Learning Goals: side-by-side on lg */}
-        <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-6 lg:space-y-0">
+        {/* Pending Tasks + Learning Goals: side-by-side on md+ */}
+        <div className="md:grid md:grid-cols-2 md:gap-3 space-y-3 md:space-y-0">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-bold text-gray-900">Pending Tasks</h2>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={showDueToday ? "default" : "outline"}
-                  onClick={() => setShowDueToday(true)}
-                >
-                  Due Today
-                </Button>
-                <Button
-                  size="sm"
-                  variant={!showDueToday ? "default" : "outline"}
-                  onClick={() => setShowDueToday(false)}
-                >
-                  All
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {filteredTasks && filteredTasks.length > 0 ? (
-                filteredTasks.map((task, index) => {
-                  const Icon = iconMap[task.icon];
-                  const TaskTypeIcon = taskTypeIcons[task.type];
-                  return (
-                    <motion.div
-                      key={task.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + index * 0.05 }}
-                    >
-                      <Card className="p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-4">
-                          <div className={`${task.color} p-3 rounded-xl`}>
-                            <Icon className="w-5 h-5 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900 mb-1">{task.title}</h3>
-                            <div className="flex items-center gap-3 text-sm text-gray-600">
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {task.estimatedTime}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {task.dueDate}
-                              </span>
-                              {task.priority === "high" && (
-                                <Badge variant="destructive" className="text-xs">
-                                  High Priority
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <Button size="sm" onClick={() => navigate("/quiz")}>
-                            Start
-                          </Button>
-                        </div>
-                      </Card>
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <div className="text-center text-gray-500">
-                  No pending tasks.
+            <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-50 rounded-xl">
+                    <CheckCircle2 className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Pending Tasks</h2>
                 </div>
-              )}
-            </div>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => setShowDueToday(true)}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                      showDueToday 
+                        ? "bg-white text-gray-900 shadow-sm" 
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Due Today
+                  </button>
+                  <button
+                    onClick={() => setShowDueToday(false)}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                      !showDueToday 
+                        ? "bg-white text-gray-900 shadow-sm" 
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    All
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 flex-1">
+                {filteredTasks && filteredTasks.length > 0 ? (
+                  filteredTasks.map((task, index) => {
+                    const Icon = iconMap[task.icon];
+                    return (
+                      <motion.div
+                        key={task.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 + index * 0.05 }}
+                      >
+                        <Card className="p-4 hover:shadow-md transition-shadow border-gray-50 bg-white">
+                          <div className="flex items-center gap-4">
+                            <div className={`${task.color} p-2.5 rounded-xl shadow-sm`}>
+                              <Icon className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-gray-900 text-sm mb-1">{task.title}</h3>
+                              <div className="flex items-center gap-3 text-[10px] text-gray-500 font-medium">
+                                <span className="flex items-center gap-1 bg-gray-50 px-2 py-0.5 rounded-full">
+                                  <Clock className="w-3 h-3 text-amber-500" />
+                                  {task.estimatedTime}
+                                </span>
+                                <span className="flex items-center gap-1 bg-gray-50 px-2 py-0.5 rounded-full">
+                                  <Calendar className="w-3 h-3 text-blue-500" />
+                                  {task.dueDate}
+                                </span>
+                                {task.priority === "high" && (
+                                  <Badge className="bg-red-50 text-red-600 border-red-100 text-[10px] h-4 px-2">
+                                    High Priority
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <Button size="sm" className="h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700" onClick={() => navigate("/quiz")}>
+                              Start
+                            </Button>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    );
+                  })
+                ) : (
+                  <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 max-w-sm mx-auto w-full">
+                    <CheckCircle2 className="w-12 h-12 mb-3 opacity-20" />
+                    <p className="text-sm font-medium">No pending tasks.</p>
+                  </div>
+                )}
+              </div>
+            </Card>
           </motion.div>
 
           {/* Learning Goals */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-bold text-gray-900">Today's Goals</h2>
-              <Target className="w-5 h-5 text-blue-600" />
-            </div>
+            <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-50 rounded-xl">
+                    <Target className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Today's Goals</h2>
+                </div>
+              </div>
 
-            <Card className="p-5">
-              <div className="space-y-4">
+              <div className="space-y-3 flex-1 p-1">
                 {goals && goals.length > 0 ? (
                   goals.map((goal: any, index: number) => {
                     const Icon = iconMap[goal.icon];
@@ -437,38 +402,48 @@ export function Dashboard() {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.3 + index * 0.05 }}
                       >
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className={`${goal.color} p-2 rounded-lg`}>
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`${goal.color} p-2 rounded-lg shadow-sm`}>
                             <Icon className="w-4 h-4 text-white" />
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-gray-900">{goal.subject}</span>
-                              <span className="text-sm text-gray-600">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-bold text-gray-900 text-sm">{goal.subject}</span>
+                              <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
                                 {goal.current}/{goal.target}
                               </span>
                             </div>
-                            <Progress value={progress} className="h-2" />
+                            <div className="relative">
+                              <Progress value={progress} className="h-1.5 bg-gray-100" />
+                              {isComplete && (
+                                <div className="absolute -right-2 -top-2 bg-emerald-500 text-white rounded-full p-0.5 shadow-sm">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {isComplete && <span className="text-green-500">✓</span>}
                         </div>
-                        <p className="text-sm text-gray-600 ml-11">{goal.goal}</p>
+                        <p className="text-xs text-gray-500 font-medium leading-relaxed pl-11">{goal.goal}</p>
                       </motion.div>
                     );
                   })
                 ) : (
-                  <div className="text-center text-gray-500">
-                    No learning goals set for today.
+                  <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 max-w-sm mx-auto w-full">
+                    <Target className="w-12 h-12 mb-3 opacity-20" />
+                    <p className="text-sm font-medium">No learning goals.</p>
                   </div>
                 )}
               </div>
-              {goals && goals.every((g: any) => g.current >= g.target) && (
+              
+              {goals && goals.length > 0 && goals.every((g: any) => g.current >= g.target) && (
                 <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="mt-4 p-3 bg-green-50 rounded-lg text-center"
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="mt-6 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100/50 text-center"
                 >
-                  <p className="text-green-700 font-medium">🎉 All goals completed! Amazing work!</p>
+                  <p className="text-emerald-700 font-bold flex items-center justify-center gap-2">
+                    <span className="text-xl">🎉</span> All goals completed! Amazing work!
+                  </p>
                 </motion.div>
               )}
             </Card>
