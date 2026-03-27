@@ -469,28 +469,49 @@ export function SuperAdminDashboard() {
         console.error('Failed to load platform stats:', err);
       }
 
+      // ── Step 4: Fetch real-time metrics for all schools ───────────────────
+      let schoolMetrics: Record<string, { students: number; teachers: number }> = {};
+      try {
+        schoolMetrics = await (statisticsService as any).getAllSchoolsMetrics();
+      } catch (err: any) {
+        console.error('Failed to load school metrics:', err);
+      }
+
       // Reconcile org-school links: fix schools whose organizationId is missing
       // or doesn't match any actual org (caused by old auto-ID bug or race condition).
       const orgIdSet = new Set(firestoreOrganizations.map((o: any) => o.id));
       const reconciledSchools = firestoreSchools.map((school: any) => {
-        // School already has a valid organizationId — nothing to fix
-        if (school.organizationId && orgIdSet.has(school.organizationId)) {
-          return school;
-        }
-        // Missing, empty, or stale organizationId — try to match by organizationName
-        // (case-insensitive, trimmed to tolerate minor formatting differences)
-        const schoolOrgName = (school.organizationName || '').trim().toLowerCase();
-        if (schoolOrgName) {
-          const matchedOrg = firestoreOrganizations.find(
-            (o: any) => (o.name || '').trim().toLowerCase() === schoolOrgName
-          );
-          if (matchedOrg) {
-            // Persist the corrected link back to Firestore (fire-and-forget)
-            schoolService.update(school.id, { organizationId: matchedOrg.id }).catch(() => {});
-            return { ...school, organizationId: matchedOrg.id };
+        // Fetch real-time metrics for this school
+        const m = schoolMetrics[school.id] || { students: 0, teachers: 0 };
+        
+        // Build base reconciled school
+        let updatedSchool = { ...school };
+
+        // Fix organizationId if missing
+        if (!school.organizationId || !orgIdSet.has(school.organizationId)) {
+          const schoolOrgName = (school.organizationName || '').trim().toLowerCase();
+          if (schoolOrgName) {
+            const matchedOrg = firestoreOrganizations.find(
+              (o: any) => (o.name || '').trim().toLowerCase() === schoolOrgName
+            );
+            if (matchedOrg) {
+              schoolService.update(school.id, { organizationId: matchedOrg.id }).catch(() => {});
+              updatedSchool.organizationId = matchedOrg.id;
+            }
           }
         }
-        return school;
+
+        // Merge real-time metrics and dynamic storage info
+        return {
+          ...updatedSchool,
+          students: m.students,
+          teachers: m.teachers,
+          activeStudents: m.students,
+          activeTeachers: m.teachers,
+          // Provide default storage based on plan if missing or '0 GB'
+          storage: school.storage && school.storage !== '0 GB' ? school.storage : 
+                   (school.plan === 'Enterprise' ? '100 GB' : school.plan === 'Professional' ? '50 GB' : '20 GB')
+        };
       });
 
       // ── Repair schoolsCount on every org ────────────────────────────────

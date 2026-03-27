@@ -1581,6 +1581,35 @@ export const statisticsService = {
             activeParents: parentSnap.size
         };
     },
+
+    getAllSchoolsMetrics: async () => {
+        // Fetch all students and teachers to calculate counts per school
+        // This is more efficient for the Super Admin dashboard than querying each school individually
+        const studentSnap = await getDocs(collection(db, 'students'));
+        const teacherSnap = await getDocs(collection(db, 'teachers'));
+
+        const metrics: Record<string, { students: number; teachers: number }> = {};
+
+        studentSnap.forEach(doc => {
+            const data = doc.data();
+            const sid = data.school_id;
+            if (sid) {
+                if (!metrics[sid]) metrics[sid] = { students: 0, teachers: 0 };
+                metrics[sid].students++;
+            }
+        });
+
+        teacherSnap.forEach(doc => {
+            const data = doc.data();
+            const sid = data.school_id;
+            if (sid) {
+                if (!metrics[sid]) metrics[sid] = { students: 0, teachers: 0 };
+                metrics[sid].teachers++;
+            }
+        });
+
+        return metrics;
+    },
 };
 
 // ==================== QUIZ SERVICE (from dataStore) ====================
