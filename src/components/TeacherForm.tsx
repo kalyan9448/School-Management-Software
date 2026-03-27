@@ -39,10 +39,13 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
         employeeId: teacher?.employeeId || teacher?.id || '',
         subjects: teacher?.subjects || ((teacher as any)?.subject ? [(teacher as any).subject] : []),
         qualification: teacher?.qualification || '',
-        experience: teacher?.experience || '',
+        experience: teacher?.experience != null ? String(teacher.experience) : '',
         joiningDate: teacher?.joiningDate || new Date().toISOString().split('T')[0],
         status: teacher?.status || 'active',
     });
+
+    // Warn if name looks like an email address (common data-entry mistake)
+    const nameIsEmail = formData.name.includes('@');
 
     const [selectedClasses, setSelectedClasses] = useState<string[]>(
         teacher?.classes ? [...new Set(teacher.classes.map((assignment) => formatAssignedClass(assignment)))] : []
@@ -64,6 +67,10 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (nameIsEmail) {
+            return; // block submission — name validation error shown inline
+        }
+
         const classAssignments = selectedClasses.flatMap((selectedClass) => {
             const parsed = parseAssignedClass(selectedClass);
             return formData.subjects.map((subject) => ({
@@ -76,9 +83,11 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
         const teacherData: Teacher = {
             id: teacher?.id || Date.now().toString(),
             ...formData,
+            experience: Number(formData.experience) || 0,
             classes: classAssignments,
             photo: teacherPhoto,
-            documents: documents,
+            // `documents` contain File objects — strip them so Firestore is not
+            // called with non-serializable values. File upload to Storage is handled separately.
         };
 
         onSave(teacherData);
@@ -208,9 +217,12 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
                                 value={formData.name}
                                 onChange={handleChange}
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${nameIsEmail ? 'border-red-400' : 'border-gray-300'}`}
                                 placeholder="Enter full name"
                             />
+                            {nameIsEmail && (
+                                <p className="text-red-500 text-sm mt-1">Name should not be an email address. Please enter the teacher's full name.</p>
+                            )}
                         </div>
 
                         <div>
@@ -369,15 +381,17 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
                         </div>
 
                         <div>
-                            <label className="block text-gray-700 mb-2">Experience *</label>
+                            <label className="block text-gray-700 mb-2">Experience (years) *</label>
                             <input
-                                type="text"
+                                type="number"
                                 name="experience"
                                 value={formData.experience}
                                 onChange={handleChange}
                                 required
+                                min="0"
+                                max="50"
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                placeholder="e.g., 5 years"
+                                placeholder="e.g., 5"
                             />
                         </div>
 

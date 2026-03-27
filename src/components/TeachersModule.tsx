@@ -15,6 +15,11 @@ export function TeachersModule() {
   useEffect(() => {
     const loadTeachers = async () => {
       try {
+        // Purge any teachers that were only soft-deleted (status='inactive') by the
+        // old delete logic — runs silently in the background and is a no-op when clean.
+        teacherService.purgeInactive().catch((err: unknown) =>
+          console.warn('[TeachersModule] purgeInactive error:', err)
+        );
         const data = await teacherService.getAll();
         setTeachers(data);
       } catch (err) {
@@ -31,12 +36,15 @@ export function TeachersModule() {
   );
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to remove this teacher?')) {
+    const teacher = teachers.find(t => t.id === id);
+    const teacherName = teacher?.name || 'this teacher';
+    if (confirm(`Are you sure you want to permanently delete ${teacherName}? This will remove all their lessons, timetable slots, subject mappings and login access. This action cannot be undone.`)) {
       try {
-        await teacherService.update(id, { status: 'inactive' as const });
+        await teacherService.delete(id);
         setTeachers(teachers.filter(t => t.id !== id));
       } catch (err) {
         console.error('Failed to delete teacher:', err);
+        alert('Failed to delete teacher. Please try again.');
       }
     }
   };

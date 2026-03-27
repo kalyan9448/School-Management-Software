@@ -68,6 +68,28 @@ router.post('/check-email', async (req, res) => {
     }
 });
 
+/**
+ * Check the teachers collection for the given email and return the teacher's
+ * role + school_id if found.  Used to correctly identify teachers who have not
+ * yet been assigned a /users/{uid} profile.
+ */
+async function resolveTeacherByEmail(email) {
+    const lowered = email.trim().toLowerCase();
+    let snap = await db.collection('teachers').where('email', '==', lowered).limit(1).get();
+    if (snap.empty) {
+        // Also try original casing in case data was stored mixed-case
+        const trimmed = email.trim();
+        if (trimmed !== lowered) {
+            snap = await db.collection('teachers').where('email', '==', trimmed).limit(1).get();
+        }
+    }
+    if (!snap.empty) {
+        const td = snap.docs[0].data();
+        return { isTeacher: true, school_id: td.school_id || null, name: td.name || null };
+    }
+    return { isTeacher: false, school_id: null, name: null };
+}
+
 /** Robustly find a school ID by searching multiple possible principal email fields. */
 async function findSchoolIdByEmail(email) {
     const trimmed = email.trim();
@@ -114,6 +136,25 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 user.role = 'superadmin';
             }
 
+            // Correct mis-filed teachers: if the profile was saved as 'admin'
+            // (the default fallback) but the email exists in the teachers collection,
+            // update the role to 'teacher' so the dashboard redirect is correct.
+            if (user.role === 'admin' && correctRole !== 'superadmin') {
+                const teacherInfo = await resolveTeacherByEmail(email);
+                if (teacherInfo.isTeacher) {
+                    updates.role = 'teacher';
+                    user.role = 'teacher';
+                    if (!user.school_id && teacherInfo.school_id) {
+                        updates.school_id = teacherInfo.school_id;
+                        user.school_id = teacherInfo.school_id;
+                    }
+                    if (!user.name && teacherInfo.name) {
+                        updates.name = teacherInfo.name;
+                        user.name = teacherInfo.name;
+                    }
+                }
+            }
+
             // Clear isFirstLogin
             if (user.isFirstLogin) {
                 updates.isFirstLogin = false;
@@ -144,7 +185,17 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
             if (!existingQuery.empty) {
                 const existingDoc = existingQuery.docs[0];
                 user = { id: uid, ...existingDoc.data() };
-                
+
+                // Correct mis-filed teachers in orphaned docs
+                if (user.role === 'admin' && correctRole !== 'superadmin') {
+                    const teacherInfo = await resolveTeacherByEmail(email);
+                    if (teacherInfo.isTeacher) {
+                        user.role = 'teacher';
+                        if (!user.school_id && teacherInfo.school_id) user.school_id = teacherInfo.school_id;
+                        if (!user.name && teacherInfo.name) user.name = teacherInfo.name;
+                    }
+                }
+
                 // If the auto-provisioned doc was also missing school_id, try finding it
                 if (!user.school_id && user.role === 'admin') {
                     user.school_id = await findSchoolIdByEmail(email);
@@ -153,15 +204,30 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 await userRef.set(user);
                 try { await db.collection('users').doc(existingDoc.id).delete(); } catch(e) {}
             } else {
-                // Completely new user — search for their school!
-                const assignedSchoolId = (correctRole === 'admin') ? await findSchoolIdByEmail(email) : null;
+                // Completely new user — determine role before defaulting to 'admin'.
+                // Check teachers collection first so a provisioned teacher who
+                // hasn't logged in before gets the right role.
+                let finalRole = correctRole; // 'superadmin' or 'admin'
+                let resolvedName = name || email.split('@')[0] || 'User';
+                let resolvedSchoolId = null;
+
+                if (finalRole !== 'superadmin') {
+                    const teacherInfo = await resolveTeacherByEmail(email);
+                    if (teacherInfo.isTeacher) {
+                        finalRole = 'teacher';
+                        resolvedSchoolId = teacherInfo.school_id;
+                        if (teacherInfo.name) resolvedName = teacherInfo.name;
+                    } else {
+                        resolvedSchoolId = await findSchoolIdByEmail(email);
+                    }
+                }
 
                 user = {
                     id: uid,
                     email: email.trim(),
-                    name: name || email.split('@')[0] || 'User',
-                    role: correctRole,
-                    school_id: assignedSchoolId,
+                    name: resolvedName,
+                    role: finalRole,
+                    school_id: resolvedSchoolId,
                     isFirstLogin: true,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
@@ -194,6 +260,45 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
     res.json({ message: 'Logged out successfully' });
+});
+
+// DELETE /api/auth/user — hard-delete a user's Firebase Auth account + Firestore profile.
+// Called by the server-side cascadeDelete when removing a teacher/staff member.
+// Requires a valid Bearer token (caller must be authenticated).
+router.delete('/user', verifyFirebaseToken, async (req, res) => {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'email is required' });
+    }
+    const lowered = email.trim().toLowerCase();
+    const errors = [];
+
+    // 1. Delete Firebase Auth account (look up by email — Admin SDK is case-insensitive)
+    try {
+        const authUser = await admin.auth().getUserByEmail(lowered);
+        await admin.auth().deleteUser(authUser.uid);
+    } catch (err) {
+        if (err.code !== 'auth/user-not-found') {
+            errors.push(`Firebase Auth delete: ${err.message}`);
+        }
+        // user-not-found is fine — treat as already gone
+    }
+
+    // 2. Delete Firestore /users doc(s) matching this email
+    try {
+        let snap = await db.collection('users').where('email', '==', lowered).get();
+        if (snap.empty) {
+            snap = await db.collection('users').where('email', '==', email.trim()).get();
+        }
+        await Promise.all(snap.docs.map(d => d.ref.delete()));
+    } catch (err) {
+        errors.push(`Firestore users delete: ${err.message}`);
+    }
+
+    if (errors.length > 0) {
+        return res.status(207).json({ message: 'Partial delete', errors });
+    }
+    res.json({ message: 'User deleted successfully' });
 });
 
 // GET /api/auth/profile — return current user's full profile

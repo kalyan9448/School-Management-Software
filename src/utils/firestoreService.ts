@@ -531,8 +531,10 @@ export const admissionService = {
 // ==================== TEACHER SERVICE ====================
 
 export const teacherService = {
+    /** Returns only active / on-leave teachers — 'inactive' records are soft-deletes. */
     getAll: async (): Promise<Teacher[]> => {
-        return fetchCollection<Teacher>('teachers');
+        const all = await fetchCollection<Teacher>('teachers');
+        return all.filter(t => t.status !== 'inactive');
     },
 
     getById: async (id: string): Promise<Teacher | null> => {
@@ -541,32 +543,159 @@ export const teacherService = {
 
     create: async (teacher: Partial<Teacher>): Promise<Teacher> => {
         const allTeachers = await teacherService.getAll();
+        const schoolId = teacher.school_id || getSchoolId();
         const newTeacher: Omit<Teacher, 'id'> & { id?: string } = {
             employeeId: teacher.employeeId || `EMP${String(allTeachers.length + 1).padStart(3, '0')}`,
             name: teacher.name || '',
-            email: teacher.email || '',
+            email: (teacher.email || '').trim().toLowerCase(),
             phone: teacher.phone || '',
+            dob: teacher.dob || '',
+            gender: teacher.gender || '',
+            bloodGroup: teacher.bloodGroup || '',
+            emergencyContact: teacher.emergencyContact || '',
             subjects: teacher.subjects || [],
             classes: teacher.classes || [],
             qualification: teacher.qualification || '',
-            experience: teacher.experience || 0,
+            experience: Number(teacher.experience) || 0,
             joiningDate: teacher.joiningDate || new Date().toISOString().split('T')[0],
-            salary: teacher.salary || 0,
-            photo: teacher.photo,
-            address: teacher.address,
+            salary: Number(teacher.salary) || 0,
+            photo: teacher.photo || undefined,
+            address: teacher.address || '',
             status: teacher.status || 'active',
+            school_id: schoolId,
         };
-        return createDoc<Teacher>('teachers', newTeacher);
+        const created = await createDoc<Teacher>('teachers', newTeacher);
+
+        // Auto-provision a /users record so the teacher can log in and be
+        // redirected to the Teacher dashboard (role must be set before first login).
+        if (newTeacher.email) {
+            try {
+                await userService.create({
+                    email: newTeacher.email,
+                    name: newTeacher.name,
+                    role: 'teacher',
+                    school_id: schoolId || undefined,
+                    isFirstLogin: true,
+                });
+            } catch (err) {
+                console.warn('[teacherService] Auto-provisioning user record failed:', err);
+            }
+        }
+
+        return created;
     },
 
     update: async (id: string, updates: Partial<Teacher>): Promise<Teacher | null> => {
-        await updateDocById('teachers', id, updates);
+        // Coerce experience/salary to numbers, strip any File objects from documents
+        const safeUpdates: Partial<Teacher> = { ...updates };
+        if (safeUpdates.experience !== undefined) {
+            safeUpdates.experience = Number(safeUpdates.experience) || 0;
+        }
+        if (safeUpdates.salary !== undefined) {
+            safeUpdates.salary = Number(safeUpdates.salary) || 0;
+        }
+        if (safeUpdates.email) {
+            safeUpdates.email = safeUpdates.email.trim().toLowerCase();
+        }
+        // Strip documents that contain File objects (not Firestore-serializable)
+        delete (safeUpdates as any).documents;
+        await updateDocById('teachers', id, safeUpdates as Record<string, any>);
         return getDocById<Teacher>('teachers', id);
     },
 
     getByEmail: async (email: string): Promise<Teacher | null> => {
         const teachers = await fetchCollection<Teacher>('teachers', where('email', '==', email));
         return teachers[0] || null;
+    },
+
+    /**
+     * One-time migration helper: find all teachers still marked status='inactive'
+     * (created by the old soft-delete) and hard-delete them + all related data.
+     * Safe to call on every mount — it's a no-op when no inactive records exist.
+     */
+    purgeInactive: async (): Promise<void> => {
+        // Query directly — skips the getAll() filter intentionally
+        const stale = await fetchCollection<Teacher>('teachers', where('status', '==', 'inactive'));
+        if (stale.length === 0) return;
+        console.log(`[teacherService] Purging ${stale.length} soft-deleted teacher(s)…`);
+        for (const t of stale) {
+            try {
+                await teacherService.delete(t.id);
+            } catch (err) {
+                console.warn(`[teacherService.purgeInactive] Failed to purge teacher ${t.id}:`, err);
+            }
+        }
+    },
+
+    /**
+     * Hard-delete a teacher and ALL related data across the application:
+     *  - teachers doc
+     *  - users doc + Firebase Auth account (via backend)
+     *  - lessons authored by this teacher
+     *  - timetable slots assigned to this teacher
+     *  - subject_mappings for this teacher
+     *  - classes where classTeacher references this teacher
+     */
+    delete: async (id: string): Promise<void> => {
+        // Fetch the teacher first so we have email + name for related-doc queries
+        const teacher = await getDocById<Teacher>('teachers', id);
+        if (!teacher) return;
+
+        const email = (teacher.email || '').trim().toLowerCase();
+        const name = teacher.name || '';
+
+        // Run all side-effect deletes in parallel for speed
+        await Promise.all([
+            // 1. Lessons authored by this teacher (teacherId stores email)
+            fetchCollection<LessonLog>('lessons', where('teacherId', '==', email))
+                .then(docs => Promise.all(docs.map(d => deleteDocById('lessons', d.id)))),
+
+            // 2. Timetable slots assigned to this teacher (teacherId stores email)
+            fetchCollection<TimetableSlot>('timetable', where('teacherId', '==', email))
+                .then(docs => Promise.all(docs.map(d => deleteDocById('timetable', d.id)))),
+
+            // 3. Subject mappings for this teacher (matched by teacherName)
+            fetchCollection<SubjectMappingRecord>('subject_mappings', where('teacherName', '==', name))
+                .then(docs => Promise.all(docs.map(d => deleteDocById('subject_mappings', d.id)))),
+
+            // 4. Classes that list this teacher as classTeacher — clear the field
+            fetchCollection<Class>('classes', where('classTeacher', '==', name))
+                .then(docs => Promise.all(
+                    docs.map(d => updateDoc(doc(db, 'classes', d.id), { classTeacher: '' }))
+                )),
+        ]);
+
+        // 5. Delete the teachers doc itself
+        await deleteDocById('teachers', id);
+
+        // 6. Delete Firebase Auth account + users Firestore doc via backend
+        //    (requires Admin SDK — done server-side)
+        if (email) {
+            try {
+                const { auth: clientAuth } = await import('../services/firebase');
+                const currentUser = clientAuth.currentUser;
+                if (currentUser) {
+                    const token = await currentUser.getIdToken();
+                    const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 8000);
+                    await fetch(`${apiBase}/api/auth/user`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ email }),
+                        signal: ctrl.signal,
+                    });
+                    clearTimeout(timer);
+                }
+            } catch (err) {
+                // Non-fatal: backend may be down or the teacher may never have logged in.
+                // The teacher record itself is already deleted from Firestore.
+                console.warn('[teacherService.delete] Backend user delete failed (best-effort):', err);
+            }
+        }
     },
 };
 

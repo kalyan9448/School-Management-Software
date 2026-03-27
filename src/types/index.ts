@@ -113,6 +113,10 @@ export interface Teacher {
     name: string;
     email: string;
     phone: string;
+    dob?: string;
+    gender?: string;
+    bloodGroup?: string;
+    emergencyContact?: string;
     subjects: string[];
     classes: { class: string; section: string; subject: string }[];
     qualification: string;
@@ -122,7 +126,7 @@ export interface Teacher {
     photo?: string;
     address?: string;
     department?: string;
-    status: 'active' | 'inactive';
+    status: 'active' | 'inactive' | 'on-leave';
     is_active?: boolean;
     created_at?: string;
     updated_at?: string;

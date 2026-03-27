@@ -113,6 +113,25 @@ async function getUserFromFirestore(uid: string, email?: string): Promise<User |
             }
         }
 
+        // 3. No users doc found — check the teachers collection so a teacher who
+        //    was provisioned (added via TeachersModule) but never logged in before
+        //    gets the correct role instead of defaulting to 'admin'.
+        if (email) {
+            const emailLower = email.toLowerCase().trim();
+            const teacherQ = query(collection(db, 'teachers'), where('email', '==', emailLower));
+            const teacherSnap = await getDocs(teacherQ);
+            if (!teacherSnap.empty) {
+                const td = teacherSnap.docs[0].data();
+                return {
+                    id: uid,
+                    email: emailLower,
+                    name: td.name || email.split('@')[0] || 'User',
+                    role: 'teacher' as UserRole,
+                    school_id: td.school_id,
+                } as User;
+            }
+        }
+
         return null;
     } catch {
         return null;
