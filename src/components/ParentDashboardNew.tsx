@@ -73,7 +73,7 @@ interface DailyActivity {
 
 interface AttendanceRecord {
   date: string;
-  status: 'present' | 'absent' | 'late';
+  status: 'present' | 'absent' | 'late' | 'not-marked';
   time?: string;
 }
 
@@ -163,7 +163,7 @@ export function ParentDashboardNew() {
   const todayRecord = studentAttendance.find(a => a.date === todayDate);
   const todayAttendance: AttendanceRecord = {
     date: todayDate,
-    status: (todayRecord?.status as any) || 'absent',
+    status: (todayRecord?.status as any) || 'not-marked',
     time: todayRecord?.time || '--:--',
   };
 
@@ -768,13 +768,33 @@ export function ParentDashboardNew() {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Attendance */}
-            <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
+            <div className={`p-4 rounded-lg border-2 ${
+              todayAttendance.status === 'present' ? 'bg-green-50 border-green-200' :
+              todayAttendance.status === 'absent' ? 'bg-red-50 border-red-200' :
+              todayAttendance.status === 'late' ? 'bg-orange-50 border-orange-200' :
+              'bg-gray-50 border-gray-200'
+            }`}>
               <div className="flex items-center gap-3 mb-2">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <p className="text-gray-700">Attendance</p>
+                {todayAttendance.status === 'present' ? (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                ) : todayAttendance.status === 'absent' ? (
+                  <XCircle className="w-5 h-5 text-red-600" />
+                ) : todayAttendance.status === 'late' ? (
+                  <Clock className="w-5 h-5 text-orange-600" />
+                ) : (
+                  <Activity className="w-5 h-5 text-gray-400" />
+                )}
+                <p className="text-gray-700 font-medium">Attendance</p>
               </div>
-              <p className="text-2xl text-green-600 capitalize">{todayAttendance.status}</p>
-              {todayAttendance.time && (
+              <p className={`text-2xl font-bold capitalize ${
+                todayAttendance.status === 'present' ? 'text-green-600' :
+                todayAttendance.status === 'absent' ? 'text-red-600' :
+                todayAttendance.status === 'late' ? 'text-orange-600' :
+                'text-gray-500'
+              }`}>
+                {todayAttendance.status === 'not-marked' ? 'Not Marked' : todayAttendance.status}
+              </p>
+              {todayAttendance.status !== 'not-marked' && todayAttendance.time && todayAttendance.time !== '--:--' && (
                 <p className="text-gray-600 text-sm">at {todayAttendance.time}</p>
               )}
             </div>

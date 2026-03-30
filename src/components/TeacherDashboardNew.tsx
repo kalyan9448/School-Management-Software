@@ -118,6 +118,7 @@ export function TeacherDashboardNew() {
   const [scheduleDebug, setScheduleDebug] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [allStudents, setAllStudents] = useState<LocalStudent[]>([]);
+  const [todayStudents, setTodayStudents] = useState<LocalStudent[]>([]);
   const [students, setStudents] = useState<LocalStudent[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -288,7 +289,7 @@ export function TeacherDashboardNew() {
 
       // ── 1. Load today's timetable (independent of teacher record) ──────────
       setScheduleLoading(true);
-      setScheduleDebug('Loading...');
+      let todaySlots: any[] = [];
       try {
         const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
         const schoolId = sessionStorage.getItem('active_school_id');
@@ -350,7 +351,7 @@ export function TeacherDashboardNew() {
           return;
         }
 
-        const todaySlots = teacherSlots.filter(s => s.day === today);
+        todaySlots = teacherSlots.filter(s => s.day === today);
         console.log('[Timetable] Slots for today (' + today + '):', todaySlots.length, todaySlots);
 
         if (todaySlots.length === 0) {
@@ -432,6 +433,35 @@ export function TeacherDashboardNew() {
             });
           }
           setAllStudents(allStds);
+
+          // ── Determine Students for TODAY ──────────────────────────────────
+          // Use todaySchedule (already populated in step 1) to filter students
+          const todayStds: LocalStudent[] = [];
+          const seenTodayStudentIds = new Set<string>();
+          const todayClassSections = new Set<string>();
+          
+          todaySlots.forEach(slot => {
+            todayClassSections.add(`${slot.class}-${slot.section}`);
+          });
+
+          for (const classSection of todayClassSections) {
+            const [cls, sec] = classSection.split('-');
+            const stds = await studentService.getByClass(cls, sec);
+            stds.forEach((s: any) => {
+              if (!seenTodayStudentIds.has(s.id)) {
+                seenTodayStudentIds.add(s.id);
+                todayStds.push({ 
+                  id: s.id, 
+                  name: s.name, 
+                  rollNo: s.rollNo, 
+                  attendance: null, 
+                  class: s.class, 
+                  section: s.section 
+                });
+              }
+            });
+          }
+          setTodayStudents(todayStds);
         }
       } catch (teacherErr) {
         console.error('Failed to load teacher data:', teacherErr);
@@ -679,7 +709,13 @@ export function TeacherDashboardNew() {
       const todayDate = new Date().toISOString().split('T')[0];
       if (attendanceDate === todayDate) {
         const todayRecords = await attendanceService.getByDate(todayDate);
-        setDashboardPresentCount(todayRecords.filter(a => a.status === 'present').length);
+        const teacherTodayStdIds = new Set(todayStudents.map(s => s.id));
+        const presentStudentIds = new Set(
+          todayRecords
+            .filter(a => a.status === 'present' && teacherTodayStdIds.has(a.studentId))
+            .map(a => a.studentId)
+        );
+        setDashboardPresentCount(presentStudentIds.size);
       }
     } catch (err) {
       console.error('Error saving attendance:', err);
@@ -693,7 +729,15 @@ export function TeacherDashboardNew() {
       try {
         const today = new Date().toISOString().split('T')[0];
         const todayAttendance = await attendanceService.getByDate(today);
-        setDashboardPresentCount(todayAttendance.filter((a) => a.status === 'present').length);
+        
+        // Filter by students who SHOULD be in class today for this teacher and count once per student
+        const teacherTodayStdIds = new Set(todayStudents.map(s => s.id));
+        const presentStudentIds = new Set(
+          todayAttendance
+            .filter(a => a.status === 'present' && teacherTodayStdIds.has(a.studentId))
+            .map(a => a.studentId)
+        );
+        setDashboardPresentCount(presentStudentIds.size);
 
         // Get lessons logged TODAY by this teacher
         const allLessons = await lessonService.getAll();
@@ -707,13 +751,14 @@ export function TeacherDashboardNew() {
       }
     }
     loadDashboardStats();
-  }, [user]);
+  }, [user, todayStudents]);
 
   const renderDashboard = () => {
     const presentCount = dashboardPresentCount;
     const weekLessons = dashboardWeekLessons;
     const totalStudentsCount = allStudents.length;
-    const attendancePercentage = allStudents.length > 0 ? ((presentCount / allStudents.length) * 100).toFixed(0) : '0';
+    const todayStudentsCount = todayStudents.length;
+    const attendancePercentage = todayStudents.length > 0 ? ((presentCount / todayStudents.length) * 100).toFixed(0) : '0';
     const lessonsRemaining = todaySchedule.length - weekLessons.length;
 
     return (
@@ -737,7 +782,7 @@ export function TeacherDashboardNew() {
               <div className="flex-1">
                 <p className="text-gray-500 text-sm mb-1">My Classes</p>
                 <h3 className="text-3xl font-bold text-gray-900 mb-1">{myClasses.length}</h3>
-                <p className="text-gray-600 text-sm">{totalStudentsCount} Students Total</p>
+                <p className="text-gray-600 text-sm">{todayStudentsCount} Students Today</p>
               </div>
               <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
                 <BookOpen className="w-6 h-6 text-purple-600" />
@@ -755,10 +800,10 @@ export function TeacherDashboardNew() {
                 <p className="text-gray-500 text-sm mb-1">Present Today</p>
                 <div className="flex items-baseline gap-1">
                   <h3 className="text-3xl font-bold text-gray-900">{presentCount}</h3>
-                  <span className="text-gray-500 font-medium">/ {allStudents.length}</span>
+                  <span className="text-gray-500 font-medium">/ {todayStudentsCount}</span>
                 </div>
                 <p className="text-green-600 text-sm font-medium mt-1">
-                  {presentCount} students are present out of {allStudents.length}
+                  {presentCount} students are present out of {todayStudentsCount}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">

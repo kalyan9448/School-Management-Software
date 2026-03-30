@@ -26,10 +26,12 @@ import { Badge } from "@/components/student/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/student/ui/avatar";
 import { Progress } from "@/components/student/ui/progress";
 import { useNavigate } from "react-router";
+import { useAuth } from "@/contexts/AuthContext";
 import { StudentProfile, SkillsData } from "@/services/student/studentDataService";
 
 export function ProfilePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [studentData, setStudentData] = useState<any>({ name: "", grade: "", email: "" });
   const [isEditing, setIsEditing] = useState(false);
   const [showAddSkill, setShowAddSkill] = useState(false);
@@ -37,16 +39,30 @@ export function ProfilePage() {
 
   // Load skills from Firestore
   const [skills, setSkills] = useState<string[]>(["Mathematics", "Physics"]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
     (async () => {
-      const [profile, skillsArr] = await Promise.all([
+      const { TimelineService } = await import("@/services/student/studentDataService");
+      const [profile, skillsArr, activityArr] = await Promise.all([
         StudentProfile.get(),
         SkillsData.getAll(),
+        TimelineService.getAll(),
       ]);
       setStudentData(profile);
       if (skillsArr.length > 0) {
         setSkills(skillsArr.map((s: any) => s.skill || s));
+      }
+      if (activityArr.length > 0) {
+        setRecentActivity(activityArr.slice(0, 5).map(a => ({
+          action: a.title || a.action || "Academic Activity",
+          date: a.time ? `${a.time} · ${a.date}` : a.date || "Recently"
+        })));
+      } else {
+        setRecentActivity([
+          { action: "Welcome to your new Profile!", date: "Just now" },
+          { action: "Start your first lesson", date: "Today" }
+        ]);
       }
     })();
   }, []);
@@ -226,23 +242,18 @@ export function ProfilePage() {
   const aiRecommendations = getAIRecommendations();
 
   const profileStats = [
-    { label: "Courses Enrolled", value: 6, icon: BookOpen, color: "#1F6FEB" },
+    { label: "Courses Enrolled", value: studentData.enrolledCoursesCount || 0, icon: BookOpen, color: "#1F6FEB" },
   ];
 
 
   const personalInfo = [
-    { label: "Full Name", value: studentData.name, icon: User },
-    { label: "Email", value: "john.doe@example.com", icon: Mail },
-    { label: "Phone", value: "+1 (555) 123-4567", icon: Phone },
-    { label: "Location", value: "New York, USA", icon: MapPin },
-    { label: "Joined", value: "January 2024", icon: Calendar },
+    { label: "Full Name", value: studentData.name || user?.name || "Not Provided", icon: User },
+    { label: "Email", value: studentData.email || user?.email || "Not Provided", icon: Mail },
+    { label: "Phone", value: studentData.phone || "Not Provided", icon: Phone },
+    { label: "Location", value: studentData.address || "Not Provided", icon: MapPin },
+    { label: "Joined", value: studentData.joinedDate || "Not Provided", icon: Calendar },
   ];
 
-  const recentActivity = [
-    { action: "Completed Math Quiz", date: "2 hours ago" },
-    { action: "Submitted Physics Assignment", date: "2 days ago" },
-    { action: "Attended Chemistry Lab", date: "3 days ago" },
-  ];
 
   return (
     <div className="min-h-screen bg-[#FAFBFF]">
@@ -314,7 +325,7 @@ export function ProfilePage() {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h2 className="text-2xl font-bold" style={{ color: '#1A1A1A' }}>{studentData.name}</h2>
-                    <p style={{ color: '#7A869A' }}>Student · Class 10</p>
+                    <p style={{ color: '#7A869A' }}>Student · {studentData.grade && studentData.section ? `${studentData.grade} - ${studentData.section}` : studentData.grade || "Class Not Assigned"}</p>
                   </div>
                 </div>
 

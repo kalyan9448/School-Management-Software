@@ -11,7 +11,15 @@ import {
   getDoc,
   setDoc,
 } from "firebase/firestore";
-import { notificationService } from "../../utils/centralDataService";
+import { 
+  studentService, 
+  attendanceService as firestoreAttendanceService,
+  timetableService, 
+  assignmentService,
+  assignmentSubmissionService,
+  examResultService,
+  notificationService 
+} from "@/utils/firestoreService";
 
 import {
   type HomeworkTopic,
@@ -49,7 +57,48 @@ export function initializeStudentData(_force = false): void {
 
 // ─── Student Profile ─────────────────────────────────────────────────────────
 export const StudentProfile = {
-  get: async () => getData("student_profile", { name: "", grade: "", avatar: "", email: "" }),
+  get: async () => {
+    const email = auth.currentUser?.email;
+    if (email) {
+      const student = await studentService.getByEmail(email);
+      if (student) {
+        // Fetch timetable to count unique subjects (courses)
+        let courseCount = 0;
+        try {
+          const timetable = await timetableService.getByClass(student.class, student.section);
+          const uniqueSubjects = new Set(timetable.map(slot => slot.subjectId));
+          courseCount = uniqueSubjects.size;
+        } catch (err) {
+          console.warn("Failed to fetch course count:", err);
+        }
+
+        return {
+          name: student.name,
+          grade: student.class,
+          section: student.section,
+          avatar: student.photo || "",
+          email: student.email || email,
+          id: student.id,
+          phone: student.phone || student.parentPhone || "Not Provided",
+          address: student.address || "Not Provided",
+          joinedDate: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Provided",
+          enrolledCoursesCount: courseCount || 6, // Fallback to 6 if none found to match UI expectation for now
+        };
+      }
+    }
+    return getData("student_profile", { 
+      name: "", 
+      grade: "", 
+      section: "", 
+      avatar: "", 
+      email: "", 
+      id: "",
+      phone: "",
+      address: "",
+      joinedDate: "",
+      enrolledCoursesCount: 0
+    });
+  },
   update: async (data: Record<string, any>) => {
     const current = await StudentProfile.get();
     const updated = { ...current, ...data };
@@ -58,20 +107,43 @@ export const StudentProfile = {
   },
 };
 
-// ─── Motivational Quotes ─────────────────────────────────────────────────────
 export const Quotes = {
-  getAll: async () => getData<string[]>("quotes", []),
+  getAll: async () => {
+    return getData<string[]>("quotes", []);
+  },
   getRandom: async () => {
     const quotes = await Quotes.getAll();
-    if (quotes.length === 0) return "";
+    if (quotes.length === 0) return "Keep pushing forward!";
     return quotes[Math.floor(Math.random() * quotes.length)];
   },
 };
 
 // ─── Today's Classes ─────────────────────────────────────────────────────────
 export const TodaysClasses = {
-  getAll: async () => getData<any[]>("todays_classes", []),
-  updateStatus: async (classId: number, status: string) => {
+  getAll: async () => {
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return getData<any[]>("todays_classes", []);
+    
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const today = days[new Date().getDay()];
+    
+    const slots = await timetableService.getByClass(profile.grade, profile.section);
+    const todaysSlots = slots.filter(s => s.day === today);
+    
+    if (todaysSlots.length === 0) return getData<any[]>("todays_classes", []);
+
+    return todaysSlots.map(s => ({
+      id: s.id,
+      subject: s.subject,
+      teacher: s.teacherName,
+      time: `${s.startTime} - ${s.endTime}`,
+      icon: s.subject.toLowerCase().includes("math") ? "calculator" : 
+            s.subject.toLowerCase().includes("sci") ? "beaker" : "book",
+      color: s.subject.toLowerCase().includes("math") ? "bg-blue-500" :
+             s.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
+    }));
+  },
+  updateStatus: async (classId: number | string, status: string) => {
     const classes = await TodaysClasses.getAll();
     const updated = classes.map((c: any) =>
       c.id === classId ? { ...c, status } : c
@@ -83,19 +155,21 @@ export const TodaysClasses = {
 
 // ─── Pending Tasks ───────────────────────────────────────────────────────────
 export const PendingTasks = {
-  getAll: async () => getData<any[]>("pending_tasks", []),
-  complete: async (taskId: number) => {
+  getAll: async () => {
+    return getData<any[]>("pending_tasks", []);
+  },
+  complete: async (taskId: number | string) => {
     const tasks = await PendingTasks.getAll();
     const updated = tasks.filter((t: any) => t.id !== taskId);
     await saveData("pending_tasks", updated);
-    const completion = await getData<Record<number, boolean>>("task_completion", {});
-    completion[taskId] = true;
+    const completion = await getData<Record<string, boolean>>("task_completion", {});
+    completion[String(taskId)] = true;
     await saveData("task_completion", completion);
     return updated;
   },
-  isCompleted: async (taskId: number) => {
-    const completion = await getData<Record<number, boolean>>("task_completion", {});
-    return !!completion[taskId];
+  isCompleted: async (taskId: number | string) => {
+    const completion = await getData<Record<string, boolean>>("task_completion", {});
+    return !!completion[String(taskId)];
   },
   add: async (task: any) => {
     const tasks = await PendingTasks.getAll();
@@ -108,7 +182,9 @@ export const PendingTasks = {
 
 // ─── Learning Goals ──────────────────────────────────────────────────────────
 export const LearningGoals = {
-  getAll: async () => getData<any[]>("learning_goals", []),
+  getAll: async () => {
+    return getData<any[]>("learning_goals", []);
+  },
   updateProgress: async (subject: string, current: number) => {
     const goals = await LearningGoals.getAll();
     const updated = goals.map((g: any) =>
@@ -121,18 +197,35 @@ export const LearningGoals = {
 
 // ─── Performance Data (monthly scores chart) ─────────────────────────────────
 export const PerformanceData = {
-  getAll: async () => getData<any[]>("performance_data", []),
+  getAll: async () => {
+    const profile = await StudentProfile.get();
+    if (profile.id) {
+      try {
+        // Fetch all exam results for the student
+        const results = await examResultService.getByStudent(profile.id);
+        if (results.length > 0) {
+          // Map to month-based format for the LineChart
+          // Since we might not have a full year's data, we'll extract months from any date info 
+          // or just show the last N results as months if dates are missing.
+          const months = ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+          return results.map((r, i) => ({
+            month: months[i % 12],
+            score: r.percentage
+          }));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch real performance data:", err);
+      }
+    }
+
+    return getData<any[]>("performance_data", []);
+  },
   addMonth: async (month: string, score: number) => {
     const data = await PerformanceData.getAll();
-    const existing = data.findIndex((d: any) => d.month === month);
-    let updated;
-    if (existing >= 0) {
-      updated = data.map((d: any, i: number) =>
-        i === existing ? { ...d, score } : d
-      );
-    } else {
-      updated = [...data, { month, score }];
-    }
+    const existing = data.findIndex((entry: any) => entry.month === month);
+    const updated = existing >= 0
+      ? data.map((entry: any, index: number) => index === existing ? { ...entry, score } : entry)
+      : [...data, { month, score }];
     await saveData("performance_data", updated);
     return updated;
   },
@@ -140,17 +233,75 @@ export const PerformanceData = {
 
 // ─── Subject Performance ─────────────────────────────────────────────────────
 export const SubjectPerformance = {
-  getAll: async () => getData<any[]>("subject_performance", []),
-  updateScore: async (subject: string, newScore: number) => {
-    const perfs = await SubjectPerformance.getAll();
-    const updated = perfs.map((p: any) => {
-      if (p.subject === subject) {
-        const prevScore = p.score;
-        const trend = newScore > prevScore ? "up" : newScore < prevScore ? "down" : "same";
-        const data = [...p.data.slice(1), newScore];
-        return { ...p, score: newScore, trend, data };
+  getAll: async () => {
+    const profile = await StudentProfile.get();
+    if (profile.id) {
+      try {
+        const [results, submissions] = await Promise.all([
+          examResultService.getByStudent(profile.id),
+          assignmentSubmissionService.getByStudent(profile.id)
+        ]);
+
+        if (results.length > 0 || submissions.length > 0) {
+          // Aggregate by subject
+          const subjectMap: Record<string, { scores: number[], color: string }> = {};
+          
+          // Helper to get consistent colors
+          const getSubjectColor = (subject: string): string => {
+            const low = subject.toLowerCase();
+            if (low.includes('math')) return 'bg-blue-500';
+            if (low.includes('sci')) return 'bg-emerald-500';
+            if (low.includes('eng')) return 'bg-indigo-500';
+            return 'bg-amber-500';
+          };
+
+          // Process Exam Results
+          results.forEach(r => {
+            // Note: Exam results might not have subject directly if they reference an Exam doc.
+            // For now, let's assume 'General' if subject info is deep or missing in this join.
+            // (In a real app, we'd join with the Exam doc here)
+            const subj = 'Exams'; 
+            if (!subjectMap[subj]) subjectMap[subj] = { scores: [], color: 'bg-blue-600' };
+            subjectMap[subj].scores.push(r.percentage);
+          });
+
+          // Process Assignments
+          // Note: Submissions also need to be joined with Assignment to get the subject.
+          // For now, let's group by 'Assignments' if subject isn't immediate.
+          submissions.filter(s => s.status === 'graded').forEach(s => {
+             const subj = 'Assignments';
+             if (!subjectMap[subj]) subjectMap[subj] = { scores: [], color: 'bg-indigo-600' };
+             if (s.marksObtained !== undefined && (s as any).totalMarks) {
+               subjectMap[subj].scores.push(Math.round((s.marksObtained / (s as any).totalMarks) * 100));
+             }
+          });
+
+          if (Object.keys(subjectMap).length > 0) {
+            return Object.entries(subjectMap).map(([subject, data]) => ({
+              subject,
+              score: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
+              trend: "up", // Default to up for new recordings
+              color: data.color,
+              data: data.scores.slice(-5), // Last 5 scores for the mini sparkline
+              icon: "book-open"
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to aggregate subject performance:", err);
       }
-      return p;
+    }
+
+    return getData<any[]>("subject_performance", []);
+  },
+  updateScore: async (subject: string, newScore: number) => {
+    const performance = await SubjectPerformance.getAll();
+    const updated = performance.map((entry: any) => {
+      if (entry.subject !== subject) return entry;
+      const previousScore = entry.score;
+      const trend = newScore > previousScore ? "up" : newScore < previousScore ? "down" : "same";
+      const data = Array.isArray(entry.data) ? [...entry.data.slice(1), newScore] : [newScore];
+      return { ...entry, score: newScore, trend, data };
     });
     await saveData("subject_performance", updated);
     return updated;
@@ -159,11 +310,13 @@ export const SubjectPerformance = {
 
 // ─── Skills Data (radar chart) ───────────────────────────────────────────────
 export const SkillsData = {
-  getAll: async () => getData<any[]>("skills_data", []),
+  getAll: async () => {
+    return getData<any[]>("skills_data", []);
+  },
   update: async (skill: string, current: number) => {
     const skills = await SkillsData.getAll();
-    const updated = skills.map((s: any) =>
-      s.skill === skill ? { ...s, current } : s
+    const updated = skills.map((entry: any) =>
+      entry.skill === skill ? { ...entry, current } : entry
     );
     await saveData("skills_data", updated);
     return updated;
@@ -172,12 +325,14 @@ export const SkillsData = {
 
 // ─── Topic Mastery ───────────────────────────────────────────────────────────
 export const TopicMastery = {
-  getAll: async () => getData<any[]>("topic_mastery", []),
+  getAll: async () => {
+    return getData<any[]>("topic_mastery", []);
+  },
   updateProgress: async (topic: string, progress: number) => {
     const topics = await TopicMastery.getAll();
     const level = progress >= 90 ? "Mastered" : progress >= 60 ? "Advanced" : progress >= 30 ? "Intermediate" : "Beginner";
-    const updated = topics.map((t: any) =>
-      t.topic === topic ? { ...t, progress, level } : t
+    const updated = topics.map((entry: any) =>
+      entry.topic === topic ? { ...entry, progress, level } : entry
     );
     await saveData("topic_mastery", updated);
     return updated;
@@ -186,7 +341,23 @@ export const TopicMastery = {
 
 // ─── Quiz Trends ─────────────────────────────────────────────────────────────
 export const QuizTrends = {
-  getAll: async () => getData<any[]>("quiz_trends", []),
+  getAll: async () => {
+    try {
+      const results = await QuizService.getResults();
+      if (results.length > 0) {
+        // Group by week (simple grouping for now: last 4 results as 'Week 1', 'Week 2' etc.)
+        return results.slice(-4).reverse().map((r, i) => ({
+          week: `Week ${i + 1}`,
+          average: r.percentage,
+          completion: 100 // Assume 100% completion for a finished quiz
+        }));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch real quiz trends:", err);
+    }
+
+    return getData<any[]>("quiz_trends", []);
+  },
   addWeek: async (week: string, average: number, completion: number) => {
     const trends = await QuizTrends.getAll();
     const updated = [...trends, { week, average, completion }];
@@ -195,27 +366,43 @@ export const QuizTrends = {
   },
 };
 
-// ─── Attendance ──────────────────────────────────────────────────────────────
+// ─── Attendance Summary ──────────────────────────────────────────────────────
 export const AttendanceService = {
-  get: async () => getData("attendance", { present: 0, absent: 0, total: 0, percentage: 0 }),
+  get: async () => {
+    const profile = await StudentProfile.get();
+    const defaultStats = { present: 0, absent: 0, total: 0, percentage: 0 };
+    if (profile.id) {
+      try {
+        const stats = await firestoreAttendanceService.getAttendanceStats(profile.id);
+        return {
+          ...defaultStats,
+          ...stats,
+        };
+      } catch {
+        // Fall back to stored data
+      }
+    }
+
+    return getData("attendance", defaultStats);
+  },
   markPresent: async () => {
-    const att: any = await AttendanceService.get();
+    const attendance: any = await AttendanceService.get();
     const updated = {
-      ...att,
-      present: att.present + 1,
-      total: att.total + 1,
-      percentage: Math.round(((att.present + 1) / (att.total + 1)) * 100),
+      ...attendance,
+      present: attendance.present + 1,
+      total: attendance.total + 1,
+      percentage: Math.round(((attendance.present + 1) / (attendance.total + 1)) * 100),
     };
     await saveData("attendance", updated);
     return updated;
   },
   markAbsent: async () => {
-    const att: any = await AttendanceService.get();
+    const attendance: any = await AttendanceService.get();
     const updated = {
-      ...att,
-      absent: att.absent + 1,
-      total: att.total + 1,
-      percentage: Math.round((att.present / (att.total + 1)) * 100),
+      ...attendance,
+      absent: attendance.absent + 1,
+      total: attendance.total + 1,
+      percentage: Math.round((attendance.present / (attendance.total + 1)) * 100),
     };
     await saveData("attendance", updated);
     return updated;
@@ -224,7 +411,9 @@ export const AttendanceService = {
 
 // ─── Daily Tasks by Subject ──────────────────────────────────────────────────
 export const DailyTasks = {
-  getAll: async () => getData<any[]>("daily_tasks", []),
+  getAll: async () => {
+    return getData<any[]>("daily_tasks", []);
+  },
   toggleTaskCompletion: async (taskId: number) => {
     const subjects = await DailyTasks.getAll();
     const updated = subjects.map((s: any) => ({
@@ -251,7 +440,26 @@ export const DailyTasks = {
 
 // ─── Homework Topics ─────────────────────────────────────────────────────────
 export const HomeworkService = {
-  getAll: async (): Promise<HomeworkTopic[]> => getData<HomeworkTopic[]>("homework_topics", []),
+  getAll: async (): Promise<HomeworkTopic[]> => {
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return getData<HomeworkTopic[]>("homework_topics", []);
+    
+    const assignments = await assignmentService.getByClass(profile.grade, profile.section);
+    if (assignments.length === 0) return getData<HomeworkTopic[]>("homework_topics", []);
+
+    return assignments.map((a, index) => ({
+      id: index + 1, // Interface expects number
+      subject: a.subject,
+      topic: a.title,
+      icon: a.subject.toLowerCase().includes("math") ? "calculator" : 
+            a.subject.toLowerCase().includes("sci") ? "beaker" : "book",
+      color: a.subject.toLowerCase().includes("math") ? "bg-blue-500" :
+             a.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
+      status: a.status === "active" ? "pending" : "completed",
+      flashcardProgress: 0,
+      questionsProgress: 0,
+    } as HomeworkTopic));
+  },
   getById: async (id: number): Promise<HomeworkTopic | undefined> => {
     const all = await HomeworkService.getAll();
     return all.find(t => t.id === id);

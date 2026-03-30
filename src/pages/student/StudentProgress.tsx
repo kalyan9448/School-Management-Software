@@ -11,6 +11,7 @@ import {
   Award,
   Calendar,
   BookOpen,
+  Book,
   Clock,
   CheckCircle,
 } from "lucide-react";
@@ -94,6 +95,7 @@ const iconMap: Record<string, any> = {
   scroll: BookOpen,
   leaf: BookOpen,
   beaker: BookOpen,
+  book: Book,
 };
 
 export function ProgressPage() {
@@ -128,9 +130,68 @@ export function ProgressPage() {
 
   const fallbackWidth = typeof window !== 'undefined' ? Math.min(window.innerWidth - 300, 1200) : 800;
 
-  const currentAverage = performanceData[performanceData.length - 1]?.score || 0;
-  const previousAverage = performanceData[performanceData.length - 2]?.score || 0;
-  const improvement = currentAverage - previousAverage;
+  const currentAverage = performanceData.length > 0 ? performanceData[performanceData.length - 1].score : 0;
+  const previousAverage = performanceData.length > 1 ? performanceData[performanceData.length - 2].score : 0;
+  const improvement = currentAverage - (previousAverage || currentAverage);
+
+  // Dynamic Suggestions Logic
+  const suggestions = React.useMemo(() => {
+    const list = [];
+    
+    if (performanceData.length === 0) {
+      list.push({
+        type: 'info',
+        title: 'Welcome to Analytics',
+        message: 'Your performance trends will appear here once you complete your first exams and assignments.',
+        icon: Target,
+        color: 'blue'
+      });
+    } else {
+      // General Progress
+      if (improvement > 0) {
+        list.push({
+          type: 'success',
+          title: 'Great Progress!',
+          message: `Your average score has improved by ${improvement}% compared to previous assessments. Keep it up!`,
+          icon: CheckCircle,
+          color: 'green'
+        });
+      } else if (improvement < 0) {
+        list.push({
+          type: 'warning',
+          title: 'Performance Alert',
+          message: 'Your recent scores show a slight dip. Consider reviewing your last assessment topics.',
+          icon: Target,
+          color: 'blue'
+        });
+      }
+
+      // Subject Specifics
+      const lowSubject = subjectPerformance.find(s => s.score < 60);
+      if (lowSubject) {
+        list.push({
+          type: 'warning',
+          title: `Focus on ${lowSubject.subject}`,
+          message: `Your score in ${lowSubject.subject} (${lowSubject.score}%) is below target. We recommend extra practice here.`,
+          icon: Target,
+          color: 'blue'
+        });
+      }
+
+      // Quiz Efficiency
+      if (quizTrends.length > 0) {
+        list.push({
+          type: 'info',
+          title: 'Quiz Performance',
+          message: `You've completed ${quizTrends.length} quizzes this month. Consistency is the key to mastery!`,
+          icon: Clock,
+          color: 'purple'
+        });
+      }
+    }
+
+    return list;
+  }, [performanceData, subjectPerformance, quizTrends, improvement]);
 
   return (
     <div className="min-h-screen bg-[#FAFBFF]">
@@ -178,8 +239,14 @@ export function ProgressPage() {
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             {/* Performance Trend */}
-            <Card className="p-5 md:p-8">
+            <Card className="p-5 md:p-8 relative">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Performance Trend</h3>
+              {performanceData.length === 0 && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-3xl">
+                  <TrendingUp className="w-12 h-12 text-blue-200 mb-2" />
+                  <p className="text-gray-500 font-medium text-sm">Waiting for your first exam results</p>
+                </div>
+              )}
               <div className="h-[300px] md:h-[350px] w-full" ref={trendRef}>
                 <LineChart 
                   width={trendDims.width || fallbackWidth} 
@@ -279,61 +346,45 @@ export function ProgressPage() {
             <Card className="p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Personalized Suggestions</h3>
               <div className="space-y-4">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg"
-                >
-                  <div className="bg-blue-500 p-2 rounded-lg">
-                    <Target className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-blue-900">Focus on Biology</p>
-                    <p className="text-sm text-blue-700">
-                      Your Biology scores have decreased. Try reviewing Cell Biology concepts.
-                    </p>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="flex items-start gap-3 p-4 bg-green-50 rounded-lg"
-                >
-                  <div className="bg-green-500 p-2 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-green-900">Excellent Math Progress!</p>
-                    <p className="text-sm text-green-700">
-                      You've improved significantly in Mathematics. Keep practicing advanced topics.
-                    </p>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="flex items-start gap-3 p-4 bg-purple-50 rounded-lg"
-                >
-                  <div className="bg-purple-500 p-2 rounded-lg">
-                    <Clock className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-purple-900">Time Management Tip</p>
-                    <p className="text-sm text-purple-700">
-                      You're completing quizzes faster. Great job on improving efficiency!
-                    </p>
-                  </div>
-                </motion.div>
+                {suggestions.map((suggestion, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className={`flex items-start gap-3 p-4 bg-${suggestion.color}-50 rounded-lg`}
+                  >
+                    <div className={`bg-${suggestion.color}-500 p-2 rounded-lg`}>
+                      <suggestion.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className={`font-semibold text-${suggestion.color}-900`}>{suggestion.title}</p>
+                      <p className={`text-sm text-${suggestion.color}-700`}>
+                        {suggestion.message}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))}
+                {suggestions.length === 0 && (
+                  <p className="text-gray-500 text-center py-4 text-sm italic">No specific suggestions at this time.</p>
+                )}
               </div>
             </Card>
           </TabsContent>
 
           {/* Subjects Tab */}
           <TabsContent value="subjects" className="space-y-6">
+            {subjectPerformance.length === 0 && (
+              <Card className="p-12 flex flex-col items-center justify-center text-center">
+                <div className="bg-gray-100 p-4 rounded-full mb-4">
+                  <BookOpen className="w-12 h-12 text-gray-400" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No Subject Data Yet</h3>
+                <p className="text-gray-500 max-w-md">
+                  Once your teachers record marks for exams or assignments, your subject-wise performance will be displayed here.
+                </p>
+              </Card>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {subjectPerformance.map((subject, index) => {
                 const Icon = iconMap[subject.icon];
@@ -377,7 +428,7 @@ export function ProgressPage() {
 
                       {/* Mini chart */}
                       <div className="h-20 w-full overflow-hidden">
-                        <LineChart width={250} height={80} data={subject.data.map((score, i) => ({ score, index: i }))}>
+                        <LineChart width={250} height={80} data={subject.data.map((score: number, i: number) => ({ score, index: i }))}>
                           <Line
                             type="monotone"
                             dataKey="score"
@@ -397,8 +448,14 @@ export function ProgressPage() {
 
           {/* Skills Tab */}
           <TabsContent value="skills" className="space-y-6">
-            <Card className="p-5 md:p-8">
+            <Card className="p-5 md:p-8 relative">
               <h3 className="text-lg font-bold text-gray-900 mb-6">Skills Assessment</h3>
+              {skillsData.length === 0 && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-3xl">
+                  <Award className="w-12 h-12 text-blue-200 mb-2" />
+                  <p className="text-gray-500 font-medium text-sm">No skills assessment data available yet</p>
+                </div>
+              )}
               <div className="h-[300px] md:h-[450px] min-h-[350px]" ref={skillsRef}>
                 <RadarChart 
                   width={skillsDims.width || fallbackWidth} 

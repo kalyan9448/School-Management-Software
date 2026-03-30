@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Circle,
   Target,
+  Beaker,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Badge } from "@/components/student/ui/badge";
@@ -22,6 +23,7 @@ const iconMap: Record<string, any> = {
   atom: Atom,
   book: BookOpen,
   "book-open": BookOpen,
+  beaker: Beaker,
 };
 
 const statusConfig = {

@@ -50,6 +50,9 @@ const iconMap: Record<string, any> = {
   leaf: Leaf,
   book: Book,
   beaker: Beaker,
+  clock: Clock,
+  target: Target,
+  "pen-tool": PenTool,
 };
 
 const taskTypeIcons: Record<string, any> = {

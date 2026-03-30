@@ -57,6 +57,8 @@ import {
   Heart,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 type ViewType =
   | 'dashboard'
@@ -1614,9 +1616,69 @@ export function SuperAdminDashboard() {
   };
 
   const confirmExport = () => {
-    const timestamp = new Date().toLocaleDateString();
-    alert(`✅ Exporting Billing Report\n\nFormat: ${exportType}\nRecords: ${billingRecords.length}\nDate: ${timestamp}\n\nFile will be downloaded shortly...`);
-    setShowExportModal(false);
+    try {
+      const timestamp = new Date().toISOString().split('T')[0];
+
+      if (exportType === 'CSV') {
+        const headers = ['Invoice Number', 'School Name', 'Plan', 'Billing Cycle', 'Active Users', 'User Limit', 'Next Billing Date', 'Amount', 'Payment Status'];
+        const csvData = billingRecords.map(b => [
+          String(b.invoiceNumber || ''),
+          `"${String(b.schoolName || '').replace(/"/g, '""')}"`,
+          String(b.plan || ''),
+          String(b.billingCycle || ''),
+          b.activeUsers || 0,
+          b.userLimit || 0,
+          String(b.nextBillingDate || ''),
+          b.amount || 0,
+          String(b.paymentStatus || '')
+        ].join(','));
+        
+        const csvString = [headers.join(','), ...csvData].join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `Billing_Report_${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else if (exportType === 'PDF') {
+        const doc = new jsPDF();
+        doc.text(`Billing & Subscriptions Report - ${timestamp}`, 14, 15);
+        
+        const tableColumn = ['Invoice Number', 'School Name', 'Plan', 'Cycle', 'Users', 'Amount', 'Status'];
+        const tableRows: any[] = [];
+        
+        billingRecords.forEach(b => {
+          const rowData = [
+            String(b.invoiceNumber || ''),
+            String(b.schoolName || ''),
+            String(b.plan || ''),
+            String(b.billingCycle || ''),
+            `${b.activeUsers || 0}/${b.userLimit || 0}`,
+            `Rs.${(b.amount || 0).toLocaleString()}`,
+            String(b.paymentStatus || '')
+          ];
+          tableRows.push(rowData);
+        });
+        
+        (doc as any).autoTable({
+          head: [tableColumn],
+          body: tableRows,
+          startY: 20,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [107, 33, 168] }
+        });
+        
+        doc.save(`Billing_Report_${timestamp}.pdf`);
+      }
+
+      setShowExportModal(false);
+    } catch (err: any) {
+      console.error('Export Error:', err);
+      alert('Error generating export: ' + (err.message || err));
+    }
   };
 
   const handleViewInvoice = (invoiceNumber: string) => {
@@ -1625,9 +1687,57 @@ export function SuperAdminDashboard() {
   };
 
   const handleDownloadInvoice = (invoiceNumber: string) => {
-    const invoice = billingRecords.find(b => b.invoiceNumber === invoiceNumber);
-    if (invoice) {
-      alert(`✅ Downloading Invoice ${invoiceNumber}\n\nSchool: ${invoice.schoolName}\nAmount: ₹${invoice.amount.toLocaleString()}\nStatus: ${invoice.paymentStatus}\n\nFile will be saved to your downloads folder.`);
+    try {
+      const invoice = billingRecords.find(b => b.invoiceNumber === invoiceNumber);
+      if (!invoice) return;
+
+      const doc = new jsPDF();
+      const timestamp = new Date().toISOString().split('T')[0];
+
+      // Add Invoice Header
+      doc.setFontSize(22);
+      doc.text('INVOICE', 14, 25);
+      
+      doc.setFontSize(10);
+      doc.text(`Invoice Number: ${invoice.invoiceNumber}`, 14, 35);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 40);
+      doc.text(`Status: ${invoice.paymentStatus}`, 14, 45);
+
+      // School Info
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Bill To:', 14, 60);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(invoice.schoolName || ''), 14, 68);
+
+      // Tabular Item
+      const tableColumn = ['Description', 'Billing Cycle', 'Users', 'Total'];
+      const tableRows = [
+        [
+          `Subscription Plan: ${invoice.plan}`,
+          String(invoice.billingCycle || ''),
+          `${invoice.activeUsers || 0} / ${invoice.userLimit || 0}`,
+          `Rs.${(invoice.amount || 0).toLocaleString()}`
+        ]
+      ];
+
+      (doc as any).autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 80,
+        theme: 'striped',
+        headStyles: { fillColor: [107, 33, 168] }
+      });
+
+      // Footer
+      const finalY = (doc as any).lastAutoTable.cursor.y + 20;
+      doc.setFontSize(14);
+      doc.text(`Total Amount: Rs.${(invoice.amount || 0).toLocaleString()}`, 14, finalY);
+
+      doc.save(`Invoice_${invoiceNumber}_${timestamp}.pdf`);
+    } catch (err: any) {
+      console.error('Invoice Export Error:', err);
+      alert('Error generating invoice PDF: ' + (err.message || err));
     }
   };
 
@@ -5205,367 +5315,7 @@ export function SuperAdminDashboard() {
         )}
 
         {/* Manage Storage Modal */}
-        {showManageStorageModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-xl text-gray-900 font-semibold">Manage Storage</h3>
-                    <p className="text-gray-600 text-sm mt-1">Configure cloud storage settings</p>
-                  </div>
-                  <button
-                    onClick={() => setShowManageStorageModal(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
 
-                {/* Storage Usage Overview */}
-                <div className="mb-6 p-4 bg-gradient-to-br from-purple-50 to-amber-50 border border-purple-200 rounded-lg">
-                  <h4 className="text-gray-900 font-semibold mb-3">Current Usage</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Total Storage</span>
-                      <span className="text-gray-900 font-medium">245 GB / 500 GB</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-purple-600 h-2 rounded-full" style={{ width: '49%' }}></div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>49% used</span>
-                      <span>255 GB remaining</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-gray-700 mb-2 font-medium">Storage Provider *</label>
-                    <select
-                      value={storageForm.provider}
-                      onChange={(e) => setStorageForm({ ...storageForm, provider: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="Amazon S3">Amazon S3</option>
-                      <option value="Google Cloud Storage">Google Cloud Storage</option>
-                      <option value="Azure Blob">Azure Blob Storage</option>
-                      <option value="DigitalOcean Spaces">DigitalOcean Spaces</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2 font-medium">Bucket Name *</label>
-                    <input
-                      type="text"
-                      value={storageForm.bucketName}
-                      onChange={(e) => setStorageForm({ ...storageForm, bucketName: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="my-school-storage"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2 font-medium">Region</label>
-                    <select
-                      value={storageForm.region}
-                      onChange={(e) => setStorageForm({ ...storageForm, region: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="ap-south-1">Asia Pacific (Mumbai)</option>
-                      <option value="us-east-1">US East (N. Virginia)</option>
-                      <option value="eu-west-1">EU (Ireland)</option>
-                      <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2 font-medium">Access Key ID *</label>
-                    <input
-                      type="text"
-                      value={storageForm.accessKey}
-                      onChange={(e) => setStorageForm({ ...storageForm, accessKey: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="AKIAIOSFODNN7EXAMPLE"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2 font-medium">Secret Access Key *</label>
-                    <input
-                      type="password"
-                      value={storageForm.secretKey}
-                      onChange={(e) => setStorageForm({ ...storageForm, secretKey: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                    />
-                  </div>
-
-                  {/* Storage Breakdown */}
-                  <div className="pt-4 border-t border-gray-200">
-                    <h4 className="text-gray-900 font-semibold mb-3">Storage Breakdown</h4>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Student Documents</span>
-                        <span className="text-gray-900">128 GB</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Images & Media</span>
-                        <span className="text-gray-900">67 GB</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Backups</span>
-                        <span className="text-gray-900">42 GB</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Other Files</span>
-                        <span className="text-gray-900">8 GB</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <div className="flex gap-2">
-                      <Database className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-amber-800">
-                        <p className="font-medium mb-1">Important:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          <li>Ensure the bucket has proper CORS settings</li>
-                          <li>Access keys are stored encrypted</li>
-                          <li>Test connectivity after updating credentials</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 mt-6">
-                  <button
-                    onClick={() => setShowManageStorageModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmManageStorage}
-                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Export Billing Report Modal */}
-        {showExportModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl text-gray-900 font-semibold">Export Billing Report</h3>
-                  <button
-                    onClick={() => setShowExportModal(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-
-                <div className="mb-6">
-                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Download className="w-8 h-8 text-purple-600" />
-                  </div>
-                  <p className="text-center text-gray-600 mb-4">
-                    Export billing data for {billingRecords.length} records as {exportType}
-                  </p>
-
-                  <div className="p-4 bg-gray-50 rounded-lg space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Format:</span>
-                      <span className="text-gray-900 font-medium">{exportType}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Records:</span>
-                      <span className="text-gray-900 font-medium">{billingRecords.length}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Date:</span>
-                      <span className="text-gray-900 font-medium">{new Date().toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowExportModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmExport}
-                    className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors ${exportType === 'PDF' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-                      }`}
-                  >
-                    Export {exportType}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Archive School Modal */}
-        {showArchiveSchoolModal && schoolToArchive && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-              <div className="p-6">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-orange-100 mx-auto mb-4">
-                  <Archive className="w-6 h-6 text-orange-600" />
-                </div>
-                <h3 className="text-xl text-gray-900 font-semibold text-center mb-2">Archive School?</h3>
-                <p className="text-gray-600 text-center mb-4">
-                  Are you sure you want to archive <span className="font-medium text-gray-900">{schoolToArchive.name}</span>?
-                </p>
-
-                <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg mb-6">
-                  <div className="flex gap-2">
-                    <Info className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-orange-800">
-                      <p className="font-medium mb-1">What happens when you archive:</p>
-                      <ul className="list-disc list-inside space-y-1">
-                        <li>All user access will be immediately disabled</li>
-                        <li>Data will be preserved for 90 days</li>
-                        <li>Admin will receive a notification email</li>
-                        <li>School can be restored within 90 days</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowArchiveSchoolModal(false);
-                      setSchoolToArchive(null);
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmArchiveSchool}
-                    className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-                  >
-                    Archive School
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* View Invoice Modal */}
-        {showInvoiceModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl text-gray-900 font-semibold">Invoice Details</h3>
-                  <button
-                    onClick={() => {
-                      setShowInvoiceModal(false);
-                      setSelectedInvoice('');
-                    }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-
-                {(() => {
-                  const invoice = billingRecords.find(b => b.invoiceNumber === selectedInvoice);
-                  if (!invoice) return null;
-
-                  return (
-                    <div className="space-y-6">
-                      {/* Invoice Header */}
-                      <div className="flex items-start justify-between pb-4 border-b border-gray-200">
-                        <div>
-                          <h4 className="text-2xl text-gray-900 font-bold mb-1">{invoice.schoolName}</h4>
-                          <p className="text-gray-600">Invoice #{invoice.invoiceNumber}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-gray-600 text-sm mb-1">Next Billing Date</p>
-                          <p className="text-gray-900 font-semibold">{new Date(invoice.nextBillingDate).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-
-                      {/* Plan Details */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-purple-50 rounded-lg">
-                          <p className="text-purple-600 text-sm mb-1">Plan</p>
-                          <p className="text-gray-900 font-semibold">{invoice.plan}</p>
-                        </div>
-                        <div className="p-4 bg-blue-50 rounded-lg">
-                          <p className="text-blue-600 text-sm mb-1">Billing Cycle</p>
-                          <p className="text-gray-900 font-semibold">{invoice.billingCycle}</p>
-                        </div>
-                        <div className="p-4 bg-green-50 rounded-lg">
-                          <p className="text-green-600 text-sm mb-1">Active Users</p>
-                          <p className="text-gray-900 font-semibold">{invoice.activeUsers} / {invoice.userLimit}</p>
-                        </div>
-                        <div className="p-4 bg-amber-50 rounded-lg">
-                          <p className="text-amber-600 text-sm mb-1">Payment Status</p>
-                          <p className={`font-semibold ${invoice.paymentStatus === 'Paid' ? 'text-green-700' :
-                            invoice.paymentStatus === 'Pending' ? 'text-amber-700' :
-                              'text-red-700'
-                            }`}>{invoice.paymentStatus}</p>
-                        </div>
-                      </div>
-
-                      {/* Amount */}
-                      <div className="p-6 bg-gradient-to-br from-purple-50 to-amber-50 border border-purple-200 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600 text-lg">Total Amount</span>
-                          <span className="text-3xl text-gray-900 font-bold">₹{invoice.amount.toLocaleString()}</span>
-                        </div>
-                        {invoice.lastPaymentDate && (
-                          <p className="text-gray-600 text-sm mt-2">
-                            Last payment: {new Date(invoice.lastPaymentDate).toLocaleDateString()}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => {
-                            handleDownloadInvoice(invoice.invoiceNumber);
-                            setShowInvoiceModal(false);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download PDF
-                        </button>
-                        <button
-                          onClick={() => setShowInvoiceModal(false)}
-                          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -6169,6 +5919,361 @@ export function SuperAdminDashboard() {
         <div className="p-8">{renderContent()}</div>
         {renderSchedulePickerModal()}
         {renderAnnouncementDetailsModal()}
+
+        {/* Global Modals */}
+        {showManageStorageModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-xl text-gray-900 font-semibold">Manage Storage</h3>
+                    <p className="text-gray-600 text-sm mt-1">Configure cloud storage settings</p>
+                  </div>
+                  <button
+                    onClick={() => setShowManageStorageModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="mb-6 p-4 bg-gradient-to-br from-purple-50 to-amber-50 border border-purple-200 rounded-lg">
+                  <h4 className="text-gray-900 font-semibold mb-3">Current Usage</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Total Storage</span>
+                      <span className="text-gray-900 font-medium">245 GB / 500 GB</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-purple-600 h-2 rounded-full" style={{ width: '49%' }}></div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>49% used</span>
+                      <span>255 GB remaining</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">Storage Provider *</label>
+                    <select
+                      value={storageForm.provider}
+                      onChange={(e) => setStorageForm({ ...storageForm, provider: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="Amazon S3">Amazon S3</option>
+                      <option value="Google Cloud Storage">Google Cloud Storage</option>
+                      <option value="Azure Blob">Azure Blob Storage</option>
+                      <option value="DigitalOcean Spaces">DigitalOcean Spaces</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">Bucket Name *</label>
+                    <input
+                      type="text"
+                      value={storageForm.bucketName}
+                      onChange={(e) => setStorageForm({ ...storageForm, bucketName: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="my-school-storage"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">Region</label>
+                    <select
+                      value={storageForm.region}
+                      onChange={(e) => setStorageForm({ ...storageForm, region: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="ap-south-1">Asia Pacific (Mumbai)</option>
+                      <option value="us-east-1">US East (N. Virginia)</option>
+                      <option value="eu-west-1">EU (Ireland)</option>
+                      <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">Access Key ID *</label>
+                    <input
+                      type="text"
+                      value={storageForm.accessKey}
+                      onChange={(e) => setStorageForm({ ...storageForm, accessKey: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="AKIAIOSFODNN7EXAMPLE"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">Secret Access Key *</label>
+                    <input
+                      type="password"
+                      value={storageForm.secretKey}
+                      onChange={(e) => setStorageForm({ ...storageForm, secretKey: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    />
+                  </div>
+
+                  {/* Storage Breakdown */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <h4 className="text-gray-900 font-semibold mb-3">Storage Breakdown</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Student Documents</span>
+                        <span className="text-gray-900">128 GB</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Images & Media</span>
+                        <span className="text-gray-900">67 GB</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Backups</span>
+                        <span className="text-gray-900">42 GB</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Other Files</span>
+                        <span className="text-gray-900">8 GB</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex gap-2">
+                      <Database className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium mb-1">Important:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Ensure the bucket has proper CORS settings</li>
+                          <li>Access keys are stored encrypted</li>
+                          <li>Test connectivity after updating credentials</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setShowManageStorageModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmManageStorage}
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showExportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl text-gray-900 font-semibold">Export Billing Report</h3>
+                  <button
+                    onClick={() => setShowExportModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="mb-6">
+                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Download className="w-8 h-8 text-purple-600" />
+                  </div>
+                  <p className="text-center text-gray-600 mb-4">
+                    Export billing data for {billingRecords.length} records as {exportType}
+                  </p>
+
+                  <div className="p-4 bg-gray-50 rounded-lg space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Format:</span>
+                      <span className="text-gray-900 font-medium">{exportType}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Records:</span>
+                      <span className="text-gray-900 font-medium">{billingRecords.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Date:</span>
+                      <span className="text-gray-900 font-medium">{new Date().toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowExportModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmExport}
+                    className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors ${exportType === 'PDF' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                  >
+                    Export {exportType}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showArchiveSchoolModal && schoolToArchive && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-orange-100 mx-auto mb-4">
+                  <Archive className="w-6 h-6 text-orange-600" />
+                </div>
+                <h3 className="text-xl text-gray-900 font-semibold text-center mb-2">Archive School?</h3>
+                <p className="text-gray-600 text-center mb-4">
+                  Are you sure you want to archive <span className="font-medium text-gray-900">{schoolToArchive.name}</span>?
+                </p>
+
+                <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg mb-6">
+                  <div className="flex gap-2">
+                    <Info className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-orange-800">
+                      <p className="font-medium mb-1">What happens when you archive:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>All user access will be immediately disabled</li>
+                        <li>Data will be preserved for 90 days</li>
+                        <li>Admin will receive a notification email</li>
+                        <li>School can be restored within 90 days</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowArchiveSchoolModal(false);
+                      setSchoolToArchive(null);
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmArchiveSchool}
+                    className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    Archive School
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showInvoiceModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl text-gray-900 font-semibold">Invoice Details</h3>
+                  <button
+                    onClick={() => {
+                      setShowInvoiceModal(false);
+                      setSelectedInvoice('');
+                    }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {(() => {
+                  const invoice = billingRecords.find(b => b.invoiceNumber === selectedInvoice);
+                  if (!invoice) return null;
+
+                  return (
+                    <div className="space-y-6">
+                      <div className="flex items-start justify-between pb-4 border-b border-gray-200">
+                        <div>
+                          <h4 className="text-2xl text-gray-900 font-bold mb-1">{invoice.schoolName}</h4>
+                          <p className="text-gray-600">Invoice #{invoice.invoiceNumber}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-gray-600 text-sm mb-1">Next Billing Date</p>
+                          <p className="text-gray-900 font-semibold">{new Date(invoice.nextBillingDate).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-purple-50 rounded-lg">
+                          <p className="text-purple-600 text-sm mb-1">Plan</p>
+                          <p className="text-gray-900 font-semibold">{invoice.plan}</p>
+                        </div>
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                          <p className="text-blue-600 text-sm mb-1">Billing Cycle</p>
+                          <p className="text-gray-900 font-semibold">{invoice.billingCycle}</p>
+                        </div>
+                        <div className="p-4 bg-green-50 rounded-lg">
+                          <p className="text-green-600 text-sm mb-1">Active Users</p>
+                          <p className="text-gray-900 font-semibold">{invoice.activeUsers} / {invoice.userLimit}</p>
+                        </div>
+                        <div className="p-4 bg-amber-50 rounded-lg">
+                          <p className="text-amber-600 text-sm mb-1">Payment Status</p>
+                          <p className={`font-semibold ${invoice.paymentStatus === 'Paid' ? 'text-green-700' :
+                            invoice.paymentStatus === 'Pending' ? 'text-amber-700' :
+                              'text-red-700'
+                            }`}>{invoice.paymentStatus}</p>
+                        </div>
+                      </div>
+
+                      <div className="p-6 bg-gradient-to-br from-purple-50 to-amber-50 border border-purple-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 text-lg">Total Amount</span>
+                          <span className="text-3xl text-gray-900 font-bold">₹{invoice.amount.toLocaleString()}</span>
+                        </div>
+                        {invoice.lastPaymentDate && (
+                          <p className="text-gray-600 text-sm mt-2">
+                            Last payment: {new Date(invoice.lastPaymentDate).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            handleDownloadInvoice(invoice.invoiceNumber);
+                            setShowInvoiceModal(false);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download PDF
+                        </button>
+                        <button
+                          onClick={() => setShowInvoiceModal(false)}
+                          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div >
   );

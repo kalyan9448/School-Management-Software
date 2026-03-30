@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, getRoleDashboardPath } from '../../contexts/AuthContext';
+import { useAuth, getRoleDashboardPath } from '@/contexts/AuthContext';
 import { AuthLayout } from '../../layouts/AuthLayout';
 import { Login } from '../../components/Login';
 

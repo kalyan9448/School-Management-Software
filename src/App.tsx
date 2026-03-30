@@ -1,6 +1,6 @@
 
-import { AuthProvider } from './contexts/AuthContext';
-import { TenantProvider } from './contexts/TenantContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { TenantProvider } from '@/contexts/TenantContext';
 import { AppRouter } from './routes';
 
 export default function App() {

@@ -441,6 +441,12 @@ export const studentService = {
         );
     },
 
+    getByEmail: async (email: string): Promise<Student | null> => {
+        if (!email) return null;
+        const students = await fetchCollection<Student>('students', where('email', '==', email.trim().toLowerCase()));
+        return students[0] || null;
+    },
+
     create: async (student: Partial<Student>): Promise<Student> => {
         const allStudents = await studentService.getAll();
         const rollNo = student.rollNo ||
@@ -1263,6 +1269,10 @@ export const enquiryService = {
         await updateDocById('enquiries', id, updates);
         return getDocById<Enquiry>('enquiries', id);
     },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('enquiries', id);
+    },
 };
 
 // ==================== EVENT SERVICE ====================
@@ -2016,6 +2026,10 @@ const firestoreDataService = {
     studentEnrollment: studentEnrollmentService,
     feeInvoice: feeInvoiceService,
     auditLog: auditLogService,
+    admission: admissionService,
+    organization: organizationService,
+    subjectMapping: subjectMappingService,
+    studentNote: studentNoteService,
 };
 
 export default firestoreDataService;

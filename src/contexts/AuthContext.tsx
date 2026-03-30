@@ -161,8 +161,21 @@ function resolveRoleForNewUser(email: string): UserRole {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
+    // ── Pre-Initialization: Hydrate from Storage ──────────────
+    // This prevents "flash of login" or unwanted redirects on page refresh
+    // by providing immediate user context before Firebase initializes.
+    const getCachedUser = (): User | null => {
+        try {
+            const cached = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+            return cached ? JSON.parse(cached) : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const initialUser = getCachedUser();
+    const [user, setUser] = useState<User | null>(initialUser);
+    const [loading, setLoading] = useState(!initialUser); // If we have a user, don't show global loader
 
     const persistUser = (u: User) => {
         const serialized = JSON.stringify(u);

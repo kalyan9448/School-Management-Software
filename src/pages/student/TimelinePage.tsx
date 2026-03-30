@@ -14,6 +14,8 @@ import {
   Clock,
   Award,
   User,
+  Beaker,
+  Book,
 } from "lucide-react";
 
 import { motion } from "motion/react";
@@ -30,6 +32,8 @@ const iconMap: Record<string, any> = {
   atom: Atom,
   "book-open": BookOpen,
   scroll: Scroll,
+  beaker: Beaker,
+  book: Book,
 };
 
 const eventTypeColors: Record<string, string> = {
