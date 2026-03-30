@@ -18,6 +18,7 @@ import {
   Plus,
   Edit,
   Save,
+  ChevronLeft,
   ChevronRight,
   BarChart3,
   Sparkles,
@@ -101,6 +102,47 @@ export function TeacherDashboardNew() {
   const { user, logout } = useAuth();
   const { uniqueClasses } = useAcademicClasses();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
+
+  // Weekly View State
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
+    const today = new Date();
+    const day = today.getDay(); // 0 (Sun) to 6 (Sat)
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  });
+
+  const navigateWeek = (offset: number) => {
+    const newDate = new Date(currentWeekStart);
+    newDate.setDate(newDate.getDate() + offset * 7);
+    setCurrentWeekStart(newDate);
+  };
+
+  const jumpToToday = () => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    setCurrentWeekStart(monday);
+  };
+
+  const jumpToDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(date.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    setCurrentWeekStart(monday);
+  };
+
+  const formatDateForQuery = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Sync view state to URL
   useEffect(() => {
@@ -194,7 +236,15 @@ export function TeacherDashboardNew() {
 
       setLessonsLoading(true);
       try {
-        const teacherLessons = await lessonService.getByTeacher(user.email);
+        const endDate = new Date(currentWeekStart);
+        endDate.setDate(currentWeekStart.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+
+        const teacherLessons = await lessonService.getByDateRange(
+          user.email,
+          formatDateForQuery(currentWeekStart),
+          formatDateForQuery(endDate)
+        );
         if (isMounted) {
           setLessonLogs(teacherLessons);
         }
@@ -226,7 +276,7 @@ export function TeacherDashboardNew() {
     return () => {
       isMounted = false;
     };
-  }, [user?.email]);
+  }, [user?.email, currentWeekStart]);
 
   const handleSaveNote = async () => {
     if (!selectedNoteStudentId || !noteContent) {
@@ -1483,174 +1533,208 @@ export function TeacherDashboardNew() {
   const renderLessonLog = () => {
     // If form is not shown, display the list of logged lessons
     if (!showLessonForm) {
-      // Filter lessons by class and subject
+      // Filter lessons by subject and week (ensures consistency if new lessons are added manually)
+      const weekEndsAt = new Date(currentWeekStart);
+      weekEndsAt.setDate(currentWeekStart.getDate() + 7);
+
       const filteredLessons = lessonLogs.filter((lesson: any) => {
+        const lessonDate = new Date(lesson.date);
+        const dateMatch = lessonDate >= currentWeekStart && lessonDate < weekEndsAt;
         const classMatch = !selectedLessonClass ||
           (lesson.class === selectedLessonClass.class && lesson.section === selectedLessonClass.section);
         const subjectMatch = selectedSubject === 'All Subjects' || lesson.subject === selectedSubject;
-        return classMatch && subjectMatch;
+        return dateMatch && classMatch && subjectMatch;
       });
 
-      // Sort by date (most recent first) and then by creation if date is same (assuming id is temporal or just use stable sort)
-      const sortedLessons = [...filteredLessons].sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateB - dateA;
-        return 0; // Maintain order within same day
+      // Sort by date (most recent first)
+      const sortedLessons = [...filteredLessons].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      // Week range for display
+      const weekEndDate = new Date(currentWeekStart);
+      weekEndDate.setDate(currentWeekStart.getDate() + 6);
+      const rangeStr = `${currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+      // Grouping by date
+      const groupedLessons: Record<string, any[]> = {};
+      sortedLessons.forEach(lesson => {
+        const dateStr = new Date(lesson.date).toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        if (!groupedLessons[dateStr]) groupedLessons[dateStr] = [];
+        groupedLessons[dateStr].push(lesson);
       });
+
+      const subjects = ['All Subjects', ...new Set(myClasses.map(c => c.subject))];
 
       return (
         <div className="space-y-6">
-          {/* Header with Class Info */}
-          {selectedLessonClass ? (
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-md p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h2 className="text-2xl mb-2">📚 Lesson Overview</h2>
-                  <p className="text-blue-100 text-lg">
-                    {selectedLessonClass.class} - Section {selectedLessonClass.section} | {selectedSubject}
-                  </p>
-                  <p className="text-blue-100 text-sm mt-1">
-                    {sortedLessons.length} lesson{sortedLessons.length !== 1 ? 's' : ''} logged
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setShowLessonForm(true)}
-                    className="px-6 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Log New Lesson
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedLessonClass(null);
-                      setSelectedSubject('All Subjects');
-                      setCurrentView('dashboard');
-                    }}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
-                  >
-                    Back to Dashboard
-                  </button>
-                </div>
-              </div>
+          {/* Header with Nav */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <BookOpen className="w-7 h-7 text-purple-600" />
+                Lesson History
+              </h2>
+              <p className="text-gray-600">Track and manage your teaching records week by week</p>
             </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-gray-900 mb-1">📚 Log Today's Lesson</h2>
-                <p className="text-gray-600">
-                  Create and log lesson details manually for your class
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowLessonForm(true)}
+                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 shadow-md"
+              >
+                <Plus className="w-5 h-5" />
+                Log New Lesson
+              </button>
+              <button
+                onClick={() => setCurrentView('dashboard')}
+                className="px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                Dashboard
+              </button>
+            </div>
+          </div>
+
+          {/* Weekly Navigation Bar */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center bg-gray-100 rounded-lg p-1">
                 <button
-                  onClick={() => setShowLessonForm(true)}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                  onClick={() => navigateWeek(-1)}
+                  className="p-2 hover:bg-white rounded-md transition-all text-gray-600 hover:text-purple-600 hover:shadow-sm"
+                  title="Previous Week"
                 >
-                  <Plus className="w-5 h-5" />
-                  Create Log Lesson
+                  <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  onClick={jumpToToday}
+                  className="px-4 py-1.5 hover:bg-white rounded-md transition-all text-sm font-medium text-gray-700 hover:text-purple-600 hover:shadow-sm"
                 >
-                  Back to Dashboard
+                  Today
+                </button>
+                <button
+                  onClick={() => navigateWeek(1)}
+                  className="p-2 hover:bg-white rounded-md transition-all text-gray-600 hover:text-purple-600 hover:shadow-sm"
+                  title="Next Week"
+                >
+                  <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-gray-400" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {rangeStr}
+                </h3>
+              </div>
             </div>
-          )}
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative group">
+                <input
+                  type="date"
+                  onChange={(e) => jumpToDate(e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                />
+                <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg border border-gray-200 hover:bg-white hover:border-purple-300 transition-all">
+                  <Calendar className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm font-medium">Select Week</span>
+                </button>
+              </div>
+              
+              <select
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white font-medium text-gray-700"
+              >
+                {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+
+              {selectedLessonClass && (
+                <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm font-medium">
+                  {selectedLessonClass.class}-{selectedLessonClass.section}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Lesson Logs List */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-gray-900 mb-4 font-semibold">
-              {selectedLessonClass && selectedSubject !== 'All Subjects'
-                ? `${selectedSubject} Lessons`
-                : 'Logged Lessons'}
-            </h3>
-
+          <div className="bg-white rounded-xl shadow-md p-6 min-h-[400px]">
             {lessonsLoading ? (
-              <div className="text-center py-12 text-gray-500">
-                <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                <p className="text-lg mb-2">Loading lesson logs...</p>
+              <div className="flex flex-col items-center justify-center py-24 text-gray-500">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+                <p className="text-lg font-medium">Loading lessons...</p>
               </div>
             ) : sortedLessons.length > 0 ? (
-              <div className="space-y-6">
-                {(() => {
-                  let lastDate = '';
-                  return sortedLessons.map((lesson: any) => {
-                    const lessonDateObj = new Date(lesson.date);
-                    const dateString = lessonDateObj.toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    });
-                    const showHeader = dateString !== lastDate;
-                    lastDate = dateString;
-
-                    return (
-                      <div key={lesson.id} className="space-y-3">
-                        {showHeader && (
-                          <div className="flex items-center gap-4 py-2">
-                            <div className="h-px bg-gray-200 flex-1"></div>
-                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                              {dateString}
-                            </span>
-                            <div className="h-px bg-gray-200 flex-1"></div>
-                          </div>
-                        )}
-                        <div className="p-5 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all">
-                          <div className="flex items-start justify-between">
+              <div className="space-y-10">
+                {Object.keys(groupedLessons).map((dateStr) => (
+                  <div key={dateStr} className="space-y-6">
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-widest bg-gray-50 px-4 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                        {dateStr}
+                      </span>
+                      <div className="h-px bg-gray-100 flex-1"></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4">
+                      {groupedLessons[dateStr].map((lesson: any) => (
+                        <div 
+                          key={lesson.id} 
+                          className="p-6 bg-white rounded-xl border border-gray-200 hover:border-purple-400 hover:shadow-lg transition-all group relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 left-0 w-1 h-full bg-purple-500 transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+                          
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                             <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-3">
-                                <h4 className="font-semibold text-gray-900 text-lg">{lesson.topic}</h4>
-                                <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-full font-medium">
+                              <div className="flex flex-wrap items-center gap-3 mb-4">
+                                <h4 className="font-bold text-gray-900 text-xl">{lesson.topic}</h4>
+                                <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-bold uppercase tracking-wider">
                                   {lesson.subject}
+                                </span>
+                                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-bold uppercase tracking-wider">
+                                  {lesson.class}-{lesson.section}
                                 </span>
                               </div>
 
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <Calendar className="w-4 h-4 text-purple-600" />
-                                  <span>{lessonDateObj.toLocaleDateString()}</span>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Time & Duration</p>
+                                  <div className="flex items-center gap-2 text-gray-700">
+                                    <Clock className="w-4 h-4 text-purple-500" />
+                                    <span className="text-sm font-medium">{lesson.time || 'N/A'}</span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <BookOpen className="w-4 h-4 text-purple-600" />
-                                  <span>{lesson.class} - Sec {lesson.section}</span>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Learning Objectives</p>
+                                  <div className="flex items-center gap-2 text-gray-700">
+                                    <Target className="w-4 h-4 text-purple-500" />
+                                    <span className="text-sm font-medium">{lesson.objectives?.length || 0} Points</span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <Target className="w-4 h-4 text-purple-600" />
-                                  <span>{lesson.objectives?.length || 0} Objectives</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <Users className="w-4 h-4 text-purple-600" />
-                                  <span>By {lesson.teacherName || user?.name || 'Teacher'}</span>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Logged By</p>
+                                  <div className="flex items-center gap-2 text-gray-700">
+                                    <Users className="w-4 h-4 text-purple-500" />
+                                    <span className="text-sm font-medium">{lesson.teacherName || 'Teacher'}</span>
+                                  </div>
                                 </div>
                               </div>
 
                               {lesson.objectives && lesson.objectives.length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-gray-200">
-                                  <p className="text-sm text-gray-600 mb-2">Learning Objectives:</p>
+                                <div className="mt-5 p-4 bg-gray-50 rounded-lg">
                                   <div className="flex flex-wrap gap-2">
                                     {lesson.objectives.slice(0, 3).map((obj: string, idx: number) => (
-                                      <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                      <div key={idx} className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-md border border-gray-100 text-xs text-gray-600 shadow-sm">
+                                        <CheckCircle className="w-3 h-3 text-green-500" />
                                         {obj}
-                                      </span>
+                                      </div>
                                     ))}
                                     {lesson.objectives.length > 3 && (
-                                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                      <span className="text-xs text-purple-600 font-bold px-2 py-1">
                                         +{lesson.objectives.length - 3} more
                                       </span>
                                     )}
                                   </div>
-                                </div>
-                              )}
-
-                              {lesson.notes && (
-                                <div className="mt-3 pt-3 border-t border-gray-200">
-                                  <p className="text-sm text-gray-600 mb-1">Notes:</p>
-                                  <p className="text-sm text-gray-700 italic">{lesson.notes}</p>
                                 </div>
                               )}
                             </div>
@@ -1660,34 +1744,45 @@ export function TeacherDashboardNew() {
                                 setSelectedLesson(lesson);
                                 setCurrentView('teaching-flow');
                               }}
-                              className="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                              className="w-full lg:w-auto px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-purple-200 group/btn"
                             >
-                              View Teaching Flow
-                              <ChevronRight className="w-4 h-4" />
+                              <Sparkles className="w-5 h-5 group-hover/btn:rotate-12 transition-transform" />
+                              <span>View Flow</span>
+                              <ChevronRight className="w-5 h-5" />
                             </button>
                           </div>
                         </div>
-                      </div>
-                    );
-                  });
-                })()}
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                <p className="text-lg mb-2">No lessons logged yet</p>
-                <p className="text-sm mb-4">
-                  {selectedLessonClass
-                    ? `No lessons found for ${selectedLessonClass.class} - Section ${selectedLessonClass.section} | ${selectedSubject}`
-                    : 'Start by creating your first lesson log'}
+              <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                  <BookOpen className="w-10 h-10 text-gray-300" />
+                </div>
+                <h4 className="text-xl font-bold text-gray-900 mb-2">No Lessons Logged</h4>
+                <p className="text-gray-500 text-center max-w-sm mb-8">
+                  {selectedLessonClass 
+                    ? `We couldn't find any lessons for ${selectedLessonClass.class}-${selectedLessonClass.section} during this week.`
+                    : "You haven't logged any lessons for this week yet. Start tracking your progress today!"}
                 </p>
-                <button
-                  onClick={() => setShowLessonForm(true)}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors inline-flex items-center gap-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  Create Log Lesson
-                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setShowLessonForm(true)}
+                    className="px-8 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all shadow-lg hover:shadow-purple-200 flex items-center gap-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Log Your First Lesson
+                  </button>
+                  <button
+                    onClick={jumpToToday}
+                    className="px-6 py-3 bg-white text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-100 transition-all"
+                  >
+                    Go to Current Week
+                  </button>
+                </div>
               </div>
             )}
           </div>

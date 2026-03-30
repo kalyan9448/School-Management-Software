@@ -915,6 +915,25 @@ export const lessonService = {
         return lessons.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     },
 
+    getByDateRange: async (teacherId: string, startDate: string, endDate: string): Promise<LessonLog[]> => {
+        try {
+            return await fetchCollection<LessonLog>(
+                'lessons',
+                where('teacherId', '==', teacherId),
+                where('date', '>=', startDate),
+                where('date', '<=', endDate),
+                orderBy('date', 'desc')
+            );
+        } catch (error: any) {
+            console.warn('Firestore range query failed (possibly missing index). Falling back to memory filtering.', error);
+            // Fallback: Fetch by teacher and filter in memory
+            const teacherLessons = await lessonService.getByTeacher(teacherId);
+            return teacherLessons
+                .filter(l => l.date >= startDate && l.date <= endDate)
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
+    },
+
     getByClass: async (className: string, section: string): Promise<LessonLog[]> => {
         const lessons = await fetchCollection<LessonLog>(
             'lessons',
