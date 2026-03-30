@@ -47,6 +47,8 @@ export type {
     TimetableSlot,
     Admission,
     SubjectMappingRecord,
+    GeneratedReport,
+    ScheduledReport,
 } from './centralDataService';
 import { getActiveAcademicYearId } from './classUtils';
 
@@ -93,6 +95,8 @@ import type {
     TimetableSlot,
     Admission,
     SubjectMappingRecord,
+    GeneratedReport,
+    ScheduledReport,
 } from './centralDataService';
 
 import type {
@@ -1999,6 +2003,56 @@ export const subjectMappingService = {
     },
 };
 
+// ==================== REPORTS SERVICE ====================
+
+export const reportsService = {
+    getGenerated: async (): Promise<GeneratedReport[]> => {
+        const reports = await fetchCollection<GeneratedReport>('school_admin_reports');
+        return reports.sort((a, b) => new Date(b.generatedOn).getTime() - new Date(a.generatedOn).getTime());
+    },
+
+    getScheduled: async (): Promise<ScheduledReport[]> => {
+        return fetchCollection<ScheduledReport>('school_admin_scheduled_reports');
+    },
+
+    createGenerated: async (report: Partial<GeneratedReport>): Promise<GeneratedReport> => {
+        return createDoc<GeneratedReport>('school_admin_reports', {
+            name: report.name || '',
+            type: report.type || '',
+            generatedOn: report.generatedOn || new Date().toISOString().split('T')[0],
+            format: report.format || 'PDF',
+            size: report.size || '0 KB',
+            status: report.status || 'success',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        });
+    },
+
+    createScheduled: async (report: Partial<ScheduledReport>): Promise<ScheduledReport> => {
+        return createDoc<ScheduledReport>('school_admin_scheduled_reports', {
+            name: report.name || '',
+            type: report.type || '',
+            frequency: report.frequency || '',
+            recipients: report.recipients || '',
+            nextRun: report.nextRun || '',
+            status: report.status || 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        });
+    },
+
+    updateScheduled: async (id: string, updates: Partial<ScheduledReport>): Promise<void> => {
+        await updateDocById('school_admin_scheduled_reports', id, {
+            ...updates,
+            updated_at: new Date().toISOString(),
+        });
+    },
+
+    deleteGenerated: async (id: string): Promise<void> => {
+        await deleteDocById('school_admin_reports', id);
+    },
+};
+
 // ==================== DEFAULT EXPORT (same shape as old service) ====================
 
 const firestoreDataService = {
@@ -2030,6 +2084,7 @@ const firestoreDataService = {
     organization: organizationService,
     subjectMapping: subjectMappingService,
     studentNote: studentNoteService,
+    reports: reportsService,
 };
 
 export default firestoreDataService;

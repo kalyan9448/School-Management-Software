@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+
 import { useAuth } from '../contexts/AuthContext';
 import { Sidebar } from './Sidebar';
 import { DashboardHome } from './DashboardHome';
@@ -29,13 +31,24 @@ export type ViewType =
   | 'reports-approval';
 
 export function AdminDashboard() {
-  const [activeView, setActiveView] = useState<ViewType>('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
+  const [activeView, setActiveView] = useState<ViewType>(initialView);
+
   const [admissionInitialView, setAdmissionInitialView] = useState<'list' | 'form'>('list');
   const [admissionInitialData, setAdmissionInitialData] = useState<any>(null);
   const [studentViewOptions, setStudentViewOptions] = useState<any>({});
   const [schoolReady, setSchoolReady] = useState(false);
   const [schoolError, setSchoolError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
+
+  // Sync view state to URL
+  useEffect(() => {
+    if (searchParams.get('view') !== activeView) {
+      setSearchParams({ view: activeView });
+    }
+  }, [activeView, searchParams, setSearchParams]);
+
 
   // ── Ensure school_id is in sessionStorage before any module loads ──
   useEffect(() => {
@@ -161,10 +174,9 @@ export function AdminDashboard() {
             sessionStorage.setItem('active_school_code', matchedSchool.schoolCode);
           }
 
-          // Force refresh the page or state if this is the first time we resolved it
-          if (!activeId) {
-            window.location.reload();
-          }
+          // Update state when resolved to trigger re-render
+          setSchoolReady(true);
+
 
           setSchoolReady(true);
         } else {
@@ -198,8 +210,10 @@ export function AdminDashboard() {
         setStudentViewOptions(options);
       }
       setActiveView(view as ViewType);
+      setSearchParams({ view });
     }
   };
+
 
   const handleConvertToAdmission = (enquiry: any) => {
     const prefilledData = {

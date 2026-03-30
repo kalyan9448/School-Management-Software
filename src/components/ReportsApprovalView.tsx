@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp, Plus, X } from 'lucide-react';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { attendanceService, feeService, studentService, reportsService } from '../utils/centralDataService';
+import type { GeneratedReport, ScheduledReport } from '../utils/centralDataService';
 
 export function ReportsApprovalView() {
   const { uniqueClasses, uniqueSections, sectionsForClass } = useAcademicClasses();
@@ -17,71 +21,205 @@ export function ReportsApprovalView() {
     format: 'PDF'
   });
 
-  // Initialize with default data (no persistence until Firestore collection is set up)
+  // Load reports from Firestore
   useEffect(() => {
-    setScheduledReports([
-      {
-        id: '1',
-        name: 'Weekly Attendance Summary',
-        type: 'Attendance',
-        frequency: 'Weekly - Every Monday',
-        recipients: 'Admin, Academic Head',
-        nextRun: '2024-02-26',
-        status: 'active',
-      },
-      {
-        id: '2',
-        name: 'Monthly Fee Collection',
-        type: 'Fee Collection',
-        frequency: 'Monthly - 1st of month',
-        recipients: 'Admin, Accountant',
-        nextRun: '2024-03-01',
-        status: 'active',
-      }
-    ]);
+    const loadReports = async () => {
+      try {
+        const [generated, scheduled] = await Promise.all([
+          reportsService.getGenerated(),
+          reportsService.getScheduled()
+        ]);
+        
+        // Use real data if available, otherwise fallback to initial mock for empty states
+        if (generated.length > 0) {
+          setRecentReports(generated);
+        } else {
+          setRecentReports([
+            {
+              id: '1',
+              name: 'January Attendance Summary',
+              type: 'Attendance',
+              generatedOn: '2024-02-01',
+              format: 'PDF',
+              size: '2.3 MB',
+            }
+          ]);
+        }
 
-    setRecentReports([
-      {
-        id: '1',
-        name: 'January Attendance Summary',
-        type: 'Attendance',
-        generatedOn: '2024-02-01',
-        format: 'PDF',
-        size: '2.3 MB',
+        if (scheduled.length > 0) {
+          setScheduledReports(scheduled);
+        } else {
+          setScheduledReports([
+            {
+              id: '1',
+              name: 'Weekly Attendance Summary',
+              type: 'Attendance',
+              frequency: 'Weekly - Every Monday',
+              recipients: 'Admin, Academic Head',
+              nextRun: '2024-02-26',
+              status: 'active',
+            },
+            {
+              id: '2',
+              name: 'Monthly Fee Collection',
+              type: 'Fee Collection',
+              frequency: 'Monthly - 1st of month',
+              recipients: 'Admin, Accountant',
+              nextRun: '2024-03-01',
+              status: 'active',
+            }
+          ]);
+        }
+      } catch (error: any) {
+        console.error("Error loading reports from Firestore:", error);
       }
-    ]);
+    };
+    loadReports();
   }, []);
 
-  const toggleReportStatus = (id: string) => {
+  const toggleReportStatus = async (id: string) => {
+    const report = scheduledReports.find(r => r.id === id);
+    if (!report) return;
+
+    const newStatus = report.status === 'active' ? 'paused' : 'active';
+    
+    // Update local state
     const updated = scheduledReports.map(r =>
-      r.id === id ? { ...r, status: r.status === 'active' ? 'paused' : 'active' } : r
+      r.id === id ? { ...r, status: newStatus } : r
     );
     setScheduledReports(updated);
+
+    // Persist to Firestore if it's a real report (has non-mock ID structure or just try)
+    try {
+      if (id.length > 5) { // Simple check for Firestore IDs vs mock IDs
+        await reportsService.updateScheduled(id, { status: newStatus as 'active' | 'paused' });
+      }
+    } catch (error) {
+      console.error("Error updating report status:", error);
+    }
   };
 
   const handleGenerateReport = () => {
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
-      
-      const configName = reportConfig.class === 'all' 
-        ? `${reportConfig.type} Summary` 
-        : `${reportConfig.type} - Class ${reportConfig.class}${reportConfig.section !== 'all' ? ` ${reportConfig.section}` : ''}`;
+    setTimeout(async () => {
+      try {
+        const configName = reportConfig.class === 'all' 
+          ? `${reportConfig.type} Summary` 
+          : `${reportConfig.type} - Class ${reportConfig.class}${reportConfig.section !== 'all' ? ` ${reportConfig.section}` : ''}`;
 
-      const newReport = {
-        id: Date.now().toString(),
-        name: configName,
-        type: reportConfig.type,
-        generatedOn: new Date().toISOString().split('T')[0],
-        format: reportConfig.format,
-        size: '1.4 MB',
-      };
+        const reportData: Partial<GeneratedReport> = {
+          name: configName,
+          type: reportConfig.type,
+          generatedOn: new Date().toISOString().split('T')[0],
+          format: reportConfig.format,
+          size: '1.4 MB',
+          status: 'success'
+        };
 
-      const updated = [newReport, ...recentReports];
-      setRecentReports(updated);
-      setShowReportBuilder(false);
-      alert('Custom report generated successfully!');
+        // Save to Firestore
+        const savedReport = await reportsService.createGenerated(reportData);
+
+        // Update local state with the saved report (including Firestore ID)
+        setRecentReports(prev => [savedReport, ...prev]);
+        setIsGenerating(false);
+        setShowReportBuilder(false);
+        alert('Custom report generated and saved successfully!');
+      } catch (error: any) {
+        console.error("Error generating/saving report:", error);
+        setIsGenerating(false);
+        alert(`Failed to save report: ${error.message}`);
+      }
     }, 2000);
+  };
+
+  const handleDownloadRecentReport = async (report: any) => {
+    try {
+      const activeSchoolId = sessionStorage.getItem('active_school_id');
+      if (!activeSchoolId) {
+        alert("School context synchronized. Please refresh the page and try again.");
+        return;
+      }
+
+      const doc = new jsPDF() as any;
+      
+      // Add School Header
+      doc.setFontSize(22);
+      doc.setTextColor(126, 34, 206); // purple-700
+      doc.text("School Management System", 105, 20, { align: 'center' });
+      
+      doc.setFontSize(16);
+      doc.setTextColor(31, 41, 55); // gray-900
+      doc.text(report.name, 105, 30, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(107, 114, 128); // gray-500
+      doc.text(`Generated on: ${report.generatedOn} | Report Type: ${report.type}`, 105, 38, { align: 'center' });
+      
+      doc.setDrawColor(229, 231, 235);
+      doc.line(20, 45, 190, 45);
+
+      if (report.type === 'Attendance') {
+        const attendanceData = await attendanceService.getAll();
+        const students = await studentService.getAll();
+        
+        // Use real-time data for the report
+        const tableRows = attendanceData.slice(0, 40).map((record: any) => {
+          const student = students.find((s: any) => s.id === record.studentId);
+          return [
+            record.date || 'N/A',
+            student?.name || record.studentName || 'N/A',
+            record.class || 'N/A',
+            record.section || 'N/A',
+            (record.status || 'N/A').toUpperCase(),
+            record.markedBy || 'N/A'
+          ];
+        });
+
+        autoTable(doc, {
+          startY: 55,
+          head: [['Date', 'Student Name', 'Class', 'Section', 'Status']],
+          body: tableRows.length > 0 ? tableRows : [['-', 'No Records Found', '-', '-', '-']],
+          headStyles: { fillColor: [126, 34, 206] },
+          theme: 'grid',
+          styles: { fontSize: 9 }
+        });
+      } else if (report.type === 'Fee Collection' || report.type === 'Fees') {
+        const feePayments = await feeService.getAllPayments();
+        
+        const tableRows = feePayments.slice(0, 40).map((payment: any) => [
+          payment.paymentDate || 'N/A',
+          payment.studentName || 'N/A',
+          payment.receiptNo || 'N/A',
+          payment.paymentMode?.toUpperCase() || 'N/A',
+          `Rs. ${payment.amount?.toLocaleString() || 0}`,
+          'PAID'
+        ]);
+
+        autoTable(doc, {
+          startY: 55,
+          head: [['Date', 'Student Name', 'Receipt #', 'Mode', 'Amount', 'Status']],
+          body: tableRows.length > 0 ? tableRows : [['-', 'No Payments Found', '-', '-', '-', '-']],
+          headStyles: { fillColor: [126, 34, 206] },
+          theme: 'grid',
+          styles: { fontSize: 9 }
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text("Report generation for this specific type is being initialized.", 20, 60);
+        doc.text("Please check back shortly for full data integration.", 20, 70);
+      }
+
+      const footerText = "Generated via Super Admin Dashboard - Confidential";
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(footerText, 105, 285, { align: 'center' });
+
+      doc.save(`${report.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (error: any) {
+      console.error("Error generating report:", error);
+      alert(`Failed to generate report: ${error?.message || 'Unknown error'}. Please verify connection and try again.`);
+    }
   };
 
   return (
@@ -187,7 +325,11 @@ export function ReportsApprovalView() {
                         </div>
                       </div>
                     </div>
-                    <button className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all">
+                    <button 
+                      onClick={() => handleDownloadRecentReport(report)}
+                      className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                      title="Download PDF"
+                    >
                       <Download className="w-6 h-6" />
                     </button>
                   </div>

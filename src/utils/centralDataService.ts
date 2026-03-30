@@ -102,6 +102,32 @@ export interface Teacher {
   updated_at?: string;
 }
 
+export interface GeneratedReport {
+  id: string;
+  school_id?: string;
+  name: string;
+  type: string;
+  generatedOn: string;
+  format: string; // PDF, CSV etc
+  size: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScheduledReport {
+  id: string;
+  school_id?: string;
+  name: string;
+  type: string;
+  frequency: string;
+  recipients: string;
+  nextRun: string;
+  status: 'active' | 'paused';
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface SubjectMappingRecord {
   id: string;
   school_id: string;
@@ -409,6 +435,7 @@ import {
   admissionService,
   subjectMappingService,
   studentNoteService,
+  reportsService,
   StudentNote,
 } from './firestoreService';
 
@@ -442,6 +469,7 @@ export {
   admissionService,
   subjectMappingService,
   studentNoteService,
+  reportsService,
 };
 
 export type { StudentNote };

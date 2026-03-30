@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { INDIAN_STATES, STATE_CITY_MAPPING } from '../data/locationData';
@@ -179,8 +181,19 @@ interface RecoveryLog {
 }
 
 export function SuperAdminDashboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
+
   const { user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewType>(initialView);
+
+  // Sync view state to URL
+  useEffect(() => {
+    if (searchParams.get('view') !== currentView) {
+      setSearchParams({ view: currentView });
+    }
+  }, [currentView, searchParams, setSearchParams]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [isEditingSchool, setIsEditingSchool] = useState(false);

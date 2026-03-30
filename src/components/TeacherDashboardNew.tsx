@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+
 import { useAuth } from '../contexts/AuthContext';
 import {
   Users,
@@ -93,9 +95,20 @@ interface LessonLog {
 }
 
 export function TeacherDashboardNew() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
+  
   const { user, logout } = useAuth();
   const { uniqueClasses } = useAcademicClasses();
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewType>(initialView);
+
+  // Sync view state to URL
+  useEffect(() => {
+    if (searchParams.get('view') !== currentView) {
+      setSearchParams({ view: currentView });
+    }
+  }, [currentView, searchParams, setSearchParams]);
+
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [attendanceDate, setAttendanceDate] = useState(
     new Date().toISOString().split('T')[0]
@@ -1440,6 +1453,13 @@ export function TeacherDashboardNew() {
       });
 
       setLessonLogs((prevLessons) => [lesson, ...prevLessons]);
+
+      // Update dashboard stats immediately if lesson is for today
+      const today = new Date().toISOString().split('T')[0];
+      if (lesson.date === today) {
+        setDashboardWeekLessons(prev => [lesson, ...prev]);
+      }
+
       alert('✅ Lesson logged successfully!');
 
       // Reset form
