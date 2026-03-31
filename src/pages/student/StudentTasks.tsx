@@ -84,9 +84,13 @@ export function SchedulePage() {
 
   // Dynamic data from Firestore (async)
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    CalendarService.getAll().then(setCalendarEvents);
+    setIsLoading(true);
+    CalendarService.getAll()
+      .then(setCalendarEvents)
+      .finally(() => setIsLoading(false));
   }, []);
 
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
@@ -173,7 +177,7 @@ export function SchedulePage() {
       .filter(e => activeFilter === "all" || e.type === activeFilter)
       .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || "").localeCompare(b.startTime || ""))
       .slice(0, 8);
-  }, [today, activeFilter]);
+  }, [today, activeFilter, calendarEvents]);
 
   // ── Dynamic week stats ───────────────────────────────────────────────────
   const weekStats = useMemo(() => {
@@ -184,7 +188,7 @@ export function SchedulePage() {
       exams: eventsThisWeek.filter(e => e.type === "exam").length,
       events: eventsThisWeek.filter(e => e.type === "event").length,
     };
-  }, [weekDates]);
+  }, [weekDates, calendarEvents]);
 
   // ── Calendar day grid ────────────────────────────────────────────────────
   const calendarDays = useMemo(() => {

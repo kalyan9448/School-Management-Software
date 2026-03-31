@@ -18,6 +18,7 @@ import {
   assignmentService,
   assignmentSubmissionService,
   examResultService,
+  examService,
   notificationService,
   lessonService,
   quizResultService 
@@ -168,29 +169,93 @@ export const TodaysClasses = {
 };
 
 // ─── Pending Tasks ───────────────────────────────────────────────────────────
+
+/**
+ * Build pending tasks dynamically from:
+ *  1. Incomplete homework topics (flashcards or quiz not done)
+ *  2. Active assignments with due dates
+ */
 export const PendingTasks = {
   getAll: async () => {
-    return getData<any[]>("pending_tasks", []);
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return [];
+
+    const tasks: any[] = [];
+    let nextId = 1;
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const SUBJECT_ICONS: Record<string, string> = {
+      mathematics: "calculator", math: "calculator", maths: "calculator",
+      physics: "atom", chemistry: "beaker", biology: "leaf",
+      english: "book-open", history: "scroll", science: "atom",
+    };
+    const SUBJECT_COLORS: Record<string, string> = {
+      mathematics: "bg-blue-500", math: "bg-blue-500", maths: "bg-blue-500",
+      physics: "bg-purple-500", chemistry: "bg-red-500", biology: "bg-emerald-500",
+      english: "bg-green-500", history: "bg-amber-500", science: "bg-indigo-500",
+    };
+    const getIcon = (subj: string) => SUBJECT_ICONS[subj.toLowerCase()] || "book-open";
+    const getColor = (subj: string) => SUBJECT_COLORS[subj.toLowerCase()] || "bg-gray-500";
+
+    try {
+      // 1. Incomplete homework → pending tasks
+      const hwTopics = await HomeworkService.getAll();
+      for (const hw of hwTopics) {
+        if (hw.status === "completed") continue;
+
+        const parts: string[] = [];
+        if (!hw.flashcardsCompleted) parts.push("Flashcards");
+        if (!hw.questionsCompleted) parts.push("Quiz");
+        if (parts.length === 0) continue;
+
+        tasks.push({
+          id: nextId++,
+          title: `${hw.subject}: ${parts.join(" & ")} — ${hw.topic}`,
+          icon: getIcon(hw.subject),
+          color: getColor(hw.subject),
+          estimatedTime: parts.length === 2 ? "20 min" : "10 min",
+          dueDate: "Today",
+          priority: hw.flashcardProgress === 0 && hw.questionsProgress === 0 ? "high" : "medium",
+          type: "homework",
+          topicId: hw.id,
+        });
+      }
+
+      // 2. Active assignments with due dates
+      const assignments = await assignmentService.getByClass(profile.grade, profile.section);
+      for (const a of assignments) {
+        if (a.status !== "active") continue;
+        const isDueToday = a.dueDate === todayStr;
+        const isPastDue = a.dueDate < todayStr;
+        const dueLabel = isDueToday ? "Today" : isPastDue ? "Overdue" : a.dueDate;
+
+        tasks.push({
+          id: nextId++,
+          title: `${a.subject}: ${a.title}`,
+          icon: "pen-tool",
+          color: isPastDue ? "bg-red-500" : "bg-amber-500",
+          estimatedTime: `${a.totalMarks} marks`,
+          dueDate: dueLabel,
+          priority: isDueToday || isPastDue ? "high" : "medium",
+          type: "assignment",
+          assignmentId: a.id,
+        });
+      }
+    } catch (error) {
+      console.error("[PendingTasks] Error fetching tasks:", error);
+    }
+
+    return tasks;
   },
   complete: async (taskId: number | string) => {
-    const tasks = await PendingTasks.getAll();
-    const updated = tasks.filter((t: any) => t.id !== taskId);
-    await saveData("pending_tasks", updated);
-    const completion = await getData<Record<string, boolean>>("task_completion", {});
-    completion[String(taskId)] = true;
-    await saveData("task_completion", completion);
-    return updated;
+    // Tasks are derived dynamically — completion is tracked per-source
+    return PendingTasks.getAll();
   },
   isCompleted: async (taskId: number | string) => {
-    const completion = await getData<Record<string, boolean>>("task_completion", {});
-    return !!completion[String(taskId)];
+    return false;
   },
   add: async (task: any) => {
-    const tasks = await PendingTasks.getAll();
-    const newTask = { ...task, id: Date.now() };
-    const updated = [...tasks, newTask];
-    await saveData("pending_tasks", updated);
-    return updated;
+    return PendingTasks.getAll();
   },
 };
 
@@ -212,27 +277,55 @@ export const LearningGoals = {
 // ─── Performance Data (monthly scores chart) ─────────────────────────────────
 export const PerformanceData = {
   getAll: async () => {
-    const profile = await StudentProfile.get();
-    if (profile.id) {
-      try {
-        // Fetch all exam results for the student
-        const results = await examResultService.getByStudent(profile.id);
-        if (results.length > 0) {
-          // Map to month-based format for the LineChart
-          // Since we might not have a full year's data, we'll extract months from any date info 
-          // or just show the last N results as months if dates are missing.
-          const months = ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
-          return results.map((r, i) => ({
-            month: months[i % 12],
-            score: r.percentage
-          }));
-        }
-      } catch (err) {
-        console.warn("Failed to fetch real performance data:", err);
+    const user = auth.currentUser || await waitForAuth();
+    if (!user) return [];
+
+    try {
+      // Fetch quiz results from the real quiz_results collection
+      const quizResults = await quizResultService.getByStudent(user.uid);
+
+      // Also try exam results
+      const profile = await StudentProfile.get();
+      let examResults: any[] = [];
+      if (profile.id) {
+        try { examResults = await examResultService.getByStudent(profile.id); } catch {}
       }
+
+      // Combine both sources into chronological performance entries
+      const allEntries: { date: string; score: number; label: string }[] = [];
+
+      for (const qr of quizResults) {
+        allEntries.push({
+          date: qr.completed_at || qr.created_at || "",
+          score: qr.accuracy ?? Math.round((qr.correct / (qr.total || 1)) * 100),
+          label: qr.subject,
+        });
+      }
+
+      for (const er of examResults) {
+        allEntries.push({
+          date: er.gradedAt || er.created_at || "",
+          score: er.percentage,
+          label: "Exam",
+        });
+      }
+
+      if (allEntries.length === 0) return [];
+
+      // Sort chronologically and map to chart-friendly format
+      allEntries.sort((a, b) => a.date.localeCompare(b.date));
+
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return allEntries.map((e, i) => {
+        const d = new Date(e.date);
+        const monthLabel = isNaN(d.getTime()) ? `#${i + 1}` : `${months[d.getMonth()]} ${d.getDate()}`;
+        return { month: monthLabel, score: e.score, subject: e.label };
+      });
+    } catch (err) {
+      console.warn("Failed to fetch performance data:", err);
     }
 
-    return getData<any[]>("performance_data", []);
+    return [];
   },
   addMonth: async (month: string, score: number) => {
     const data = await PerformanceData.getAll();
@@ -248,65 +341,74 @@ export const PerformanceData = {
 // ─── Subject Performance ─────────────────────────────────────────────────────
 export const SubjectPerformance = {
   getAll: async () => {
-    const profile = await StudentProfile.get();
-    if (profile.id) {
-      try {
-        const [results, submissions] = await Promise.all([
-          examResultService.getByStudent(profile.id),
-          assignmentSubmissionService.getByStudent(profile.id)
-        ]);
+    const user = auth.currentUser || await waitForAuth();
+    if (!user) return [];
 
-        if (results.length > 0 || submissions.length > 0) {
-          // Aggregate by subject
-          const subjectMap: Record<string, { scores: number[], color: string }> = {};
-          
-          // Helper to get consistent colors
-          const getSubjectColor = (subject: string): string => {
-            const low = subject.toLowerCase();
-            if (low.includes('math')) return 'bg-blue-500';
-            if (low.includes('sci')) return 'bg-emerald-500';
-            if (low.includes('eng')) return 'bg-indigo-500';
-            return 'bg-amber-500';
-          };
+    const SUBJECT_COLORS: Record<string, string> = {
+      mathematics: "bg-blue-500", math: "bg-blue-500", maths: "bg-blue-500",
+      physics: "bg-purple-500", chemistry: "bg-red-500", biology: "bg-emerald-500",
+      english: "bg-green-500", history: "bg-amber-500", science: "bg-indigo-500",
+    };
+    const getColor = (subj: string) => SUBJECT_COLORS[subj.toLowerCase()] || "bg-gray-500";
 
-          // Process Exam Results
-          results.forEach(r => {
-            // Note: Exam results might not have subject directly if they reference an Exam doc.
-            // For now, let's assume 'General' if subject info is deep or missing in this join.
-            // (In a real app, we'd join with the Exam doc here)
-            const subj = 'Exams'; 
-            if (!subjectMap[subj]) subjectMap[subj] = { scores: [], color: 'bg-blue-600' };
-            subjectMap[subj].scores.push(r.percentage);
-          });
+    try {
+      // Primary: quiz_results collection (has real subject data)
+      const quizResults = await quizResultService.getByStudent(user.uid);
 
-          // Process Assignments
-          // Note: Submissions also need to be joined with Assignment to get the subject.
-          // For now, let's group by 'Assignments' if subject isn't immediate.
-          submissions.filter(s => s.status === 'graded').forEach(s => {
-             const subj = 'Assignments';
-             if (!subjectMap[subj]) subjectMap[subj] = { scores: [], color: 'bg-indigo-600' };
-             if (s.marksObtained !== undefined && (s as any).totalMarks) {
-               subjectMap[subj].scores.push(Math.round((s.marksObtained / (s as any).totalMarks) * 100));
-             }
-          });
+      // Group by subject
+      const subjectMap: Record<string, { scores: number[] }> = {};
+      for (const qr of quizResults) {
+        const subj = qr.subject || "General";
+        if (!subjectMap[subj]) subjectMap[subj] = { scores: [] };
+        subjectMap[subj].scores.push(qr.accuracy ?? Math.round((qr.correct / (qr.total || 1)) * 100));
+      }
 
-          if (Object.keys(subjectMap).length > 0) {
-            return Object.entries(subjectMap).map(([subject, data]) => ({
-              subject,
-              score: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
-              trend: "up", // Default to up for new recordings
-              color: data.color,
-              data: data.scores.slice(-5), // Last 5 scores for the mini sparkline
-              icon: "book-open"
-            }));
+      // Also try exam results
+      const profile = await StudentProfile.get();
+      if (profile.id) {
+        try {
+          const examResults = await examResultService.getByStudent(profile.id);
+          for (const er of examResults) {
+            const subj = "Exams";
+            if (!subjectMap[subj]) subjectMap[subj] = { scores: [] };
+            subjectMap[subj].scores.push(er.percentage);
+          }
+        } catch {}
+      }
+
+      // Also incorporate homework progress
+      const hwTopics = await HomeworkService.getAll();
+      for (const hw of hwTopics) {
+        if (hw.questionsCompleted && hw.accuracy !== null) {
+          const subj = hw.subject;
+          if (!subjectMap[subj]) subjectMap[subj] = { scores: [] };
+          // Only add if not already counted (quiz_results should have it, but just in case)
+          if (quizResults.length === 0) {
+            subjectMap[subj].scores.push(hw.accuracy);
           }
         }
-      } catch (err) {
-        console.warn("Failed to aggregate subject performance:", err);
       }
+
+      if (Object.keys(subjectMap).length > 0) {
+        return Object.entries(subjectMap).map(([subject, data]) => {
+          const avg = Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length);
+          const lastTwo = data.scores.slice(-2);
+          const trend = lastTwo.length >= 2 ? (lastTwo[1] > lastTwo[0] ? "up" : lastTwo[1] < lastTwo[0] ? "down" : "same") : "same";
+          return {
+            subject,
+            score: avg,
+            trend,
+            color: getColor(subject),
+            data: data.scores.slice(-5),
+            icon: "book-open",
+          };
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to aggregate subject performance:", err);
     }
 
-    return getData<any[]>("subject_performance", []);
+    return [];
   },
   updateScore: async (subject: string, newScore: number) => {
     const performance = await SubjectPerformance.getAll();
@@ -325,7 +427,42 @@ export const SubjectPerformance = {
 // ─── Skills Data (radar chart) ───────────────────────────────────────────────
 export const SkillsData = {
   getAll: async () => {
-    return getData<any[]>("skills_data", []);
+    const user = auth.currentUser || await waitForAuth();
+    if (!user) return [];
+
+    try {
+      const quizResults = await quizResultService.getByStudent(user.uid);
+      const hwTopics = await HomeworkService.getAll();
+
+      if (quizResults.length === 0 && hwTopics.length === 0) return [];
+
+      // Derive skill metrics from quiz + homework data
+      const totalQuizzes = quizResults.length;
+      const totalHw = hwTopics.length;
+      const completedHw = hwTopics.filter(h => h.status === "completed").length;
+      const avgAccuracy = totalQuizzes > 0
+        ? Math.round(quizResults.reduce((s, r) => s + (r.accuracy ?? 0), 0) / totalQuizzes)
+        : 0;
+      const flashcardAvg = totalHw > 0
+        ? Math.round(hwTopics.reduce((s, h) => s + (h.flashcardProgress || 0), 0) / totalHw)
+        : 0;
+      const quizCompletionRate = totalHw > 0
+        ? Math.round((hwTopics.filter(h => h.questionsCompleted).length / totalHw) * 100)
+        : 0;
+
+      return [
+        { skill: "Quiz Accuracy", current: avgAccuracy, fullMark: 100, expected: 70 },
+        { skill: "Flashcard Mastery", current: flashcardAvg, fullMark: 100, expected: 80 },
+        { skill: "Completion Rate", current: totalHw > 0 ? Math.round((completedHw / totalHw) * 100) : 0, fullMark: 100, expected: 75 },
+        { skill: "Consistency", current: Math.min(totalQuizzes * 20, 100), fullMark: 100, expected: 60 },
+        { skill: "Quiz Completion", current: quizCompletionRate, fullMark: 100, expected: 70 },
+        { skill: "Engagement", current: Math.min((totalQuizzes + completedHw) * 15, 100), fullMark: 100, expected: 50 },
+      ];
+    } catch (err) {
+      console.warn("Failed to build skills data:", err);
+    }
+
+    return [];
   },
   update: async (skill: string, current: number) => {
     const skills = await SkillsData.getAll();
@@ -356,21 +493,31 @@ export const TopicMastery = {
 // ─── Quiz Trends ─────────────────────────────────────────────────────────────
 export const QuizTrends = {
   getAll: async () => {
+    const user = auth.currentUser || await waitForAuth();
+    if (!user) return [];
+
     try {
-      const results = await QuizService.getResults();
-      if (results.length > 0) {
-        // Group by week (simple grouping for now: last 4 results as 'Week 1', 'Week 2' etc.)
-        return results.slice(-4).reverse().map((r, i) => ({
-          week: `Week ${i + 1}`,
-          average: r.percentage,
-          completion: 100 // Assume 100% completion for a finished quiz
+      // Fetch from the real quiz_results collection
+      const quizResults = await quizResultService.getByStudent(user.uid);
+      if (quizResults.length > 0) {
+        // Sort oldest first for charting
+        const sorted = [...quizResults].sort((a, b) =>
+          (a.completed_at || "").localeCompare(b.completed_at || "")
+        );
+
+        return sorted.map((r, i) => ({
+          week: r.subject ? `${r.subject}` : `Quiz ${i + 1}`,
+          average: r.accuracy ?? Math.round((r.correct / (r.total || 1)) * 100),
+          completion: 100,
+          topic: r.topic,
+          date: r.completed_at,
         }));
       }
     } catch (err) {
-      console.warn("Failed to fetch real quiz trends:", err);
+      console.warn("Failed to fetch quiz trends:", err);
     }
 
-    return getData<any[]>("quiz_trends", []);
+    return [];
   },
   addWeek: async (week: string, average: number, completion: number) => {
     const trends = await QuizTrends.getAll();
@@ -730,32 +877,128 @@ export const Flashcards = {
 };
 
 // ─── Calendar Events ─────────────────────────────────────────────────────────
+
+/**
+ * Build CalendarEvent objects from real Firestore collections:
+ *   timetable  → recurring "class" events expanded for ±30 days
+ *   lessons    → "homework" events on the date the teacher logged them
+ *   exams      → "exam" events
+ *   assignments→ "assignment" events (placed on dueDate)
+ */
 export const CalendarService = {
-  getAll: async (): Promise<CalendarEvent[]> => getData<CalendarEvent[]>("calendar_events", []),
+  getAll: async (): Promise<CalendarEvent[]> => {
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return [];
+
+    const events: CalendarEvent[] = [];
+    let nextId = 1;
+
+    const SUBJECT_COLORS: Record<string, string> = {
+      mathematics: "#3b82f6", math: "#3b82f6", maths: "#3b82f6",
+      physics: "#a855f7", chemistry: "#ef4444",
+      biology: "#10b981", science: "#10b981",
+      english: "#22c55e", history: "#f59e0b",
+      geography: "#06b6d4", hindi: "#ec4899",
+      computer: "#6366f1", default: "#64748b",
+    };
+    const getColor = (subj: string) =>
+      SUBJECT_COLORS[subj.toLowerCase()] || SUBJECT_COLORS.default;
+
+    try {
+      // ── 1. Timetable → recurring class events (±30 days from today) ──────
+      const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const slots = await timetableService.getByClass(profile.grade, profile.section);
+      const now = new Date();
+      const rangeStart = new Date(now); rangeStart.setDate(now.getDate() - 30);
+      const rangeEnd = new Date(now); rangeEnd.setDate(now.getDate() + 30);
+
+      for (const d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
+        const dayName = DAY_NAMES[d.getDay()];
+        const dateStr = d.toISOString().split("T")[0];
+        for (const slot of slots) {
+          if (slot.day === dayName) {
+            events.push({
+              id: nextId++,
+              title: `${slot.subject} Class`,
+              subject: slot.subject,
+              type: "class",
+              date: dateStr,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              teacher: slot.teacherName,
+              location: slot.room || undefined,
+              description: `${slot.subject} class with ${slot.teacherName}`,
+              color: getColor(slot.subject),
+            });
+          }
+        }
+      }
+
+      // ── 2. Lessons → homework events ─────────────────────────────────────
+      const lessons = await lessonService.getByClass(profile.grade, profile.section);
+      for (const lesson of lessons) {
+        events.push({
+          id: nextId++,
+          title: `${lesson.subject}: ${lesson.topic}`,
+          subject: lesson.subject,
+          type: "homework",
+          date: lesson.date,
+          teacher: lesson.teacherName,
+          description: lesson.description || lesson.objectives?.join(", ") || lesson.topic,
+          color: getColor(lesson.subject),
+        });
+      }
+
+      // ── 3. Exams ─────────────────────────────────────────────────────────
+      const exams = await examService.getByClass(profile.grade, profile.section);
+      for (const exam of exams) {
+        events.push({
+          id: nextId++,
+          title: `${exam.type.replace("-", " ").toUpperCase()}: ${exam.subject} — ${exam.name}`,
+          subject: exam.subject,
+          type: "exam",
+          date: exam.date,
+          description: exam.syllabus || `${exam.name} (${exam.duration} min, ${exam.totalMarks} marks)`,
+          color: "#ef4444",
+          priority: "high",
+        });
+      }
+
+      // ── 4. Assignments ───────────────────────────────────────────────────
+      const assignments = await assignmentService.getByClass(profile.grade, profile.section);
+      for (const a of assignments) {
+        events.push({
+          id: nextId++,
+          title: `${a.subject}: ${a.title}`,
+          subject: a.subject,
+          type: "assignment",
+          date: a.dueDate,
+          description: a.description || a.title,
+          color: "#f59e0b",
+          priority: a.status === "active" ? "medium" : "low",
+        });
+      }
+    } catch (error) {
+      console.error("[CalendarService] Error fetching calendar data:", error);
+    }
+
+    return events;
+  },
+
   getByDate: async (date: string): Promise<CalendarEvent[]> => {
     const all = await CalendarService.getAll();
     return all.filter(e => e.date === date);
   },
   toggleCompleted: async (eventId: number): Promise<CalendarEvent[]> => {
-    const events = await CalendarService.getAll();
-    const updated = events.map(e =>
-      e.id === eventId ? { ...e, completed: !e.completed } : e
-    );
-    await saveData("calendar_events", updated);
-    return updated;
+    // Toggling completion of dynamic events is not persisted for Firestore-sourced events
+    return CalendarService.getAll();
   },
   add: async (event: Omit<CalendarEvent, "id">): Promise<CalendarEvent[]> => {
-    const events = await CalendarService.getAll();
-    const newEvent = { ...event, id: Date.now() };
-    const updated = [...events, newEvent];
-    await saveData("calendar_events", updated);
-    return updated;
+    // Custom events could be saved to student_portal — for now just refresh
+    return CalendarService.getAll();
   },
   delete: async (eventId: number): Promise<CalendarEvent[]> => {
-    const events = await CalendarService.getAll();
-    const updated = events.filter(e => e.id !== eventId);
-    await saveData("calendar_events", updated);
-    return updated;
+    return CalendarService.getAll();
   },
 };
 

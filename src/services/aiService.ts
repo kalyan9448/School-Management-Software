@@ -78,7 +78,8 @@ export const aiService = {
      */
     generateFlashcards: async (subject: string, topic: string, studentLevel: string = "Grade 10", count: number = 10): Promise<any[]> => {
         const prompt = `You are an expert ${subject} teacher specialized in pedagogical learning for ${studentLevel} students. 
-        Create exactly ${count} flashcards for the topic: "${topic}".
+        Create between 5 and ${count} flashcards for the topic: "${topic}".
+        You MUST generate at least 5 flashcards. Aim for ${count} if the topic has enough breadth.
         
         Follow these pedagogical principles:
         1. Start with fundamental definitions.
@@ -91,6 +92,7 @@ export const aiService = {
         - "back": The concise answer or explanation.
         - "category": A short category label (e.g., "Definition", "Concept", "Application", "Formula").
         
+        IMPORTANT: You MUST return at least 5 flashcards. Do not return fewer than 5.
         Do not include any formatting markdown (like \`\`\`json) or extra text. Pure valid JSON only.`;
 
         const messages: ChatMessage[] = [
@@ -101,14 +103,16 @@ export const aiService = {
         try {
             const responseText = await callAI(messages, DEFAULT_MODEL, true);
             const parsed = JSON.parse(responseText);
-            return parsed.flashcards || [];
+            const cards = parsed.flashcards || [];
+            console.log('[aiService] Parsed flashcards count:', cards.length);
+            if (cards.length < 5) {
+                console.warn('[aiService] Too few flashcards from AI, using fallback');
+                return getFallbackFlashcards(subject, topic);
+            }
+            return cards;
         } catch (error) {
             console.error("Failed to parse flashcards:", error);
-            // Fallback for demo if api key is missing
-            return [
-                 { id: 1, front: `What is the core concept of ${topic}?`, back: `Placeholder for ${topic} core concept.`, category: "Concept" },
-                 { id: 2, front: `How is ${topic} applied?`, back: `Placeholder for ${topic} application.`, category: "Application" }
-            ];
+            return getFallbackFlashcards(subject, topic);
         }
     },
 
@@ -245,6 +249,22 @@ function shuffleQuestionOptions(q: any): any {
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return { ...q, options: shuffled, correctAnswer: shuffled.indexOf(correctText) };
+}
+
+/**
+ * Fallback flashcards when AI fails — always returns at least 5 cards.
+ */
+function getFallbackFlashcards(subject: string, topic: string): any[] {
+    const templates = [
+        { front: `What is the definition of ${topic}?`, back: `${topic} is a key concept in ${subject}. Review your textbook for the precise definition.`, category: "Definition" },
+        { front: `What are the main principles of ${topic}?`, back: `The core principles of ${topic} form the foundation for understanding this area of ${subject}.`, category: "Concept" },
+        { front: `How is ${topic} applied in real life?`, back: `${topic} has many practical applications in everyday scenarios related to ${subject}.`, category: "Application" },
+        { front: `What is a common formula or rule associated with ${topic}?`, back: `Key formulas and rules for ${topic} can be found in your ${subject} reference material.`, category: "Formula" },
+        { front: `What are common mistakes students make with ${topic}?`, back: `A frequent mistake is confusing related concepts. Always read the question carefully when dealing with ${topic}.`, category: "Common Mistakes" },
+        { front: `How does ${topic} relate to other topics in ${subject}?`, back: `${topic} connects to several other areas in ${subject}. Understanding these relationships deepens your mastery.`, category: "Connections" },
+        { front: `What is the historical significance of ${topic}?`, back: `${topic} has played an important role in the development of ${subject} as a field.`, category: "History" },
+    ];
+    return templates.map((t, i) => ({ ...t, id: i + 1 }));
 }
 
 function getFallbackQuiz(subject: string, topic: string): any[] {

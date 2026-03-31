@@ -338,7 +338,7 @@ export function Dashboard() {
               <div className="space-y-2 flex-1">
                 {filteredTasks && filteredTasks.length > 0 ? (
                   filteredTasks.map((task, index) => {
-                    const Icon = iconMap[task.icon];
+                    const Icon = iconMap[task.icon] || BookOpen;
                     return (
                       <motion.div
                         key={task.id}
@@ -369,7 +369,7 @@ export function Dashboard() {
                                 )}
                               </div>
                             </div>
-                            <Button size="sm" className="h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700" onClick={() => navigate("/quiz")}>
+                            <Button size="sm" className="h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700" onClick={() => navigate(task.topicId ? `/homework/${task.topicId}` : "/homework")}>
                               Start
                             </Button>
                           </div>
