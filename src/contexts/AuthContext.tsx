@@ -113,8 +113,8 @@ async function getUserFromFirestore(uid: string, email?: string): Promise<User |
             }
         }
 
-        // 3. No users doc found — check the teachers collection so a teacher who
-        //    was provisioned (added via TeachersModule) but never logged in before
+        // 3. No users doc found — check the teachers/students collection so a
+        //    teacher or student who was provisioned but never logged in before
         //    gets the correct role instead of defaulting to 'admin'.
         if (email) {
             const emailLower = email.toLowerCase().trim();
@@ -128,6 +128,19 @@ async function getUserFromFirestore(uid: string, email?: string): Promise<User |
                     name: td.name || email.split('@')[0] || 'User',
                     role: 'teacher' as UserRole,
                     school_id: td.school_id,
+                } as User;
+            }
+
+            const studentQ = query(collection(db, 'students'), where('email', '==', emailLower));
+            const studentSnap = await getDocs(studentQ);
+            if (!studentSnap.empty) {
+                const sd = studentSnap.docs[0].data();
+                return {
+                    id: uid,
+                    email: emailLower,
+                    name: sd.name || email.split('@')[0] || 'User',
+                    role: 'student' as UserRole,
+                    school_id: sd.school_id,
                 } as User;
             }
         }
@@ -167,7 +180,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getCachedUser = (): User | null => {
         try {
             const cached = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
-            return cached ? JSON.parse(cached) : null;
+            const parsed = cached ? JSON.parse(cached) : null;
+            // Restore active_school_id from cached user so firestoreService
+            // queries work immediately (before onAuthStateChanged completes).
+            if (parsed?.school_id && !sessionStorage.getItem('active_school_id')) {
+                sessionStorage.setItem('active_school_id', parsed.school_id);
+            }
+            return parsed;
         } catch {
             return null;
         }
@@ -238,40 +257,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
 
                 // 4. Fallback: If school_id is STILL missing (backend down, race
-                //    condition, etc.), try to resolve it from the schools collection.
+                //    condition, etc.), try to resolve it from the schools or students collection.
                 if (!appUser!.school_id && appUser!.role !== 'superadmin') {
                     try {
                         const emailLower = email.toLowerCase().trim();
                         const emailTrimmed = email.trim();
-                        const fields = ['email', 'principalEmail', 'principalGmail', 'principal_email'] as const;
-                        let foundSchoolId: string | null = null;
 
-                        for (const field of fields) {
-                            // Try lowercase first
-                            const q1 = query(collection(db, 'schools'), where(field, '==', emailLower));
-                            const snap1 = await getDocs(q1);
-                            if (!snap1.empty) {
-                                foundSchoolId = snap1.docs[0].id;
-                                break;
-                            }
-                            // Also try original casing
-                            if (emailTrimmed !== emailLower) {
-                                const q2 = query(collection(db, 'schools'), where(field, '==', emailTrimmed));
-                                const snap2 = await getDocs(q2);
-                                if (!snap2.empty) {
-                                    foundSchoolId = snap2.docs[0].id;
-                                    break;
+                        // For student/parent roles, check the students collection first
+                        if (appUser!.role === 'student' || appUser!.role === 'parent') {
+                            const studentQ = query(collection(db, 'students'), where('email', '==', emailLower));
+                            const studentSnap = await getDocs(studentQ);
+                            if (!studentSnap.empty) {
+                                const sd = studentSnap.docs[0].data();
+                                if (sd.school_id) {
+                                    appUser!.school_id = sd.school_id;
+                                    await saveUserToFirestore(firebaseUser.uid, appUser!);
+                                    console.log('[AuthContext] Auto-resolved school_id from students:', sd.school_id);
                                 }
                             }
                         }
 
-                        if (foundSchoolId) {
-                            appUser!.school_id = foundSchoolId;
-                            // Persist the fix to Firestore so it sticks
-                            await saveUserToFirestore(firebaseUser.uid, appUser!);
-                            console.log('[AuthContext] Auto-resolved school_id:', foundSchoolId);
-                        } else {
-                            console.warn('[AuthContext] Could not resolve school_id for', emailLower);
+                        // If still missing, check the schools collection (for admin/principal)
+                        if (!appUser!.school_id) {
+                            const fields = ['email', 'principalEmail', 'principalGmail', 'principal_email'] as const;
+                            let foundSchoolId: string | null = null;
+
+                            for (const field of fields) {
+                                const q1 = query(collection(db, 'schools'), where(field, '==', emailLower));
+                                const snap1 = await getDocs(q1);
+                                if (!snap1.empty) {
+                                    foundSchoolId = snap1.docs[0].id;
+                                    break;
+                                }
+                                if (emailTrimmed !== emailLower) {
+                                    const q2 = query(collection(db, 'schools'), where(field, '==', emailTrimmed));
+                                    const snap2 = await getDocs(q2);
+                                    if (!snap2.empty) {
+                                        foundSchoolId = snap2.docs[0].id;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (foundSchoolId) {
+                                appUser!.school_id = foundSchoolId;
+                                await saveUserToFirestore(firebaseUser.uid, appUser!);
+                                console.log('[AuthContext] Auto-resolved school_id:', foundSchoolId);
+                            } else {
+                                console.warn('[AuthContext] Could not resolve school_id for', emailLower);
+                            }
                         }
                     } catch (err) {
                         console.warn('Frontend school_id resolution failed:', err);

@@ -118,7 +118,20 @@ function getSchoolId(): string {
 
 /** Returns school_id or throws if not set. Ensures multi-tenant queries are always scoped. */
 function requireSchoolId(): string {
-    const sid = getSchoolId();
+    let sid = getSchoolId();
+    // Fallback: try restoring from cached user profile (covers new-tab / sessionStorage miss)
+    if (!sid) {
+        try {
+            const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
+            if (cached) {
+                const user = JSON.parse(cached);
+                if (user?.school_id) {
+                    sid = user.school_id;
+                    sessionStorage.setItem('active_school_id', sid!);
+                }
+            }
+        } catch { /* ignore */ }
+    }
     if (!sid) throw new Error('No active school selected. Please select a school first.');
     return sid;
 }
@@ -447,7 +460,11 @@ export const studentService = {
 
     getByEmail: async (email: string): Promise<Student | null> => {
         if (!email) return null;
-        const students = await fetchCollection<Student>('students', where('email', '==', email.trim().toLowerCase()));
+        const lowered = email.trim().toLowerCase();
+        let students = await fetchCollection<Student>('students', where('email', '==', lowered));
+        if (students.length === 0 && lowered !== email.trim()) {
+            students = await fetchCollection<Student>('students', where('email', '==', email.trim()));
+        }
         return students[0] || null;
     },
 
@@ -468,7 +485,7 @@ export const studentService = {
             motherName: student.motherName || '',
             parentPhone: student.parentPhone || '',
             parentEmail: student.parentEmail || '',
-            email: student.email || '',
+            email: (student.email || '').trim().toLowerCase(),
             parentId: student.parentId || '',
             address: student.address || '',
             admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],

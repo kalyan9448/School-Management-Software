@@ -30,6 +30,17 @@ import {
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
 
+/** Wait for Firebase Auth to resolve the current user (handles page refresh). */
+function waitForAuth(): Promise<import('firebase/auth').User | null> {
+  return new Promise((resolve) => {
+    if (auth.currentUser) return resolve(auth.currentUser);
+    const unsub = auth.onAuthStateChanged((user) => {
+      unsub();
+      resolve(user);
+    });
+  });
+}
+
 function getUid(): string {
   return auth.currentUser?.uid || "anonymous";
 }
@@ -58,7 +69,8 @@ export function initializeStudentData(_force = false): void {
 // ─── Student Profile ─────────────────────────────────────────────────────────
 export const StudentProfile = {
   get: async () => {
-    const email = auth.currentUser?.email;
+    const user = await waitForAuth();
+    const email = user?.email;
     if (email) {
       const student = await studentService.getByEmail(email);
       if (student) {

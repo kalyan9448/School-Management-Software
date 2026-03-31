@@ -38,6 +38,7 @@ import {
   HomeworkService,
 } from "@/services/student/studentDataService";
 import { useNavigate } from "react-router";
+import { useAuth } from "@/contexts/AuthContext";
 import { WelcomeBanner } from "@/components/student/modules/WelcomeBanner";
 import { NotificationCenter } from "@/components/student/NotificationCenter";
 import { UserMenu } from "@/components/student/UserMenu";
@@ -66,6 +67,7 @@ const taskTypeIcons: Record<string, any> = {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [showDueToday, setShowDueToday] = useState(true);
   const [taskCompletionState, setTaskCompletionState] = useState<Record<number, boolean>>({});
 
@@ -79,25 +81,33 @@ export function Dashboard() {
   const [quote, setQuote] = useState("");
 
   useEffect(() => {
+    // Don't fetch until auth is resolved — on refresh, auth.currentUser
+    // is null until Firebase finishes initializing.
+    if (authLoading || !user) return;
+
     (async () => {
-      const [profile, tasks, classes, lg, daily, hw, q] = await Promise.all([
-        StudentProfile.get(),
-        PendingTasks.getAll(),
-        TodaysClasses.getAll(),
-        LearningGoals.getAll(),
-        DailyTasks.getAll(),
-        HomeworkService.getAll(),
-        Quotes.getRandom(),
-      ]);
-      setStudentInfo(profile);
-      setAllPendingTasks(tasks);
-      setAllClasses(classes);
-      setGoals(lg);
-      setDailyTasksBySubject(daily);
-      setHwTopics(hw);
-      setQuote(q);
+      try {
+        const [profile, tasks, classes, lg, daily, hw, q] = await Promise.allSettled([
+          StudentProfile.get(),
+          PendingTasks.getAll(),
+          TodaysClasses.getAll(),
+          LearningGoals.getAll(),
+          DailyTasks.getAll(),
+          HomeworkService.getAll(),
+          Quotes.getRandom(),
+        ]);
+        if (profile.status === 'fulfilled') setStudentInfo(profile.value);
+        if (tasks.status === 'fulfilled') setAllPendingTasks(tasks.value);
+        if (classes.status === 'fulfilled') setAllClasses(classes.value);
+        if (lg.status === 'fulfilled') setGoals(lg.value);
+        if (daily.status === 'fulfilled') setDailyTasksBySubject(daily.value);
+        if (hw.status === 'fulfilled') setHwTopics(hw.value);
+        if (q.status === 'fulfilled') setQuote(q.value);
+      } catch (err) {
+        console.error('[StudentDashboard] Data fetch failed:', err);
+      }
     })();
-  }, []);
+  }, [user, authLoading]);
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",

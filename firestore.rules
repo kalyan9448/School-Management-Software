@@ -184,6 +184,13 @@ service cloud.firestore {
       );
     }
 
+    // Read access for ALL school members (including students and parents).
+    // Use this for collections that every school member should be able to read.
+    function canReadSchoolDataAnyMember() {
+      return isSuperAdmin()
+          || (isAnySchoolMember() && hasValidSchoolId() && isOwnSchool());
+    }
+
 
     // =========================================================================
     // STUDENT PORTAL  (per-user private storage -- completely isolated)
@@ -263,7 +270,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /classes/{classId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -276,7 +283,11 @@ service cloud.firestore {
     match /students/{studentId} {
       allow read: if isSuperAdmin() || (
         hasValidSchoolId() && isOwnSchool() &&
-        (isAdminOrAbove() || isTeacher() || (isStudent() && request.auth.uid == studentId)
+        (isAdminOrAbove() || isTeacher()
+        || (isStudent() && (
+              request.auth.uid == studentId
+              || resource.data.email == request.auth.token.email
+           ))
         // Parent can read their own children: matched by parentId or by parentEmail
         || (isParent() && (
               resource.data.parentId == request.auth.uid ||
@@ -284,6 +295,10 @@ service cloud.firestore {
            ))
         )
       );
+      // Allow any authenticated user to find their own student record by email.
+      // Needed on first login before role/school_id claims are set (chicken-and-egg).
+      allow list: if isSignedIn()
+          && resource.data.email == request.auth.token.email;
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -298,9 +313,13 @@ service cloud.firestore {
         hasValidSchoolId() && isOwnSchool() &&
         (isAdminOrAbove() || isTeacher())
       );
-      // Also allow a teacher to read their own record by email when school_id
+      // Allow a teacher to read their own record by email when school_id
       // claim is not yet available (e.g. first render after login).
       allow get: if isTeacher()
+          && resource.data.email == request.auth.token.email;
+      // Allow any authenticated user to find their own teacher record by email.
+      // Needed on first login before role/school_id claims are set.
+      allow list: if isSignedIn()
           && resource.data.email == request.auth.token.email;
 
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
@@ -334,7 +353,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /subjects/{subjectId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -367,7 +386,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /assignments/{assignmentId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
       allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -380,7 +399,7 @@ service cloud.firestore {
     match /assignment_submissions/{submissionId} {
       allow read: if isSuperAdmin() || (
         hasValidSchoolId() && isOwnSchool() &&
-        (isAdminOrAbove() || isTeacher() || (isStudent() && resource.data.studentId == request.auth.uid))
+        (isAdminOrAbove() || isTeacher() || isStudent() || isParent())
       );
       allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher() || isStudent()) && canCreateSchoolData());
       allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
@@ -392,7 +411,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /exams/{examId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -405,10 +424,7 @@ service cloud.firestore {
     match /exam_results/{resultId} {
       allow read: if isSuperAdmin() || (
         hasValidSchoolId() && isOwnSchool() &&
-        (isAdminOrAbove() || isTeacher()
-        || (isStudent() && resource.data.studentId == request.auth.uid)
-        || isParent()
-        )
+        (isAdminOrAbove() || isTeacher() || isStudent() || isParent())
       );
       allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
       allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
@@ -420,9 +436,8 @@ service cloud.firestore {
     // =========================================================================
 
     match /quizzes/{quizId} {
-      // Students need to read quizzes to take them.
-      allow read: if canReadSchoolData()
-          || (isStudent() && hasValidSchoolId() && isOwnSchool());
+      // Students and parents can read quizzes.
+      allow read: if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
       allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -455,7 +470,7 @@ service cloud.firestore {
     match /quiz_results/{resultId} {
       allow read: if isSuperAdmin() || (
         hasValidSchoolId() && isOwnSchool() &&
-        (isAdminOrAbove() || isTeacher() || (isStudent() && resource.data.studentId == request.auth.uid))
+        (isAdminOrAbove() || isTeacher() || isStudent() || isParent())
       );
       allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher() || isStudent()) && canCreateSchoolData());
       allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
@@ -467,7 +482,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /attendance/{attendanceId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canCreateSchoolData());
       allow update: if isSuperAdmin() || ((isAdminOrAbove() || isTeacher()) && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -479,7 +494,7 @@ service cloud.firestore {
 
     match /fee_payments/{paymentId} {
       allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData())
-                    || (isParent() && hasValidSchoolId() && isOwnSchool());
+                    || ((isStudent() || isParent()) && hasValidSchoolId() && isOwnSchool());
       allow create: if isSuperAdmin() || (isFinanceStaff() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isFinanceStaff() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -490,7 +505,8 @@ service cloud.firestore {
     // =========================================================================
 
     match /fee_structures/{structureId} {
-      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData());
+      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData())
+                    || ((isStudent() || isParent()) && hasValidSchoolId() && isOwnSchool());
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -501,7 +517,8 @@ service cloud.firestore {
     // =========================================================================
 
     match /fee_invoices/{invoiceId} {
-      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData());
+      allow read:   if isSuperAdmin() || (isFinanceStaff() && canReadSchoolData())
+                    || ((isStudent() || isParent()) && hasValidSchoolId() && isOwnSchool());
       allow create: if isSuperAdmin() || (isFinanceStaff() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isFinanceStaff() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -524,8 +541,7 @@ service cloud.firestore {
 
     match /announcements/{announcementId} {
       // All school members (including students and parents) can read announcements.
-      allow read: if isSignedIn() && (isSuperAdmin() || canReadSchoolData()
-          || (isAnySchoolMember() && hasValidSchoolId() && isOwnSchool()));
+      allow read: if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -559,8 +575,7 @@ service cloud.firestore {
 
     match /events/{eventId} {
       // All school members can read events (calendar, school activities).
-      allow read: if isSignedIn() && (isSuperAdmin() || canReadSchoolData()
-          || (isAnySchoolMember() && hasValidSchoolId() && isOwnSchool()));
+      allow read: if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -572,7 +587,7 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if isSuperAdmin()
-          || (hasValidSchoolId() && isOwnSchool() && (isAdminOrAbove() || isTeacher()))
+          || (hasValidSchoolId() && isOwnSchool() && (isAdminOrAbove() || isTeacher() || isStudent() || isParent()))
           || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSuperAdmin() || (isStaff() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (
@@ -587,15 +602,10 @@ service cloud.firestore {
     // =========================================================================
 
     match /timetable/{slotId} {
-      // Primary path: any school user with a valid school_id (matches school_id field
-      // injected into every query by fetchCollection).
-      // Fallback path A: teacher reads their own slots by email match — works even when
-      //   the JWT school_id claim is absent (e.g. first render before token refresh).
-      // Fallback path B: student/parent reads their class slots (school_id scoped).
-      allow read: if canReadSchoolData()
-          || (isTeacher() && resource.data.teacherId == request.auth.token.email)
-          || (isStudent() && hasValidSchoolId() && isOwnSchool())
-          || (isParent()  && hasValidSchoolId() && isOwnSchool());
+      // All school members can read timetable.
+      // Fallback: teacher reads own slots by email match when JWT school_id is absent.
+      allow read: if canReadSchoolDataAnyMember()
+          || (isTeacher() && resource.data.teacherId == request.auth.token.email);
 
       // Only admins manage the master timetable.
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
@@ -619,7 +629,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /academic_years/{yearId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
@@ -630,7 +640,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /student_enrollments/{enrollmentId} {
-      allow read:   if canReadSchoolData();
+      allow read:   if canReadSchoolDataAnyMember();
       allow create: if isSuperAdmin() || (isAdminOrAbove() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());

@@ -2,7 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { admin, verifyFirebaseToken } = require('../utils/firebaseAdmin');
 
-const db = admin.firestore();
+let _db;
+function db() {
+    if (!_db) _db = admin.firestore();
+    return _db;
+}
 
 function resolveSchoolId(req) {
 	return req.schoolId || req.firebaseUser?.school_id || null;
@@ -11,7 +15,25 @@ function resolveSchoolId(req) {
 // All routes scoped to req.schoolId (from x-school-id header)
 
 // Students
-router.get('/students', (req, res) => res.json({ students: [], schoolId: req.schoolId }));
+router.get('/students', verifyFirebaseToken, async (req, res) => {
+	try {
+		const schoolId = resolveSchoolId(req);
+		if (!schoolId) {
+			return res.status(400).json({ error: 'Missing school context' });
+		}
+
+		const studentsSnap = await db
+			.collection('students')
+			.where('school_id', '==', schoolId)
+			.get();
+
+		const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+		res.json({ students, schoolId });
+	} catch (error) {
+		console.error('[schoolAdmin] Students fetch failed:', error);
+		res.status(500).json({ error: error.message || 'Failed to load students' });
+	}
+});
 router.post('/students', (req, res) => res.json({ message: 'Create student', body: req.body, schoolId: req.schoolId }));
 router.get('/students/:id', (req, res) => res.json({ message: `Get student ${req.params.id}` }));
 router.put('/students/:id', (req, res) => res.json({ message: `Update student ${req.params.id}` }));
@@ -40,17 +62,7 @@ router.get('/admissions', verifyFirebaseToken, async (req, res) => {
 			.where('school_id', '==', schoolId)
 			.get();
 
-		let admissions = admissionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-		// Legacy fallback for instances still storing admissions in students.
-		if (admissions.length === 0) {
-			const studentsSnap = await db
-				.collection('students')
-				.where('school_id', '==', schoolId)
-				.get();
-
-			admissions = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-		}
+		const admissions = admissionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
 		res.json({ admissions, schoolId });
 	} catch (error) {
@@ -70,7 +82,7 @@ router.post('/admissions', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Admission data with at least a name is required' });
 		}
 
-		const admissionRef = db.collection('admissions').doc();
+		const admissionRef = db().collection('admissions').doc();
 		const payload = {
 			...data,
 			id: admissionRef.id,

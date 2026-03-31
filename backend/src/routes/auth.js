@@ -2,7 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { admin, verifyFirebaseToken } = require('../utils/firebaseAdmin');
 
-const db = admin.firestore();
+let _db;
+function db() {
+    if (!_db) _db = admin.firestore();
+    return _db;
+}
 
 /** Determine role from SUPERADMIN_EMAILS env var (comma-separated). */
 function resolveRole(email) {
@@ -29,13 +33,13 @@ router.post('/check-email', async (req, res) => {
         // 1. Check Firestore for a user profile with this email.
         //    Firestore queries are case-sensitive, so try exact match first,
         //    then lowercase (admins may have stored mixed-case emails).
-        let snapshot = await db.collection('users')
+        let snapshot = await db().collection('users')
             .where('email', '==', trimmed)
             .limit(1)
             .get();
 
         if (snapshot.empty && trimmed !== lowered) {
-            snapshot = await db.collection('users')
+            snapshot = await db().collection('users')
                 .where('email', '==', lowered)
                 .limit(1)
                 .get();
@@ -75,12 +79,12 @@ router.post('/check-email', async (req, res) => {
  */
 async function resolveTeacherByEmail(email) {
     const lowered = email.trim().toLowerCase();
-    let snap = await db.collection('teachers').where('email', '==', lowered).limit(1).get();
+    let snap = await db().collection('teachers').where('email', '==', lowered).limit(1).get();
     if (snap.empty) {
         // Also try original casing in case data was stored mixed-case
         const trimmed = email.trim();
         if (trimmed !== lowered) {
-            snap = await db.collection('teachers').where('email', '==', trimmed).limit(1).get();
+            snap = await db().collection('teachers').where('email', '==', trimmed).limit(1).get();
         }
     }
     if (!snap.empty) {
@@ -88,6 +92,27 @@ async function resolveTeacherByEmail(email) {
         return { isTeacher: true, school_id: td.school_id || null, name: td.name || null };
     }
     return { isTeacher: false, school_id: null, name: null };
+}
+
+/**
+ * Check the students collection for the given email and return the student's
+ * role + school_id if found. Used to correctly identify students who have not
+ * yet been assigned a /users/{uid} profile.
+ */
+async function resolveStudentByEmail(email) {
+    const lowered = email.trim().toLowerCase();
+    let snap = await db().collection('students').where('email', '==', lowered).limit(1).get();
+    if (snap.empty) {
+        const trimmed = email.trim();
+        if (trimmed !== lowered) {
+            snap = await db().collection('students').where('email', '==', trimmed).limit(1).get();
+        }
+    }
+    if (!snap.empty) {
+        const sd = snap.docs[0].data();
+        return { isStudent: true, school_id: sd.school_id || null, name: sd.name || null };
+    }
+    return { isStudent: false, school_id: null, name: null };
 }
 
 /** Robustly find a school ID by searching multiple possible principal email fields. */
@@ -99,13 +124,13 @@ async function findSchoolIdByEmail(email) {
     const fields = ['email', 'principalEmail', 'principalGmail', 'principal_email'];
     
     for (const field of fields) {
-        let q = await db.collection('schools')
+        let q = await db().collection('schools')
             .where(field, '==', trimmed)
             .limit(1)
             .get();
         
         if (q.empty && trimmed !== lowered) {
-            q = await db.collection('schools')
+            q = await db().collection('schools')
                 .where(field, '==', lowered)
                 .limit(1)
                 .get();
@@ -121,7 +146,7 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
     try {
         const { uid, email, name } = req.firebaseUser;
         const correctRole = resolveRole(email);
-        const userRef = db.collection('users').doc(uid);
+        const userRef = db().collection('users').doc(uid);
         const snap = await userRef.get();
 
         let user;
@@ -136,9 +161,9 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 user.role = 'superadmin';
             }
 
-            // Correct mis-filed teachers: if the profile was saved as 'admin'
-            // (the default fallback) but the email exists in the teachers collection,
-            // update the role to 'teacher' so the dashboard redirect is correct.
+            // Correct mis-filed teachers/students: if the profile was saved as 'admin'
+            // (the default fallback) but the email exists in the teachers or students
+            // collection, update the role so the dashboard redirect is correct.
             if (user.role === 'admin' && correctRole !== 'superadmin') {
                 const teacherInfo = await resolveTeacherByEmail(email);
                 if (teacherInfo.isTeacher) {
@@ -151,6 +176,20 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                     if (!user.name && teacherInfo.name) {
                         updates.name = teacherInfo.name;
                         user.name = teacherInfo.name;
+                    }
+                } else {
+                    const studentInfo = await resolveStudentByEmail(email);
+                    if (studentInfo.isStudent) {
+                        updates.role = 'student';
+                        user.role = 'student';
+                        if (!user.school_id && studentInfo.school_id) {
+                            updates.school_id = studentInfo.school_id;
+                            user.school_id = studentInfo.school_id;
+                        }
+                        if (!user.name && studentInfo.name) {
+                            updates.name = studentInfo.name;
+                            user.name = studentInfo.name;
+                        }
                     }
                 }
             }
@@ -177,7 +216,7 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
         } else {
             // Check if there is an orphaned user doc with this email (from frontend auto-provision)
             const lowered = email.toLowerCase().trim();
-            const existingQuery = await db.collection('users')
+            const existingQuery = await db().collection('users')
                 .where('email', 'in', [email.trim(), lowered])
                 .limit(1)
                 .get();
@@ -186,23 +225,30 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 const existingDoc = existingQuery.docs[0];
                 user = { id: uid, ...existingDoc.data() };
 
-                // Correct mis-filed teachers in orphaned docs
+                // Correct mis-filed teachers/students in orphaned docs
                 if (user.role === 'admin' && correctRole !== 'superadmin') {
                     const teacherInfo = await resolveTeacherByEmail(email);
                     if (teacherInfo.isTeacher) {
                         user.role = 'teacher';
                         if (!user.school_id && teacherInfo.school_id) user.school_id = teacherInfo.school_id;
                         if (!user.name && teacherInfo.name) user.name = teacherInfo.name;
+                    } else {
+                        const studentInfo = await resolveStudentByEmail(email);
+                        if (studentInfo.isStudent) {
+                            user.role = 'student';
+                            if (!user.school_id && studentInfo.school_id) user.school_id = studentInfo.school_id;
+                            if (!user.name && studentInfo.name) user.name = studentInfo.name;
+                        }
                     }
                 }
 
                 // If the auto-provisioned doc was also missing school_id, try finding it
-                if (!user.school_id && user.role === 'admin') {
+                if (!user.school_id && (user.role === 'admin' || user.role === 'student')) {
                     user.school_id = await findSchoolIdByEmail(email);
                 }
 
                 await userRef.set(user);
-                try { await db.collection('users').doc(existingDoc.id).delete(); } catch(e) {}
+                try { await db().collection('users').doc(existingDoc.id).delete(); } catch(e) {}
             } else {
                 // Completely new user — determine role before defaulting to 'admin'.
                 // Check teachers collection first so a provisioned teacher who
@@ -218,7 +264,14 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                         resolvedSchoolId = teacherInfo.school_id;
                         if (teacherInfo.name) resolvedName = teacherInfo.name;
                     } else {
-                        resolvedSchoolId = await findSchoolIdByEmail(email);
+                        const studentInfo = await resolveStudentByEmail(email);
+                        if (studentInfo.isStudent) {
+                            finalRole = 'student';
+                            resolvedSchoolId = studentInfo.school_id;
+                            if (studentInfo.name) resolvedName = studentInfo.name;
+                        } else {
+                            resolvedSchoolId = await findSchoolIdByEmail(email);
+                        }
                     }
                 }
 
@@ -286,9 +339,9 @@ router.delete('/user', verifyFirebaseToken, async (req, res) => {
 
     // 2. Delete Firestore /users doc(s) matching this email
     try {
-        let snap = await db.collection('users').where('email', '==', lowered).get();
+        let snap = await db().collection('users').where('email', '==', lowered).get();
         if (snap.empty) {
-            snap = await db.collection('users').where('email', '==', email.trim()).get();
+            snap = await db().collection('users').where('email', '==', email.trim()).get();
         }
         await Promise.all(snap.docs.map(d => d.ref.delete()));
     } catch (err) {
@@ -304,7 +357,7 @@ router.delete('/user', verifyFirebaseToken, async (req, res) => {
 // GET /api/auth/profile — return current user's full profile
 router.get('/profile', verifyFirebaseToken, async (req, res) => {
     try {
-        const snap = await db.collection('users').doc(req.firebaseUser.uid).get();
+        const snap = await db().collection('users').doc(req.firebaseUser.uid).get();
         if (!snap.exists) {
             return res.status(404).json({ error: 'User profile not found' });
         }

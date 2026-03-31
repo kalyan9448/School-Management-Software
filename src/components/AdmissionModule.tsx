@@ -110,11 +110,6 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     selectedFees: s.selectedFees || [],
   });
 
-  const loadLegacyAdmissionsFromStudents = async () => {
-    const firestoreStudents = await studentService.getAll();
-    setStudents(firestoreStudents.map(mapAdmissionRecord));
-  };
-
   const loadAdmissionsFromBackend = async () => {
     const response = await apiClient.get('/api/school-admin/admissions');
     const records = Array.isArray(response.data?.admissions) ? response.data.admissions : [];
@@ -222,16 +217,6 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
         await syncSchoolContext(resolvedSchoolId);
         await loadAdmissions(true);
         return;
-      }
-
-      if (error?.code === 'permission-denied' || error?.message?.includes('permissions')) {
-        try {
-          await loadLegacyAdmissionsFromStudents();
-          setServerError(null);
-          return;
-        } catch (fallbackError) {
-          console.error('Failed to load legacy admissions from students:', fallbackError);
-        }
       }
 
       setServerError(
