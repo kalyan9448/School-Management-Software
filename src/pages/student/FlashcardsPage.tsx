@@ -48,12 +48,17 @@ export function FlashcardsPage() {
     })();
   }, []);
   
+  // Route state passed from SubjectDetailPage
+  const stateSubject = location.state?.subject || "";
+  const stateTopic = location.state?.topic || "";
+  const stateGrade = location.state?.grade || "";
+
   // Find data from either classes or homework topics
-  const classItem = allClasses.find((c: any) => c.id === Number(topicId));
-  const homeworkTopic = allHomeworkTopics.find((t) => t.id === Number(topicId));
+  const classItem = allClasses.find((c: any) => String(c.id) === String(topicId));
+  const homeworkTopic = allHomeworkTopics.find((t) => String(t.id) === String(topicId));
   
-  // Use subject from classItem or homeworkTopic
-  const decodedSubject = classItem?.subject || homeworkTopic?.subject || "";
+  // Use subject from classItem, homeworkTopic, or route state
+  const decodedSubject = classItem?.subject || homeworkTopic?.subject || stateSubject || "";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -64,20 +69,24 @@ export function FlashcardsPage() {
 
   // Find the corresponding homework topic for navigation
   const currentTopic = homeworkTopic || allHomeworkTopics.find((t) => t.subject === decodedSubject);
+  
+  // Resolve the topic name: homework topic > route state > subject name
+  const resolvedTopic = currentTopic?.topic || stateTopic || decodedSubject;
+  const resolvedGrade = studentData.grade || stateGrade || "Grade 10";
 
   useEffect(() => {
     async function loadFlashcards() {
-      if (decodedSubject && currentTopic?.topic) {
+      if (decodedSubject && resolvedTopic) {
         setIsLoading(true);
         try {
           const cards = await aiService.generateFlashcards(
             decodedSubject, 
-            currentTopic.topic, 
-            studentData.grade,
+            resolvedTopic, 
+            resolvedGrade,
             10
           );
           // Add IDs to generated cards
-          const cardsWithIds = cards.map((card, index) => ({ ...card, id: index + 1 }));
+          const cardsWithIds = cards.map((card: any, index: number) => ({ ...card, id: index + 1 }));
           setFlashcards(cardsWithIds);
         } catch (error) {
           console.error("Failed to load AI flashcards", error);
@@ -89,7 +98,7 @@ export function FlashcardsPage() {
       }
     }
     loadFlashcards();
-  }, [decodedSubject, currentTopic?.topic]);
+  }, [decodedSubject, resolvedTopic]);
 
   const currentCard = flashcards[currentIndex];
   // Guard the variables since flashcards could be empty
@@ -100,17 +109,19 @@ export function FlashcardsPage() {
 
   // Save completion status when all cards are reviewed
   useEffect(() => {
-    if (allCardsReviewed && currentTopic) {
+    if (allCardsReviewed && decodedSubject) {
       (async () => {
-        await HomeworkService.updateFlashcardProgress(currentTopic.id, 100);
-        
-        if (decodedSubject) {
-          for (const id of knownCards) await FlashcardService.markMastered(decodedSubject, id);
-          for (const id of reviewCards) await FlashcardService.markViewed(decodedSubject, id);
+        // Find topic by ID or subject match
+        const matchedTopic = currentTopic || allHomeworkTopics.find((t) => t.subject === decodedSubject);
+        if (matchedTopic) {
+          await HomeworkService.updateFlashcardProgress(matchedTopic.id, 100);
         }
+        
+        for (const id of knownCards) await FlashcardService.markMastered(decodedSubject, id);
+        for (const id of reviewCards) await FlashcardService.markViewed(decodedSubject, id);
       })();
     }
-  }, [allCardsReviewed, currentTopic, knownCards.length, reviewCards.length, decodedSubject]);
+  }, [allCardsReviewed, decodedSubject, knownCards.length, reviewCards.length]);
 
   if (isLoading) {
     return (
@@ -186,14 +197,12 @@ export function FlashcardsPage() {
   // Handle navigation to topic detail page
   const handleContinueToAssessment = () => {
     if (source === 'todays_classes') {
-      console.log("Navigating back to dashboard");
       navigate("/student/dashboard");
     } else {
-      if (currentTopic) {
-        console.log("Navigating to topic:", currentTopic.id);
-        navigate(`/homework/${currentTopic.id}`);
+      const matchedTopic = currentTopic || allHomeworkTopics.find((t) => t.subject === decodedSubject);
+      if (matchedTopic) {
+        navigate(`/homework/${matchedTopic.id}`);
       } else {
-        console.log("No topic found, going back");
         navigate(-1);
       }
     }

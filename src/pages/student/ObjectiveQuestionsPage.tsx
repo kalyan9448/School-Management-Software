@@ -53,7 +53,7 @@ export function ObjectiveQuestionsPage() {
             topicDetails.subject, 
             topicDetails.topic, 
             studentData.grade,
-            10
+            5
           );
           // ensure they have IDs
           const questionsWithIds = generatedQuestions.map((q, idx) => ({...q, id: idx + 1}));
@@ -73,21 +73,30 @@ export function ObjectiveQuestionsPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [answers, setAnswers] = useState<(number | null)[]>(
-    new Array(questions.length).fill(null)
-  );
+  const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [startTime] = useState(Date.now());
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
   const [showResults, setShowResults] = useState(false);
 
+  // Sync answers array when questions load
+  useEffect(() => {
+    if (questions.length > 0) {
+      setAnswers(new Array(questions.length).fill(null));
+      setCurrentQuestionIndex(0);
+      setSelectedAnswer(null);
+      setShowExplanation(false);
+      setShowResults(false);
+    }
+  }, [questions]);
+
   const currentQuestion = questions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+  const progress = questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0;
 
   // Calculate results
-  const correctAnswers = answers.filter(
-    (ans, idx) => ans === questions[idx].correctAnswer
-  ).length;
-  const accuracy = Math.round((correctAnswers / questions.length) * 100);
+  const correctAnswers = questions.length > 0 ? answers.filter(
+    (ans, idx) => idx < questions.length && ans === questions[idx]?.correctAnswer
+  ).length : 0;
+  const accuracy = questions.length > 0 ? Math.round((correctAnswers / questions.length) * 100) : 0;
 
   useEffect(() => {
     setQuestionStartTime(Date.now());
@@ -196,10 +205,7 @@ export function ObjectiveQuestionsPage() {
         subject={topicDetails?.subject || "Unknown Subject"}
         topic={topicDetails?.topic || "Unknown Topic"}
         topicId={topicId || ""}
-        onRetry={() => {
-          setQuizKey(prevKey => prevKey + 1);
-          window.location.reload();
-        }}
+        onRetry={undefined}
         onReviewMistakes={() => {
           // Navigate to review mistakes page
           navigate(`/review-mistakes/${topicId}`);

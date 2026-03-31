@@ -250,40 +250,38 @@ export function Dashboard() {
                 </Badge>
               </div>
 
-              <div className={`flex-1 ${(!dailyTasksBySubject || dailyTasksBySubject.length === 0) ? "flex items-center justify-center py-6" : ""}`}>
-                {dailyTasksBySubject && dailyTasksBySubject.length > 0 ? (
+              <div className={`flex-1 ${(!hwTopics || hwTopics.length === 0) ? "flex items-center justify-center py-6" : ""}`}>
+                {hwTopics && hwTopics.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {dailyTasksBySubject.map((subjectData, subjectIndex) => {
-                      const SubjectIcon = iconMap[subjectData.icon];
-                      const homeworkTopic = hwTopics.find((ht: any) => ht.subject === subjectData.subject);
+                    {hwTopics.map((hw: any, hwIndex: number) => {
+                      const SubjectIcon = iconMap[hw.icon] || BookOpen;
 
                       return (
                         <motion.div
-                          key={subjectData.subject}
+                          key={hw.subject + hwIndex}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.15 + subjectIndex * 0.05 }}
+                          transition={{ delay: 0.15 + hwIndex * 0.05 }}
                         >
                           <Card
                             className="p-4 hover:shadow-md transition-all cursor-pointer border-gray-100 bg-white"
-                            onClick={() => {
-                              if (homeworkTopic) {
-                                navigate(`/homework/${homeworkTopic.id}`);
-                              }
-                            }}
+                            onClick={() => navigate(`/homework/${hw.id}`)}
                           >
                             <div className="flex items-center gap-3 mb-3">
-                              <div className={`${subjectData.color} p-2 rounded-lg shadow-sm`}>
+                              <div className={`${hw.color} p-2 rounded-lg shadow-sm`}>
                                 <SubjectIcon className="w-4 h-4 text-white" />
                               </div>
-                              <h3 className="font-bold text-gray-900 text-xs truncate flex-1">{subjectData.subject}</h3>
+                              <h3 className="font-bold text-gray-900 text-xs truncate flex-1">{hw.subject}</h3>
                             </div>
                             <div className="p-2 bg-indigo-50/50 rounded-lg text-[10px] font-semibold text-indigo-700 mb-2 truncate">
-                              {homeworkTopic?.topic || "Check tasks"}
+                              {hw.topic || "Check tasks"}
                             </div>
+                            {hw.teacher && (
+                              <p className="text-[9px] text-gray-500 mb-2 truncate">👨‍🏫 {hw.teacher}</p>
+                            )}
                             <div className="flex items-center justify-between text-[9px] text-gray-500 uppercase tracking-wider font-bold">
                               <span>Progress</span>
-                              <span className="text-indigo-600">{homeworkTopic?.flashcardProgress || 0}%</span>
+                              <span className="text-indigo-600">{hw.flashcardProgress || 0}%</span>
                             </div>
                           </Card>
                         </motion.div>
@@ -293,7 +291,7 @@ export function Dashboard() {
                 ) : (
                   <div className="flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 py-10 px-8 max-w-sm w-full mx-auto">
                     <BookOpen className="w-12 h-12 mb-4 opacity-20" />
-                    <p className="text-sm font-medium text-center">No daily tasks.</p>
+                    <p className="text-sm font-medium text-center">No homework assigned.</p>
                   </div>
                 )}
               </div>

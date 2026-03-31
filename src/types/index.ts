@@ -284,6 +284,34 @@ export interface ExamResult {
     updated_at?: string;
 }
 
+// ----- Quiz Results (AI Homework) -----
+
+export interface QuizAnswer {
+    questionId: number;
+    selectedAnswer: number;
+    isCorrect: boolean;
+}
+
+export interface QuizResult {
+    id: string;
+    school_id: string;
+    student_id: string;
+    student_email: string;
+    student_name: string;
+    class: string;
+    section: string;
+    subject: string;
+    topic: string;
+    score: number;
+    correct: number;
+    total: number;
+    accuracy: number;
+    answers: QuizAnswer[];
+    questions: any[];
+    completed_at: string;
+    created_at?: string;
+}
+
 // ----- Fees -----
 
 export interface FeeComponent {

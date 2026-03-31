@@ -21,7 +21,7 @@ interface PerformanceRewardScreenProps {
   subject: string;
   topic: string;
   topicId: string; // Add topicId for navigation
-  onRetry: () => void;
+  onRetry?: () => void;
   onReviewMistakes: () => void;
   onBackToTopic: () => void;
   timeSpent: string;
@@ -366,15 +366,17 @@ export function PerformanceRewardScreen({
           )}
 
           {/* Secondary Actions */}
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              onClick={onRetry}
-              variant="outline"
-              className="h-12 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-semibold"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Retry Quiz
-            </Button>
+          <div className={`grid ${onRetry ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+            {onRetry && (
+              <Button
+                onClick={onRetry}
+                variant="outline"
+                className="h-12 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-semibold"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Retry Quiz
+              </Button>
+            )}
             <Button
               onClick={onBackToTopic}
               variant="outline"

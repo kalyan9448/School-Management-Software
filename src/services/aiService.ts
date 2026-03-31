@@ -1,56 +1,71 @@
 // =============================================================================
-// AI Service — Groq API integration
-// Set VITE_GROQ_API_KEY in your .env file.
+// AI Service — Google Gemini API integration
+// Set VITE_GEMINI_API_KEY in your .env file.
 // =============================================================================
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.1-8b-instant';
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const DEFAULT_MODEL = 'gemini-2.0-flash';
 
-interface GroqMessage {
+interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
     content: string;
 }
 
 /**
- * Helper to call the Groq API
+ * Helper to call the Google Gemini API
  */
-async function callGroq(messages: GroqMessage[], model = DEFAULT_MODEL, jsonMode = false): Promise<string> {
-    if (!GROQ_API_KEY || GROQ_API_KEY === 'your_groq_api_key_here') {
-        console.warn('[aiService] VITE_GROQ_API_KEY not set or invalid. Returning placeholder response.');
-        if (jsonMode) return '[]';
-        return `[AI response placeholder — set VITE_GROQ_API_KEY in .env]`;
+async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode = false): Promise<string> {
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your-gemini-api-key') {
+        console.warn('[aiService] VITE_GEMINI_API_KEY not set or invalid. Returning placeholder response.');
+        if (jsonMode) return '{}';
+        return `[AI response placeholder — set VITE_GEMINI_API_KEY in .env]`;
     }
 
     try {
+        // Extract system instruction from messages
+        const systemMsg = messages.find(m => m.role === 'system');
+        const nonSystemMsgs = messages.filter(m => m.role !== 'system');
+
+        // Build Gemini request body
         const body: any = {
-            model,
-            messages,
+            contents: nonSystemMsgs.map(msg => ({
+                role: msg.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: msg.content }],
+            })),
+            generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 8192,
+            },
         };
 
-        if (jsonMode) {
-             body.response_format = { type: "json_object" };
+        if (systemMsg) {
+            body.systemInstruction = { parts: [{ text: systemMsg.content }] };
         }
 
-        const response = await fetch(GROQ_BASE_URL, {
+        if (jsonMode) {
+            body.generationConfig.responseMimeType = 'application/json';
+        }
+
+        const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+        const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GROQ_API_KEY}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Groq API Error Details:', errorData);
-            throw new Error(`Groq API error: ${response.status} ${response.statusText}`);
+            console.error('Gemini API Error Details:', errorData);
+            throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
-        return data.choices?.[0]?.message?.content ?? '';
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        return text;
     } catch (error) {
-        console.error("Failed to fetch from Groq:", error);
+        console.error("Failed to fetch from Gemini:", error);
         throw error;
     }
 }
@@ -78,13 +93,13 @@ export const aiService = {
         
         Do not include any formatting markdown (like \`\`\`json) or extra text. Pure valid JSON only.`;
 
-        const messages: GroqMessage[] = [
+        const messages: ChatMessage[] = [
             { role: 'system', content: 'You are a pedagogical education assistant that outputs valid JSON.' },
             { role: 'user', content: prompt }
         ];
 
         try {
-            const responseText = await callGroq(messages, DEFAULT_MODEL, true);
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
             const parsed = JSON.parse(responseText);
             return parsed.flashcards || [];
         } catch (error) {
@@ -113,22 +128,26 @@ export const aiService = {
         Respond ONLY with a JSON object containing a "questions" array. Each object in the array MUST have the following keys:
         - "question": The multiple-choice question text.
         - "options": An array of exactly 4 string options.
-        - "correctAnswer": The integer index (0-3) of the correct option.
+        - "correctAnswer": The integer index (0-3) of the correct option. IMPORTANT: Distribute correctAnswer randomly across 0, 1, 2, and 3. Do NOT always use 0.
         - "explanation": A helpful, educational explanation of why the answer is correct and why other options might be confusing.
         - "difficulty": Either "easy", "medium", or "hard".
         - "category": A short category label.
         
         Do not include any formatting markdown (like \`\`\`json) or extra text. Pure valid JSON only.`;
 
-        const messages: GroqMessage[] = [
+        const messages: ChatMessage[] = [
             { role: 'system', content: 'You are a pedagogical assessment assistant that outputs valid JSON.' },
             { role: 'user', content: prompt }
         ];
 
         try {
-            const responseText = await callGroq(messages, DEFAULT_MODEL, true);
-             const parsed = JSON.parse(responseText);
-             return parsed.questions || [];
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
+            console.log('[aiService] Quiz raw response length:', responseText.length);
+            const parsed = JSON.parse(responseText);
+            const questions = parsed.questions || [];
+            console.log('[aiService] Parsed quiz questions count:', questions.length);
+            if (questions.length === 0) return getFallbackQuiz(subject, topic);
+            return questions.map(shuffleQuestionOptions);
         } catch (error) {
              console.error("Failed to parse quiz:", error);
              return getFallbackQuiz(subject, topic);
@@ -157,13 +176,13 @@ export const aiService = {
         
         Keep explanations clear, encouraging, and appropriate for ${studentLevel}. Pure valid JSON only.`;
 
-        const messages: GroqMessage[] = [
+        const messages: ChatMessage[] = [
             { role: 'system', content: 'You are a pedagogical content expert that outputs valid JSON.' },
             { role: 'user', content: prompt }
         ];
 
         try {
-            const responseText = await callGroq(messages, DEFAULT_MODEL, true);
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
             return JSON.parse(responseText);
         } catch (error) {
             console.error("Failed to generate subject overview:", error);
@@ -175,7 +194,7 @@ export const aiService = {
      * Contextual Chat for a specific topic
      */
      chatTopic: async (subject: string, topic: string, chatHistory: {role: 'user' | 'assistant', content: string}[], newMessage: string): Promise<string> => {
-        const messages: GroqMessage[] = [
+        const messages: ChatMessage[] = [
             { 
                role: 'system', 
                content: `You are a friendly, encouraging AI tutor helping a student master the topic "${topic}" in the subject "${subject}". 
@@ -185,33 +204,49 @@ export const aiService = {
             { role: 'user', content: newMessage }
         ];
 
-        return callGroq(messages);
+        return callAI(messages);
      },
 
      // Backward compatibility for existing methods
      generateLessonContent: async (subject: string, topic: string, gradeLevel: string): Promise<string> => {
         const prompt = `You are an expert educator. Create a comprehensive lesson plan for:\nSubject: ${subject}\nTopic: ${topic}\nGrade: ${gradeLevel}\n\nInclude: learning objectives, key concepts, activities, and assessment ideas.`;
-        return callGroq([{ role: 'user', content: prompt }]);
+        return callAI([{ role: 'user', content: prompt }]);
     },
 
     summarizeStudentPerformance: async (studentName: string, attendancePercentage: number, averageGrade: number, subjects: string[]): Promise<string> => {
         const prompt = `Provide a brief, constructive performance summary for a student:\nName: ${studentName}\nAttendance: ${attendancePercentage}%\nAverage Grade: ${averageGrade}%\nSubjects: ${subjects.join(', ')}\n\nGive actionable recommendations for improvement in 3-4 sentences.`;
-        return callGroq([{ role: 'user', content: prompt }]);
+        return callAI([{ role: 'user', content: prompt }]);
     },
 
     generateParentMessage: async (studentName: string, topic: string, context: string): Promise<string> => {
         const prompt = `Write a professional, empathetic message from a school to a parent about:\nStudent: ${studentName}\nRegarding: ${topic}\nContext: ${context}\n\nKeep it concise (2-3 paragraphs), professional, and solution-focused.`;
-        return callGroq([{ role: 'user', content: prompt }]);
+        return callAI([{ role: 'user', content: prompt }]);
     },
 
     prompt: async (text: string): Promise<string> => {
-        return callGroq([{ role: 'user', content: text }]);
+        return callAI([{ role: 'user', content: text }]);
     },
 };
 
 /**
  * Provides fallback questions when AI generation fails or is rate-limited.
  */
+/**
+ * Shuffle a question's options and update correctAnswer so the answer
+ * is no longer always at index 0 (or any fixed position).
+ */
+function shuffleQuestionOptions(q: any): any {
+    if (!q.options || q.options.length !== 4) return q;
+    const correctText = q.options[q.correctAnswer ?? 0];
+    // Fisher-Yates shuffle
+    const shuffled = [...q.options];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return { ...q, options: shuffled, correctAnswer: shuffled.indexOf(correctText) };
+}
+
 function getFallbackQuiz(subject: string, topic: string): any[] {
     const fallbackMap: Record<string, any[]> = {
         "Shakespearean Sonnets Analysis": [
@@ -278,15 +313,26 @@ function getFallbackQuiz(subject: string, topic: string): any[] {
     };
 
     // Return specific fallback or a generic set
-    return fallbackMap[topic] || [
-        {
-            question: `What is the primary focus of ${topic}?`,
-            options: ["Option A", "Option B", "Option C", "Option D"],
-            correctAnswer: 0,
-            explanation: `This is a fallback question for ${topic} in ${subject}.`,
-            difficulty: "easy",
+    return fallbackMap[topic] || Array.from({ length: 5 }, (_, i) => {
+        const correctIdx = i % 4; // Rotate correct answer: 0,1,2,3,0
+        const options = [
+            `A key principle of ${topic}`,
+            `A common misconception about ${topic}`,
+            `An unrelated concept in ${subject}`,
+            `A partially correct statement about ${topic}`
+        ];
+        // Swap the correct-looking option into the correct index
+        const temp = options[0];
+        options[0] = options[correctIdx];
+        options[correctIdx] = temp;
+        return {
+            question: `Question ${i + 1}: What is an important concept related to ${topic} in ${subject}?`,
+            options,
+            correctAnswer: correctIdx,
+            explanation: `This is a placeholder question for ${topic}. The AI quiz generator was unavailable.`,
+            difficulty: i < 2 ? "easy" : i < 4 ? "medium" : "hard",
             category: "General"
-        }
-    ];
+        };
+    });
 }
 

@@ -105,6 +105,7 @@ import type {
     StudentEnrollment,
     FeeInvoice,
     AuditLog,
+    QuizResult,
 } from '../types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -2089,6 +2090,58 @@ export const reportsService = {
     },
 };
 
+// ==================== Quiz Results Service ====================
+
+export const quizResultService = {
+    /** Save a new quiz result */
+    create: async (result: Omit<QuizResult, 'id'>): Promise<QuizResult> => {
+        return createDoc<QuizResult>('quiz_results', {
+            ...result,
+            created_at: new Date().toISOString(),
+        });
+    },
+
+    /** Get all quiz results for a student */
+    getByStudent: async (studentId: string): Promise<QuizResult[]> => {
+        const results = await fetchCollection<QuizResult>(
+            'quiz_results',
+            where('student_id', '==', studentId),
+        );
+        return results.sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
+    },
+
+    /** Get quiz results for a specific subject + student */
+    getByStudentAndSubject: async (studentId: string, subject: string): Promise<QuizResult[]> => {
+        const results = await fetchCollection<QuizResult>(
+            'quiz_results',
+            where('student_id', '==', studentId),
+            where('subject', '==', subject),
+        );
+        return results.sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
+    },
+
+    /** Get all quiz results for a class (teacher view) */
+    getByClass: async (className: string, section: string): Promise<QuizResult[]> => {
+        return fetchCollection<QuizResult>(
+            'quiz_results',
+            where('class', '==', className),
+            where('section', '==', section),
+        );
+    },
+
+    /** Get latest result for a student + subject + topic */
+    getLatest: async (studentId: string, subject: string, topic: string): Promise<QuizResult | null> => {
+        const results = await fetchCollection<QuizResult>(
+            'quiz_results',
+            where('student_id', '==', studentId),
+            where('subject', '==', subject),
+            where('topic', '==', topic),
+        );
+        if (results.length === 0) return null;
+        return results.sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''))[0];
+    },
+};
+
 // ==================== DEFAULT EXPORT (same shape as old service) ====================
 
 const firestoreDataService = {
@@ -2121,6 +2174,7 @@ const firestoreDataService = {
     subjectMapping: subjectMappingService,
     studentNote: studentNoteService,
     reports: reportsService,
+    quizResult: quizResultService,
 };
 
 export default firestoreDataService;

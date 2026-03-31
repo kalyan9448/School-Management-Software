@@ -321,13 +321,34 @@ export function TopicDetailPage() {
             </div>
 
             <Button
-              onClick={() => navigate(`/flashcards/${topic.id}`, { state: { source: 'homework' } })}
-              className="w-full h-16 rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 outline-none transition-all active:scale-95 group relative overflow-hidden bg-blue-600 hover:bg-blue-700 border-none"
+              onClick={() => navigate(`/flashcards/${topic.id}`, { 
+                state: { 
+                  source: 'homework',
+                  subject: topic.subject,
+                  topic: topic.topic,
+                  grade: studentData.grade,
+                } 
+              })}
+              disabled={flashcardCompleted}
+              className={`w-full h-16 rounded-2xl font-bold text-lg outline-none transition-all active:scale-95 group relative overflow-hidden border-none ${
+                flashcardCompleted
+                  ? "bg-emerald-100 !text-emerald-700 cursor-default shadow-none"
+                  : "bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100"
+              }`}
             >
               <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="flex items-center justify-center gap-2 relative z-10 text-white w-full">
-                <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                <span>{flashcardProgress > 0 ? "Continue" : "Start"} Flashcards</span>
+              <div className="flex items-center justify-center gap-2 relative z-10 w-full">
+                {flashcardCompleted ? (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Flashcards Completed</span>
+                  </>
+                ) : (
+                  <>
+                    <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <span>{flashcardProgress > 0 ? "Continue" : "Start"} Flashcards</span>
+                  </>
+                )}
               </div>
             </Button>
           </Card>
@@ -397,19 +418,28 @@ export function TopicDetailPage() {
 
             <Button
               onClick={() =>
-                !questionsLocked && navigate(`/objective-questions/${topic.id}`)
+                !questionsLocked && !questionsCompleted && navigate(`/objective-questions/${topic.id}`, {
+                  state: { subject: topic.subject, topic: topic.topic, grade: studentData.grade }
+                })
               }
-              disabled={questionsLocked}
-              variant={questionsLocked ? "secondary" : "default"}
-              className={`w-full h-16 rounded-2xl font-bold text-lg outline-none transition-all active:scale-95 ${questionsLocked
+              disabled={questionsLocked || questionsCompleted}
+              variant={questionsLocked || questionsCompleted ? "secondary" : "default"}
+              className={`w-full h-16 rounded-2xl font-bold text-lg outline-none transition-all active:scale-95 ${questionsCompleted
+                  ? "bg-emerald-100 !text-emerald-700 cursor-not-allowed border-none shadow-none"
+                  : questionsLocked
                   ? "bg-gray-200 !text-gray-500 cursor-not-allowed border-none shadow-none"
                   : "bg-blue-600 hover:bg-blue-700 !text-white shadow-xl shadow-blue-100 border-none relative overflow-hidden group/btn"
                 }`}
               size="lg"
             >
-              {!questionsLocked && <div className="absolute inset-0 bg-white/10 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>}
+              {!questionsLocked && !questionsCompleted && <div className="absolute inset-0 bg-white/10 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>}
               <div className="flex items-center justify-center gap-2 relative z-10 w-full">
-                {questionsLocked ? (
+                {questionsCompleted ? (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Assessment Completed</span>
+                  </>
+                ) : questionsLocked ? (
                   <>
                     <Lock className="w-5 h-5" />
                     <span>Locked Section</span>
@@ -464,7 +494,7 @@ export function TopicDetailPage() {
                 </div>
               </div>
 
-              {topic.mistakePatterns.length > 0 && (
+              {topic.mistakePatterns && topic.mistakePatterns.length > 0 && (
                 <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
                   <div className="flex items-start gap-2 mb-2">
                     <Brain className="w-4 h-4 text-orange-600 mt-0.5" />

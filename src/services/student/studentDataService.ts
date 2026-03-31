@@ -18,7 +18,9 @@ import {
   assignmentService,
   assignmentSubmissionService,
   examResultService,
-  notificationService 
+  notificationService,
+  lessonService,
+  quizResultService 
 } from "@/utils/firestoreService";
 
 import {
@@ -424,7 +426,40 @@ export const AttendanceService = {
 // ─── Daily Tasks by Subject ──────────────────────────────────────────────────
 export const DailyTasks = {
   getAll: async () => {
-    return getData<any[]>("daily_tasks", []);
+    // Dynamically fetch from lessons collection based on student's class/section
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return getData<any[]>("daily_tasks", []);
+
+    try {
+      const lessons = await lessonService.getByClass(profile.grade, profile.section);
+      if (lessons.length === 0) return getData<any[]>("daily_tasks", []);
+
+      // Group lessons by subject and build daily task items
+      const subjectMap = new Map<string, any>();
+      for (const lesson of lessons) {
+        if (!subjectMap.has(lesson.subject)) {
+          subjectMap.set(lesson.subject, {
+            subject: lesson.subject,
+            icon: lesson.subject.toLowerCase().includes("math") ? "calculator" : 
+                  lesson.subject.toLowerCase().includes("sci") ? "beaker" : "book",
+            color: lesson.subject.toLowerCase().includes("math") ? "bg-blue-500" :
+                   lesson.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
+            teacher: lesson.teacherName,
+            topic: lesson.topic,
+            objectives: lesson.objectives || [],
+            tasks: (lesson.objectives || []).map((obj: string, i: number) => ({
+              id: `${lesson.id}-${i}`,
+              text: obj,
+              completed: false,
+            })),
+          });
+        }
+      }
+      return Array.from(subjectMap.values());
+    } catch (e) {
+      console.warn("Failed to fetch lessons for daily tasks:", e);
+      return getData<any[]>("daily_tasks", []);
+    }
   },
   toggleTaskCompletion: async (taskId: number) => {
     const subjects = await DailyTasks.getAll();
@@ -456,21 +491,87 @@ export const HomeworkService = {
     const profile = await StudentProfile.get();
     if (!profile.grade || !profile.section) return getData<HomeworkTopic[]>("homework_topics", []);
     
-    const assignments = await assignmentService.getByClass(profile.grade, profile.section);
-    if (assignments.length === 0) return getData<HomeworkTopic[]>("homework_topics", []);
+    // Load saved progress (keyed by subject) to merge with dynamic data
+    const savedProgress = await getData<Record<string, Partial<HomeworkTopic>>>("homework_progress", {});
 
-    return assignments.map((a, index) => ({
-      id: index + 1, // Interface expects number
-      subject: a.subject,
-      topic: a.title,
-      icon: a.subject.toLowerCase().includes("math") ? "calculator" : 
-            a.subject.toLowerCase().includes("sci") ? "beaker" : "book",
-      color: a.subject.toLowerCase().includes("math") ? "bg-blue-500" :
-             a.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
-      status: a.status === "active" ? "pending" : "completed",
-      flashcardProgress: 0,
-      questionsProgress: 0,
-    } as HomeworkTopic));
+    const mergeProgress = (topic: HomeworkTopic): HomeworkTopic => {
+      const saved = savedProgress[topic.subject];
+      if (!saved) return topic;
+      return {
+        ...topic,
+        flashcardProgress: saved.flashcardProgress ?? topic.flashcardProgress,
+        flashcardsCompleted: saved.flashcardsCompleted ?? topic.flashcardsCompleted,
+        questionsProgress: saved.questionsProgress ?? topic.questionsProgress,
+        questionsCompleted: saved.questionsCompleted ?? topic.questionsCompleted,
+        questionsAttempted: saved.questionsAttempted ?? topic.questionsAttempted,
+        accuracy: saved.accuracy ?? topic.accuracy,
+        lastAttemptDate: saved.lastAttemptDate ?? topic.lastAttemptDate,
+        status: saved.status ?? topic.status,
+      } as HomeworkTopic;
+    };
+
+    // Try assignments first
+    const assignments = await assignmentService.getByClass(profile.grade, profile.section);
+    if (assignments.length > 0) {
+      return assignments.map((a, index) => mergeProgress({
+        id: index + 1,
+        subject: a.subject,
+        topic: a.title,
+        teacher: "",
+        icon: a.subject.toLowerCase().includes("math") ? "calculator" : 
+              a.subject.toLowerCase().includes("sci") ? "beaker" : "book",
+        color: a.subject.toLowerCase().includes("math") ? "bg-blue-500" :
+               a.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
+        status: a.status === "active" ? "pending" : "completed",
+        flashcardProgress: 0,
+        questionsProgress: 0,
+        flashcardsCompleted: false,
+        questionsCompleted: false,
+        questionsAttempted: 0,
+        totalQuestions: 5,
+        accuracy: null,
+        lastAttemptDate: null,
+      } as HomeworkTopic));
+    }
+
+    // Fallback: generate homework topics from lessons collection
+    try {
+      const lessons = await lessonService.getByClass(profile.grade, profile.section);
+      if (lessons.length > 0) {
+        // Deduplicate by subject — pick latest lesson per subject
+        const subjectMap = new Map<string, typeof lessons[0]>();
+        for (const lesson of lessons) {
+          const existing = subjectMap.get(lesson.subject);
+          if (!existing || (lesson.date && existing.date && lesson.date > existing.date)) {
+            subjectMap.set(lesson.subject, lesson);
+          }
+        }
+
+        return Array.from(subjectMap.values()).map((lesson, index) => mergeProgress({
+          id: index + 1,
+          subject: lesson.subject,
+          topic: lesson.topic,
+          teacher: lesson.teacherName,
+          icon: lesson.subject.toLowerCase().includes("math") ? "calculator" : 
+                lesson.subject.toLowerCase().includes("sci") ? "beaker" : "book",
+          color: lesson.subject.toLowerCase().includes("math") ? "bg-blue-500" :
+                 lesson.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
+          status: "pending" as const,
+          flashcardProgress: 0,
+          questionsProgress: 0,
+          flashcardsCompleted: false,
+          questionsCompleted: false,
+          questionsAttempted: 0,
+          totalQuestions: 5,
+          accuracy: null,
+          lastAttemptDate: null,
+        } as HomeworkTopic));
+      }
+    } catch (e) {
+      console.warn("Failed to fetch lessons for homework:", e);
+    }
+
+    return getData<HomeworkTopic[]>("homework_topics", []);
   },
   getById: async (id: number): Promise<HomeworkTopic | undefined> => {
     const all = await HomeworkService.getAll();
@@ -478,11 +579,18 @@ export const HomeworkService = {
   },
   updateTopic: async (id: number, updates: Partial<HomeworkTopic>): Promise<HomeworkTopic[]> => {
     const topics = await HomeworkService.getAll();
-    const updated = topics.map(t =>
-      t.id === id ? { ...t, ...updates } : t
-    );
-    await saveData("homework_topics", updated);
-    return updated;
+    const target = topics.find(t => t.id === id);
+    if (target) {
+      // Save progress keyed by subject so it persists across regenerations
+      const savedProgress = await getData<Record<string, Partial<HomeworkTopic>>>("homework_progress", {});
+      savedProgress[target.subject] = {
+        ...(savedProgress[target.subject] || {}),
+        ...updates,
+      };
+      await saveData("homework_progress", savedProgress);
+    }
+    // Return merged list
+    return HomeworkService.getAll();
   },
   getRecommendedQuizzes: async () => {
     const topics = await HomeworkService.getAll();
@@ -520,11 +628,53 @@ export const HomeworkService = {
     });
   },
   saveDetailedResults: async (topicId: number, results: any) => {
+    // Save to the dedicated quiz_results collection
+    const profile = await StudentProfile.get();
+    const topic = await HomeworkService.getById(topicId);
+    const user = auth.currentUser;
+
+    await quizResultService.create({
+      student_id: user?.uid || getUid(),
+      student_email: user?.email || "",
+      student_name: profile.name || "",
+      class: profile.grade || "",
+      section: profile.section || "",
+      subject: topic?.subject || results.subject || "",
+      topic: topic?.topic || results.topic || "",
+      score: results.accuracy,
+      correct: results.correctAnswers,
+      total: results.totalQuestions,
+      accuracy: results.accuracy,
+      answers: results.answers || [],
+      questions: results.questions || [],
+      completed_at: results.timestamp || new Date().toISOString(),
+    } as any);
+
+    // Also keep a lightweight copy in student_portal for quick access
     const allResults = await getData<Record<number, any>>("topic_quiz_results", {});
-    allResults[topicId] = results;
+    allResults[topicId] = {
+      completed: results.completed,
+      questionsAttempted: results.questionsAttempted,
+      totalQuestions: results.totalQuestions,
+      correctAnswers: results.correctAnswers,
+      accuracy: results.accuracy,
+      timestamp: results.timestamp,
+    };
     await saveData("topic_quiz_results", allResults);
   },
   getDetailedResults: async (topicId: number) => {
+    // Try from quiz_results collection first for full data
+    const topic = await HomeworkService.getById(topicId);
+    if (topic) {
+      const user = auth.currentUser;
+      const result = await quizResultService.getLatest(
+        user?.uid || getUid(),
+        topic.subject,
+        topic.topic,
+      );
+      if (result) return result;
+    }
+    // Fallback to student_portal lightweight copy
     const allResults = await getData<Record<number, any>>("topic_quiz_results", {});
     return allResults[topicId];
   },

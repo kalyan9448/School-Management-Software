@@ -7,12 +7,14 @@ import {
   Target,
   Lightbulb,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
-import { TodaysClasses, StudentProfile, Flashcards as FlashcardService } from "@/services/student/studentDataService";
+import { TodaysClasses, StudentProfile } from "@/services/student/studentDataService";
 import { aiService } from "@/services/aiService";
+import { lessonService } from "@/utils/firestoreService";
 
 export function SubjectDetailPage() {
   const navigate = useNavigate();
@@ -21,15 +23,38 @@ export function SubjectDetailPage() {
   // Dynamic data from Firestore (async)
   const [studentData, setStudentData] = useState<any>({ name: "", grade: "" });
   const [classItem, setClassItem] = useState<any>(undefined);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [profile, classes] = await Promise.all([
-        StudentProfile.get(),
-        TodaysClasses.getAll(),
-      ]);
-      setStudentData(profile);
-      setClassItem(classes.find((c: any) => c.id === Number(id)));
+      setLoading(true);
+      try {
+        const [profile, classes] = await Promise.all([
+          StudentProfile.get(),
+          TodaysClasses.getAll(),
+        ]);
+        setStudentData(profile);
+        const found = classes.find((c: any) => String(c.id) === String(id));
+        if (found) {
+          // Try to enrich with lesson log data (recent topic for this subject)
+          try {
+            const lessons = await lessonService.getByClass(profile.grade, profile.section);
+            const subjectLesson = lessons.find((l: any) => l.subject === found.subject);
+            if (subjectLesson) {
+              found.recentTopic = subjectLesson.topic;
+              found.recentObjectives = subjectLesson.objectives;
+              found.recentDescription = subjectLesson.description;
+            }
+          } catch (e) {
+            console.warn("Could not fetch lesson logs:", e);
+          }
+        }
+        setClassItem(found);
+      } catch (e) {
+        console.error("Failed to load class data:", e);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [id]);
 
@@ -38,30 +63,48 @@ export function SubjectDetailPage() {
 
   useEffect(() => {
     async function fetchAIOverview() {
-      if (classItem && classItem.topics && classItem.topics[0]) {
-        setIsGenerating(true);
-        try {
-          const overview = await aiService.generateSubjectOverview(
-            classItem.subject, 
-            classItem.topics[0], 
-            studentData.grade
-          );
-          if (overview) {
-            setAiTopicDetails(overview);
-          }
-        } catch (error) {
-          console.error("AI Overview generation failed:", error);
-        } finally {
-          setIsGenerating(false);
+      if (!classItem) return;
+      // Use explicit topics, recent lesson topic, or fall back to subject name
+      const topic = classItem.topics?.[0] || classItem.recentTopic || classItem.subject;
+      setIsGenerating(true);
+      try {
+        const overview = await aiService.generateSubjectOverview(
+          classItem.subject, 
+          topic, 
+          studentData.grade || "Grade 10"
+        );
+        if (overview) {
+          setAiTopicDetails(overview);
         }
+      } catch (error) {
+        console.error("AI Overview generation failed:", error);
+      } finally {
+        setIsGenerating(false);
       }
     }
     fetchAIOverview();
   }, [classItem?.id]);
 
-  // Use AI details if generated, otherwise fall back to mock data
-  const topicDetails = aiTopicDetails || classItem?.topicDetails;
-  const flashcardsAvailable = FlashcardService.getBySubject(classItem?.subject || "");
+  // Use AI details if generated, otherwise build from lesson log data
+  const topicDetails = aiTopicDetails || (classItem?.recentTopic ? {
+    mainTopic: classItem.recentTopic,
+    description: classItem.recentDescription || `Learn about ${classItem.recentTopic} in ${classItem?.subject}`,
+    learningObjectives: classItem.recentObjectives || [],
+    keyPoints: [],
+    overview: `Explore the topic of ${classItem.recentTopic} as part of your ${classItem?.subject} curriculum.`,
+  } : null);
+
+  // Show loading while fetching
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF] flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-[#7A869A] text-sm">Loading class details...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If no class data, show error
   if (!classItem) {
@@ -109,6 +152,10 @@ export function SubjectDetailPage() {
                   <p className="text-sm md:text-base font-medium">{topicDetails.mainTopic}</p>
                 </div>
               )}
+              <div className="flex items-center gap-4 mt-2 text-white/70 text-sm">
+                {classItem.teacher && <span>👨‍🏫 {classItem.teacher}</span>}
+                {classItem.time && <span>🕐 {classItem.time}</span>}
+              </div>
             </div>
           </div>
         </div>
@@ -117,9 +164,16 @@ export function SubjectDetailPage() {
       <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6 pb-24">
         {/* Check if topicDetails exists */}
         {!topicDetails ? (
+          isGenerating ? (
+            <Card className="p-8 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+              <p className="text-[#7A869A] text-sm">Generating AI learning guide for {classItem.subject}...</p>
+            </Card>
+          ) : (
           <Card className="p-6">
             <p className="text-[#7A869A]">Topic details are not available for this subject.</p>
           </Card>
+          )
         ) : (
           <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
@@ -248,46 +302,50 @@ export function SubjectDetailPage() {
             </div>
 
             {/* View Flashcards Button - Centered on desktop */}
-            {flashcardsAvailable.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.6 }}
-                className="lg:max-w-2xl lg:mx-auto pt-8"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.6 }}
+              className="lg:max-w-2xl lg:mx-auto pt-8"
+            >
+              <Card 
+                className="p-8 bg-gradient-to-br from-blue-600 to-blue-800 border-none shadow-2xl rounded-3xl relative overflow-hidden group"
               >
-                <Card 
-                  className="p-8 bg-gradient-to-br from-blue-600 to-blue-800 border-none shadow-2xl rounded-3xl relative overflow-hidden group"
-                >
-                  {/* Decorative backgrounds */}
-                  <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                  <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-black/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                  
-                  <div className="relative z-10 text-center">
-                    <div className="flex items-center justify-center gap-3 mb-3">
-                      <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
-                        <Sparkles className="w-6 h-6 text-white" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white tracking-tight">
-                        Master this Topic
-                      </h3>
+                {/* Decorative backgrounds */}
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-black/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                
+                <div className="relative z-10 text-center">
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                      <Sparkles className="w-6 h-6 text-white" />
                     </div>
-                    <p className="text-white/80 font-medium mb-6 max-w-sm mx-auto">
-                      Review {flashcardsAvailable.length} personalized flashcards powered by AI to lock in your knowledge.
-                    </p>
-                    <Button
-                      onClick={() => {
-                        console.log("Navigating to flashcards for class ID:", classItem.id);
-                        navigate(`/flashcards/${classItem.id}`, { state: { source: 'todays_classes' } });
-                      }}
-                      className="w-full bg-white hover:bg-gray-100 text-blue-700 font-bold py-7 text-lg rounded-2xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all border-none"
-                    >
-                      <BookOpen className="w-6 h-6 mr-3" />
-                      Start Learning Now
-                    </Button>
+                    <h3 className="text-2xl font-bold text-white tracking-tight">
+                      Master this Topic
+                    </h3>
                   </div>
-                </Card>
-              </motion.div>
-            )}
+                  <p className="text-white/80 font-medium mb-6 max-w-sm mx-auto">
+                    AI-powered flashcards to help you master {classItem.subject}.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      navigate(`/flashcards/${classItem.id}`, { 
+                        state: { 
+                          source: 'todays_classes',
+                          subject: classItem.subject,
+                          topic: topicDetails?.mainTopic || classItem.recentTopic || classItem.subject,
+                          grade: studentData.grade,
+                        } 
+                      });
+                    }}
+                    className="w-full bg-white hover:bg-gray-100 text-blue-700 font-bold py-7 text-lg rounded-2xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all border-none"
+                  >
+                    <BookOpen className="w-6 h-6 mr-3" />
+                    Start Learning Now
+                  </Button>
+                </div>
+              </Card>
+            </motion.div>
           </>
         )}
       </div>
