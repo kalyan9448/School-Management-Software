@@ -102,6 +102,21 @@ export function HomePage() {
 
       {/* Topic Cards */}
       <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6">
+        {topics.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-20 text-center"
+          >
+            <div className="bg-[#EEF4FF] p-6 rounded-full mb-5">
+              <BookOpen className="w-12 h-12 text-[#1F6FEB]" />
+            </div>
+            <h2 className="text-xl font-bold text-[#1A1A1A] mb-2">No homeworks today</h2>
+            <p className="text-[#7A869A] text-sm max-w-xs">
+              You're all caught up! Check back later for new assignments from your teachers.
+            </p>
+          </motion.div>
+        ) : (
         <div className="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 md:gap-4 md:space-y-0">
           {topics.map((topic, index) => {
             const Icon = iconMap[topic.icon];
@@ -223,6 +238,7 @@ export function HomePage() {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );
