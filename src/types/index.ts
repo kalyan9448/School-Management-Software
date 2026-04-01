@@ -383,7 +383,10 @@ export interface Notification {
     id: string;
     school_id: string;
     userId: string;
-    type: 'attendance' | 'assignment' | 'exam' | 'fee' | 'announcement' | 'general';
+    recipientRole?: string;
+    class?: string;
+    section?: string;
+    type: 'attendance' | 'assignment' | 'exam' | 'fee' | 'announcement' | 'progress' | 'general';
     title: string;
     message: string;
     date: string;

@@ -24,6 +24,7 @@ import {
   Receipt,
   MessageSquare,
   ChevronRight,
+  ChevronLeft,
   Target,
   Activity,
   FileText,
@@ -32,7 +33,8 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
-import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults } from '../hooks/useDataService';
+import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
+import dataService from '../utils/firestoreService';
 
 type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions';
 type ReportPeriod = 'weekly' | 'monthly';
@@ -107,6 +109,30 @@ interface Notification {
 export function ParentDashboardNew() {
   const { user, logout } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    // Standardize to start on Sunday (0)
+    const day = d.getDay();
+    d.setDate(d.getDate() - day);
+    return d;
+  });
+
+  const navigateWeek = (dir: number) => {
+    setCurrentWeekStart(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + (dir * 7));
+      return d;
+    });
+  };
+
+  const jumpToToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay();
+    d.setDate(d.getDate() - day);
+    setCurrentWeekStart(d);
+  };
 
   // 1. Fetch children for this parent (tries parentId, then childrenIds, then email match)
   const { students: children, loading: childrenLoading } = useStudents({
@@ -128,10 +154,17 @@ export function ParentDashboardNew() {
   const selectedChild = children.find(c => c.id === selectedChildId) || children[0] || null;
 
   // 3. Fetch dynamic data for selected child (only when a real child is selected)
+  // Fetch attendance for last 90 days so both weekly and monthly reports work
+  const attendanceStartDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }, []);
+
   const { attendance: studentAttendance, stats: attendanceStats } = useAttendance(
     selectedChild ? {
       studentId: selectedChild.id,
-      startDate: new Date().toISOString().substring(0, 7) + '-01'
+      startDate: attendanceStartDate
     } : undefined
   );
 
@@ -142,23 +175,124 @@ export function ParentDashboardNew() {
     } : undefined
   );
 
+  // Collect all children's classes for notification filtering (multi-child parents)
+  const allChildClasses = useMemo(() => 
+    children.map(c => ({ class: c.class || '', section: c.section || '' })).filter(c => c.class),
+    [children]
+  );
+
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(
-    user?.email || undefined, 
+    user?.id || undefined, 
     'parent',
     selectedChild?.class,
-    selectedChild?.section
+    selectedChild?.section,
+    allChildClasses.length > 1 ? allChildClasses : undefined
   );
 
   // Additional dynamic data for progress, fees, etc.
   const { payments: feeRecords } = useFeePayments(selectedChild ? { studentId: selectedChild.id } : undefined);
   const { performance: studentPerformance } = useStudentPerformance(selectedChild?.id);
   const { assignments } = useAssignments(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
+  const { submissions: assignmentSubmissions } = useAssignmentSubmissions(selectedChild ? { studentId: selectedChild.id } : undefined);
   const { exams } = useExams(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
   const { results: examResults } = useExamResults(selectedChild ? { studentId: selectedChild.id } : undefined);
   const { invoices: feeInvoices } = useFeeInvoices(selectedChild ? { studentId: selectedChild.id } : undefined);
 
-  // Demo data fallback / merging
-  const todayDate = new Date().toISOString().split('T')[0];
+  // Fetch quiz results for selected child
+  const [quizResults, setQuizResults] = useState<any[]>([]);
+  useEffect(() => {
+    if (!selectedChild) { setQuizResults([]); return; }
+    let cancelled = false;
+
+    const loadQuizResults = async () => {
+      try {
+        const studentIds = new Set<string>([selectedChild.id]);
+
+        // Resolve the child's auth UID from the users collection.
+        // Quiz results are typically stored with student_id = auth UID.
+        if (selectedChild.email) {
+          try {
+            const studentUser = await dataService.user.getByEmail(selectedChild.email.toLowerCase());
+            if (studentUser?.id) studentIds.add(studentUser.id);
+          } catch { /* user record may not exist — handled below via class fallback */ }
+        }
+
+        // Fetch quiz results for each known student ID
+        const resultGroups = await Promise.all(
+          Array.from(studentIds).map((sid) =>
+            dataService.quizResult.getByStudent(sid).catch(() => [])
+          )
+        );
+
+        let merged = resultGroups.flat();
+
+        // Fallback: if no results found via student_id, try by class+section
+        // and filter to this child's name or email (covers wrong-UID scenario).
+        if (merged.length === 0 && selectedChild.class && selectedChild.section) {
+          try {
+            const classResults = await dataService.quizResult.getByClass(
+              selectedChild.class, selectedChild.section
+            );
+            const childName = (selectedChild.name || '').toLowerCase();
+            const childEmail = (selectedChild.email || '').toLowerCase();
+            merged = classResults.filter((qr: any) => {
+              const qrName = (qr.student_name || '').toLowerCase();
+              const qrEmail = (qr.student_email || '').toLowerCase();
+              return (childEmail && qrEmail === childEmail)
+                || (childName && qrName === childName);
+            });
+          } catch { /* class query may fail — that's okay */ }
+        }
+
+        // Deduplicate by Firestore document ID
+        const seen = new Set<string>();
+        const deduped = merged.filter((result: any) => {
+          if (!result?.id || seen.has(result.id)) return false;
+          seen.add(result.id);
+          return true;
+        });
+
+        if (!cancelled) setQuizResults(deduped);
+      } catch {
+        if (!cancelled) setQuizResults([]);
+      }
+    };
+
+    loadQuizResults();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChild?.id, selectedChild?.email, selectedChild?.name, selectedChild?.class, selectedChild?.section]);
+
+  // Local date helper (avoids UTC offset shifting the date)
+  const getLocalDateStr = (d: Date = new Date()): string =>
+    d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+
+  const getResultDateStr = (value?: string): string => {
+    if (!value) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value.split('T')[0] : getLocalDateStr(parsed);
+  };
+
+  const normalizeQuizKey = (subject?: string, topic?: string): string =>
+    `${(subject || '').trim().toLowerCase()}::${(topic || '').trim().toLowerCase()}`;
+
+  const getQuizAccuracy = (result: any): number => {
+    if (typeof result?.accuracy === 'number') return result.accuracy;
+    if (typeof result?.correct === 'number' && typeof result?.total === 'number' && result.total > 0) {
+      return Math.round((result.correct / result.total) * 100);
+    }
+    if (typeof result?.score === 'number' && typeof result?.total === 'number' && result.total > 0 && result.score <= result.total) {
+      return Math.round((result.score / result.total) * 100);
+    }
+    if (typeof result?.score === 'number') return result.score;
+    return 0;
+  };
+
+  const todayDate = getLocalDateStr();
 
   const todayRecord = studentAttendance.find(a => a.date === todayDate);
   const todayAttendance: AttendanceRecord = {
@@ -167,71 +301,163 @@ export function ParentDashboardNew() {
     time: todayRecord?.time || '--:--',
   };
 
-  // Convert lessons to daily activities
-  const todayActivities: DailyActivity[] = lessons
-    .filter(l => l.date === todayDate)
-    .map(l => ({
-      id: l.id,
-      date: l.date,
-      subject: l.subject,
-      topic: l.topic,
-      objectives: l.objectives,
-      teacherNote: l.notes,
-      quizAssigned: false, // Quizzes logic would go here
-      quizCompleted: false,
-    }));
+  // Convert lessons to daily activities, enriched with quiz results
+  const todayActivities: DailyActivity[] = useMemo(() => {
+    // Index today's quiz results by subject+topic and subject-only for O(1) lookup
+    const quizIndex = new Map<string, { score: number; total: number }>();
+    const subjectOnlyIndex = new Map<string, { score: number; total: number }>();
+    for (const qr of quizResults) {
+      const qrDate = getResultDateStr(qr.completed_at || qr.created_at);
+      if (qrDate === todayDate) {
+        const entry = { score: getQuizAccuracy(qr), total: 100 };
+        const key = normalizeQuizKey(qr.subject, qr.topic);
+        quizIndex.set(key, entry);
+        // Subject-only fallback for quiz results missing topic
+        if (qr.subject) {
+          const subjKey = (qr.subject || '').trim().toLowerCase();
+          if (!subjectOnlyIndex.has(subjKey)) subjectOnlyIndex.set(subjKey, entry);
+        }
+      }
+    }
+
+    return lessons
+      .filter(l => l.date === todayDate)
+      .map(l => {
+        const key = normalizeQuizKey(l.subject, l.topic);
+        // Try exact match first, then subject-only fallback
+        const quizResult = quizIndex.get(key)
+          || subjectOnlyIndex.get((l.subject || '').trim().toLowerCase());
+        return {
+          id: l.id,
+          date: l.date,
+          subject: l.subject,
+          topic: l.topic,
+          objectives: l.objectives || [],
+          teacherNote: l.notes,
+          quizAssigned: true,
+          quizCompleted: !!quizResult,
+          quizScore: quizResult?.score,
+          quizTotal: quizResult?.total,
+        };
+      });
+  }, [lessons, quizResults, todayDate]);
 
   // Fallback to empty if no activities logged yet
   const effectiveActivities = todayActivities;
 
-  const weekTimeline: DailyActivity[] = lessons
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .map(l => ({
-      id: l.id,
-      date: l.date,
-      subject: l.subject,
-      topic: l.topic,
-      objectives: l.objectives,
-      teacherNote: l.notes,
-      quizAssigned: false,
-      quizCompleted: false,
-    }));
+  const weekTimeline: DailyActivity[] = useMemo(() => {
+    // Index ALL quiz results by date::subject::topic and date::subject for timeline enrichment
+    const quizIndex = new Map<string, { score: number; total: number }>();
+    const subjOnlyIndex = new Map<string, { score: number; total: number }>();
+    for (const qr of quizResults) {
+      const qrDate = getResultDateStr(qr.completed_at || qr.created_at);
+      if (qrDate) {
+        const entry = { score: getQuizAccuracy(qr), total: 100 };
+        quizIndex.set(`${qrDate}::${normalizeQuizKey(qr.subject, qr.topic)}`, entry);
+        if (qr.subject) {
+          const subjKey = `${qrDate}::${(qr.subject || '').trim().toLowerCase()}`;
+          if (!subjOnlyIndex.has(subjKey)) subjOnlyIndex.set(subjKey, entry);
+        }
+      }
+    }
 
-  // Generate Progress Data Dynamically
+    const weekEnd = new Date(currentWeekStart);
+    weekEnd.setDate(currentWeekStart.getDate() + 7);
+
+    return lessons
+      .filter(l => {
+        const lessonDate = new Date(l.date + 'T00:00:00');
+        return lessonDate >= currentWeekStart && lessonDate < weekEnd;
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map(l => {
+        const key = `${l.date}::${normalizeQuizKey(l.subject, l.topic)}`;
+        const quizResult = quizIndex.get(key)
+          || subjOnlyIndex.get(`${l.date}::${(l.subject || '').trim().toLowerCase()}`);
+        return {
+          id: l.id,
+          date: l.date,
+          subject: l.subject,
+          topic: l.topic,
+          objectives: l.objectives || [],
+          teacherNote: l.notes,
+          quizAssigned: true,
+          quizCompleted: !!quizResult,
+          quizScore: quizResult?.score,
+          quizTotal: quizResult?.total,
+        };
+      });
+  }, [lessons, quizResults, currentWeekStart]);
+
+  // Generate Progress Data Dynamically from quiz and exam backend results
   const progressData: ProgressData[] = useMemo(() => {
-    if (!examResults || examResults.length === 0) return [];
+    if ((!examResults || examResults.length === 0) && (!quizResults || quizResults.length === 0)) return [];
 
-    // Group results by subject
-    const subjectGroups: Record<string, { totalScores: number, count: number, lastScore: number }> = {};
+    // Normalize subject names for consistent grouping (trim + title-case first letter)
+    const normalizeSubject = (s: string) => {
+      const trimmed = s.trim();
+      if (!trimmed) return trimmed;
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    };
+
+    const subjectGroups: Record<string, { scores: { score: number; date: string }[]; }> = {};
+
+    quizResults.forEach((result) => {
+      if (!result.subject) return;
+      const subj = normalizeSubject(result.subject);
+      if (!subjectGroups[subj]) subjectGroups[subj] = { scores: [] };
+      const score = getQuizAccuracy(result);
+      const date = result.completed_at || result.created_at || '';
+      subjectGroups[subj].scores.push({ score, date });
+    });
 
     examResults.forEach(result => {
       const exam = exams.find(e => e.id === result.examId);
-      if (exam) {
-        if (!subjectGroups[exam.subject]) {
-          subjectGroups[exam.subject] = { totalScores: 0, count: 0, lastScore: 0 };
+      if (exam?.subject) {
+        const subj = normalizeSubject(exam.subject);
+        if (!subjectGroups[subj]) subjectGroups[subj] = { scores: [] };
+        // Compute percentage from marks if the stored percentage is missing/invalid
+        let pct = result.percentage;
+        if (typeof pct !== 'number' || isNaN(pct)) {
+          pct = result.totalMarks > 0 ? Math.round((result.marksObtained / result.totalMarks) * 100) : 0;
         }
-        subjectGroups[exam.subject].totalScores += result.percentage;
-        subjectGroups[exam.subject].count += 1;
-        // Simplified "last score" logic, assuming chronological order loosely
-        subjectGroups[exam.subject].lastScore = result.percentage;
+        const date = result.gradedAt || result.created_at || '';
+        subjectGroups[subj].scores.push({ score: pct, date });
       }
     });
 
     return Object.entries(subjectGroups).map(([subject, data]) => {
-      const avg = Math.round(data.totalScores / data.count);
+      const { scores } = data;
+      const totalScores = scores.reduce((s, e) => s + e.score, 0);
+      const avg = Math.round(totalScores / scores.length);
+
+      // Sort by date ascending to compute real trend
+      const sorted = [...scores].sort((a, b) => a.date.localeCompare(b.date));
+      const lastScore = sorted[sorted.length - 1].score;
+
       let trend: 'improving' | 'steady' | 'needs-attention' = 'steady';
-      if (avg >= 80) trend = 'improving';
-      else if (avg < 60) trend = 'needs-attention';
+      if (sorted.length >= 2) {
+        // Compare recent half average vs older half average
+        const mid = Math.floor(sorted.length / 2);
+        const olderAvg = sorted.slice(0, mid).reduce((s, e) => s + e.score, 0) / mid;
+        const recentAvg = sorted.slice(mid).reduce((s, e) => s + e.score, 0) / (sorted.length - mid);
+        if (recentAvg >= olderAvg + 5) trend = 'improving';
+        else if (recentAvg <= olderAvg - 5) trend = 'needs-attention';
+      } else {
+        // Single result: judge by score level
+        if (avg >= 75) trend = 'improving';
+        else if (avg < 50) trend = 'needs-attention';
+      }
 
       return {
         subject,
         averageScore: avg,
-        totalQuizzes: data.count,
+        totalQuizzes: scores.length,
         trend,
-        lastScore: data.lastScore
+        lastScore: Math.round(lastScore),
       };
-    });
-  }, [examResults, exams]);
+    }).sort((a, b) => b.averageScore - a.averageScore);
+  }, [examResults, exams, quizResults]);
 
 
 
@@ -248,11 +474,14 @@ export function ParentDashboardNew() {
     receiptNo: p.receiptNo
   }));
 
+  // Deduplicate: exclude invoices that already have a matching payment
+  const paidInvoiceIds = new Set((payments || []).map(p => (p as any).invoiceId).filter(Boolean));
   const pendingFees = (feeInvoices || [])
+    .filter(inv => !paidInvoiceIds.has(inv.id))
     .filter(inv => inv.status === 'pending' || inv.status === 'overdue' || inv.status === 'partial')
     .map(inv => ({
       id: inv.id,
-      feeHead: inv.items.map(i => i.componentName).join(', ') || 'School Fee',
+      feeHead: inv.items?.map((i: any) => i.componentName).join(', ') || 'School Fee',
       amount: inv.totalBalance,
       dueDate: inv.dueDate,
       status: (inv.status === 'partial' ? 'pending' : inv.status) as 'pending' | 'overdue',
@@ -264,63 +493,163 @@ export function ParentDashboardNew() {
 
   const [selectedReportPeriod, setSelectedReportPeriod] = useState<ReportPeriod>('weekly');
 
-  // Helper to calculate assignment stats
+  // Helper: compute attendance stats for a specific date range from raw records
+  const computeAttendanceForPeriod = (days: number) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = getLocalDateStr(cutoff);
+    const records = studentAttendance.filter(r => r.date >= cutoffStr);
+    const total = records.length;
+    const present = records.filter(r => r.status === 'present').length;
+    const absent = records.filter(r => r.status === 'absent').length;
+    const late = records.filter(r => r.status === 'late').length;
+    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+    return { total, present, absent, late, percentage };
+  };
+
+  // Helper to calculate assignment stats from actual submission data
   const calculateAssignmentStats = (days: number) => {
-    const cutoffDate = new Date(new Date().getTime() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const recentAssignments = assignments.filter(a => a.assignedDate >= cutoffDate);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffDate = getLocalDateStr(cutoff);
+    const recentAssignments = assignments.filter(a => (a.assignedDate || a.dueDate || '') >= cutoffDate);
     const assigned = recentAssignments.length;
-    // Assuming we don't have detailed submission tracking per assignment easily here, we mock the completion relatively based on studentPerformance
-    const completionRate = studentPerformance?.assignmentPercentage || 0;
-    const completed = Math.round((completionRate / 100) * assigned);
-    return {
-      assigned,
-      completed,
-      onTime: completed, // Assuming on time for simplicity
-      late: 0,
-      pending: assigned - completed,
-      completionRate: assigned > 0 ? completionRate : 100,
-    };
+
+    // Match actual student submissions against assignments
+    const submittedIds = new Set((assignmentSubmissions || []).map(s => s.assignmentId));
+    let completed = 0;
+    let onTime = 0;
+    let late = 0;
+    for (const a of recentAssignments) {
+      if (submittedIds.has(a.id)) {
+        completed++;
+        const sub = (assignmentSubmissions || []).find(s => s.assignmentId === a.id);
+        if (sub && a.dueDate && sub.submittedDate <= a.dueDate) {
+          onTime++;
+        } else {
+          late++;
+        }
+      }
+    }
+    const pending = assigned - completed;
+    const completionRate = assigned > 0 ? Math.round((completed / assigned) * 100) : 100;
+    return { assigned, completed, onTime, late, pending, completionRate };
+  };
+
+  // Helper: compute quiz-based homework stats for a period
+  const calculateQuizHomeworkStats = (days: number) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = getLocalDateStr(cutoff);
+
+    // Lessons in the period are the "assigned" homework
+    const periodLessons = lessons.filter(l => l.date >= cutoffStr);
+    const totalLessons = periodLessons.length;
+
+    // Quiz results completed in the period
+    const periodQuizzes = quizResults.filter(qr => {
+      const d = getResultDateStr(qr.completed_at || qr.created_at);
+      return d >= cutoffStr;
+    });
+
+    // Build set of completed subject::topic keys
+    const completedKeys = new Set(
+      periodQuizzes.map(qr => normalizeQuizKey(qr.subject, qr.topic))
+    );
+
+    let quizCompleted = 0;
+    for (const l of periodLessons) {
+      if (completedKeys.has(normalizeQuizKey(l.subject, l.topic))) {
+        quizCompleted++;
+      }
+    }
+
+    const avgAccuracy = periodQuizzes.length > 0
+      ? Math.round(periodQuizzes.reduce((s, qr) => s + getQuizAccuracy(qr), 0) / periodQuizzes.length)
+      : 0;
+
+    return { totalLessons, quizCompleted, quizPending: totalLessons - quizCompleted, avgAccuracy, totalQuizzesTaken: periodQuizzes.length };
   };
 
   // Generate Report Data Dynamically
   const weeklyReportData = useMemo(() => {
     const hwStats = calculateAssignmentStats(7);
+    const attStats = computeAttendanceForPeriod(7);
+    const quizHw = calculateQuizHomeworkStats(7);
+
+    // Merge assignment + quiz homework into a combined view
+    const totalAssigned = hwStats.assigned + quizHw.totalLessons;
+    const totalCompleted = hwStats.completed + quizHw.quizCompleted;
+    const totalPending = hwStats.pending + quizHw.quizPending;
+    const combinedRate = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 100;
+
+    // Dynamic highlights
+    const highlights: string[] = [];
+    highlights.push(`Attendance: ${attStats.percentage}% (${attStats.present} of ${attStats.total} days)`);
+    if (totalCompleted > 0) highlights.push(`Completed ${totalCompleted} of ${totalAssigned} homework tasks (${combinedRate}%)`);
+    if (quizHw.totalQuizzesTaken > 0) highlights.push(`Average quiz accuracy: ${quizHw.avgAccuracy}%`);
+    if (attStats.absent > 0) highlights.push(`${attStats.absent} absent day${attStats.absent > 1 ? 's' : ''} this week`);
+    if (totalPending > 0) highlights.push(`${totalPending} homework task${totalPending > 1 ? 's' : ''} still pending`);
+    if (highlights.length === 0) highlights.push('No activity data for this period yet.');
+
     return {
       period: 'Last 7 Days',
-      attendanceSummary: {
-        present: attendanceStats?.present || 0,
-        absent: attendanceStats?.absent || 0,
-        late: attendanceStats?.late || 0,
-        total: attendanceStats?.total || 0,
+      attendanceSummary: attStats,
+      homeworkSummary: {
+        assigned: totalAssigned,
+        completed: totalCompleted,
+        onTime: hwStats.onTime,
+        late: hwStats.late,
+        pending: totalPending,
+        completionRate: combinedRate,
       },
-      homeworkSummary: hwStats,
-      performanceBySubject: progressData, // Reusing progress data
-      skillGrowth: [], // Kept empty or static as it's a very advanced feature not currently in the data model
-      highlights: [
-        `Attendance is at ${attendanceStats?.percentage || 0}%`,
-        `Completed ${hwStats.completed} assignments recently.`
-      ],
+      performanceBySubject: progressData,
+      skillGrowth: [],
+      highlights,
       teacherComments: [],
     };
-  }, [attendanceStats, assignments, progressData, studentPerformance]);
+  }, [studentAttendance, assignments, assignmentSubmissions, lessons, quizResults, progressData]);
 
   const monthlyReportData = useMemo(() => {
     const hwStats = calculateAssignmentStats(30);
+    const attStats = computeAttendanceForPeriod(30);
+    const quizHw = calculateQuizHomeworkStats(30);
+
+    const totalAssigned = hwStats.assigned + quizHw.totalLessons;
+    const totalCompleted = hwStats.completed + quizHw.quizCompleted;
+    const totalPending = hwStats.pending + quizHw.quizPending;
+    const combinedRate = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 100;
+
+    // Compute overall performance from progressData
+    const overallAvg = progressData.length > 0
+      ? Math.round(progressData.reduce((s, p) => s + p.averageScore, 0) / progressData.length)
+      : 0;
+
+    const highlights: string[] = [];
+    highlights.push(`Monthly attendance: ${attStats.percentage}% (${attStats.present} of ${attStats.total} days)`);
+    if (overallAvg > 0) highlights.push(`Overall performance score: ${overallAvg}%`);
+    if (totalCompleted > 0) highlights.push(`Completed ${totalCompleted} of ${totalAssigned} homework tasks (${combinedRate}%)`);
+    if (quizHw.totalQuizzesTaken > 0) highlights.push(`Average quiz accuracy: ${quizHw.avgAccuracy}%`);
+    const strongSubjects = progressData.filter(p => p.averageScore >= 80);
+    if (strongSubjects.length > 0) highlights.push(`Strong subjects: ${strongSubjects.map(s => s.subject).join(', ')}`);
+    const weakSubjects = progressData.filter(p => p.averageScore < 60);
+    if (weakSubjects.length > 0) highlights.push(`Needs attention: ${weakSubjects.map(s => s.subject).join(', ')}`);
+    if (highlights.length === 0) highlights.push('No activity data for this period yet.');
+
     return {
       period: 'Last 30 Days',
-      attendanceSummary: {
-        present: attendanceStats?.present || 0,
-        absent: attendanceStats?.absent || 0,
-        late: attendanceStats?.late || 0,
-        total: attendanceStats?.total || 0,
+      attendanceSummary: attStats,
+      homeworkSummary: {
+        assigned: totalAssigned,
+        completed: totalCompleted,
+        onTime: hwStats.onTime,
+        late: hwStats.late,
+        pending: totalPending,
+        completionRate: combinedRate,
       },
-      homeworkSummary: hwStats,
       performanceBySubject: progressData,
       skillGrowth: [],
-      highlights: [
-        `Monthly attendance: ${attendanceStats?.percentage || 0}%`,
-        `Overall Exam Score: ${studentPerformance?.examPercentage || 0}%`
-      ],
+      highlights,
       teacherComments: [],
       areasOfImprovement: progressData
         .filter(p => p.averageScore < 70)
@@ -330,7 +659,7 @@ export function ParentDashboardNew() {
           suggestions: [`Review upcoming lessons for ${p.subject}`, `Practice more past assignments.`]
         }))
     };
-  }, [attendanceStats, assignments, progressData, studentPerformance]);
+  }, [studentAttendance, assignments, assignmentSubmissions, lessons, quizResults, progressData]);
 
   // AI Discussion Suggestions derived from todays lessons
   const aiDiscussionSuggestions: AIDiscussionSuggestion[] = lessons
@@ -352,9 +681,11 @@ export function ParentDashboardNew() {
 
   const renderReports = () => {
     const reportData = selectedReportPeriod === 'weekly' ? weeklyReportData : monthlyReportData;
-    const attendancePercentage = Math.round(
-      (reportData.attendanceSummary.present / reportData.attendanceSummary.total) * 100
-    );
+    const attendancePercentage = reportData.attendanceSummary.total > 0
+      ? Math.round(
+        (reportData.attendanceSummary.present / reportData.attendanceSummary.total) * 100
+      )
+      : 0;
 
     return (
       <div className="space-y-6">
@@ -393,14 +724,10 @@ export function ParentDashboardNew() {
               </button>
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="mt-2">
             <p className="text-gray-700">
               Report Period: <strong>{reportData.period}</strong>
             </p>
-            <button className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-              <Download className="w-4 h-4" />
-              Download PDF
-            </button>
           </div>
         </div>
 
@@ -714,11 +1041,10 @@ export function ParentDashboardNew() {
     const pendingQuizzes = effectiveActivities.filter(
       (a) => a.quizAssigned && !a.quizCompleted
     ).length;
-    const averageScore =
-      effectiveActivities
-        .filter((a) => a.quizScore)
-        .reduce((sum, a) => sum + (a.quizScore || 0), 0) /
-      (effectiveActivities.filter((a) => a.quizScore).length || 1);
+    const scoredActivities = effectiveActivities.filter((a) => typeof a.quizScore === 'number');
+    const averageScore = scoredActivities.length > 0
+      ? scoredActivities.reduce((sum, a) => sum + (a.quizScore || 0), 0) / scoredActivities.length
+      : null;
 
     return (
       <div className="space-y-6">
@@ -828,7 +1154,7 @@ export function ParentDashboardNew() {
                 <p className="text-gray-700">Avg Score</p>
               </div>
               <p className="text-2xl text-yellow-600">
-                {averageScore ? Math.round(averageScore) : '—'}%
+                {averageScore !== null ? Math.round(averageScore) : '—'}%
               </p>
               <p className="text-gray-600 text-sm">today</p>
             </div>
@@ -904,10 +1230,10 @@ export function ParentDashboardNew() {
                     <div className="ml-4 text-center">
                       <div className="w-20 h-20 bg-gradient-to-br from-purple-600 to-purple-700 rounded-full flex flex-col items-center justify-center text-white">
                         <span className="text-2xl font-bold">{activity.quizScore}</span>
-                        <span className="text-xs">/ {activity.quizTotal}</span>
+                        <span className="text-xs">%</span>
                       </div>
                       <p className="text-gray-600 text-sm mt-1">
-                        {Math.round((activity.quizScore / (activity.quizTotal || 1)) * 100)}%
+                        Accuracy
                       </p>
                     </div>
                   )}
@@ -1023,66 +1349,135 @@ export function ParentDashboardNew() {
       return acc;
     }, {} as Record<string, DailyActivity[]>);
 
+    const weekEnd = new Date(currentWeekStart);
+    weekEnd.setDate(currentWeekStart.getDate() + 6);
+    const rangeStr = `${currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-gray-900">Learning Timeline</h2>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Calendar className="w-7 h-7 text-purple-600" />
+              Learning Timeline
+            </h2>
+            <p className="text-gray-600 font-medium">Track your child's daily lessons and quiz performance</p>
+          </div>
           <button
             onClick={() => setCurrentView('dashboard')}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
           >
             Back to Dashboard
           </button>
         </div>
 
-        <div className="space-y-6">
-          {Object.entries(groupedByDate)
-            .sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime())
-            .map(([date, activities]) => (
-              <div key={date} className="bg-white rounded-xl shadow-md p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Calendar className="w-5 h-5 text-purple-600" />
-                  <h3 className="text-gray-900">
-                    {new Date(date).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </h3>
-                </div>
+        {/* Weekly Navigation Bar */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => navigateWeek(-1)}
+                className="p-2 hover:bg-white rounded-md transition-all text-gray-600 hover:text-purple-600 hover:shadow-sm"
+                title="Previous Week"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={jumpToToday}
+                className="px-4 py-1.5 hover:bg-white rounded-md transition-all text-sm font-medium text-gray-700 hover:text-purple-600 hover:shadow-sm"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => navigateWeek(1)}
+                className="p-2 hover:bg-white rounded-md transition-all text-gray-600 hover:text-purple-600 hover:shadow-sm"
+                title="Next Week"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-400" />
+              <h3 className="text-lg font-bold text-gray-900">
+                {rangeStr}
+              </h3>
+            </div>
+          </div>
+          <div className="text-sm font-medium text-purple-600 bg-purple-50 px-4 py-2 rounded-lg border border-purple-100">
+            {weekTimeline.length} Lessons Found
+          </div>
+        </div>
 
-                <div className="space-y-3">
-                  {activities.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="p-4 bg-gray-50 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
-                              {activity.subject}
-                            </span>
-                            {activity.quizCompleted && activity.quizScore && (
-                              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                                Score: {activity.quizScore}/{activity.quizTotal}
+        <div className="space-y-8">
+          {Object.entries(groupedByDate).length > 0 ? (
+            Object.entries(groupedByDate)
+              .sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime())
+              .map(([date, activities]) => (
+                <div key={date} className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest bg-gray-50 px-4 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                      {new Date(date).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    <div className="h-px bg-gray-100 flex-1"></div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {activities.map((activity) => (
+                      <div
+                        key={activity.id}
+                        className="p-6 bg-white rounded-xl border border-gray-200 hover:border-purple-400 hover:shadow-lg transition-all group relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 left-0 w-1 h-full bg-purple-500 transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-3 mb-3">
+                              <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold uppercase tracking-wider">
+                                {activity.subject}
                               </span>
+                              {activity.quizCompleted ? (
+                                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" />
+                                  Score: {activity.quizScore}%
+                                </span>
+                              ) : (
+                                <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  Quiz Pending
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-xl font-bold text-gray-900 mb-2">{activity.topic}</h4>
+                            {activity.teacherNote && (
+                              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-start gap-2">
+                                <MessageSquare className="w-4 h-4 text-blue-600 mt-1 flex-shrink-0" />
+                                <p className="text-gray-700 text-sm italic">
+                                  <span className="font-bold text-blue-800 not-italic">Teacher's Note:</span> {activity.teacherNote}
+                                </p>
+                              </div>
                             )}
                           </div>
-                          <p className="text-gray-900 mb-2">{activity.topic}</p>
-                          {activity.teacherNote && (
-                            <p className="text-gray-600 text-sm italic">
-                              Note: {activity.teacherNote}
-                            </p>
-                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+              ))
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                <Calendar className="w-10 h-10 text-gray-300" />
               </div>
-            ))}
+              <h4 className="text-xl font-bold text-gray-900 mb-2">No Activities Found</h4>
+              <p className="text-gray-500 text-center max-w-sm">
+                There are no learning activities logged for this week.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1101,146 +1496,174 @@ export function ParentDashboardNew() {
           </button>
         </div>
 
-        {/* Overall Performance */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Overall Performance</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
-              <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
-              <p className="text-gray-700 mb-1">Average Score</p>
-              <p className="text-3xl text-green-600">
-                {Math.round(
-                  progressData.reduce((sum, p) => sum + p.averageScore, 0) / progressData.length
-                )}
-                %
-              </p>
-            </div>
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
-              <Brain className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-              <p className="text-gray-700 mb-1">Total Quizzes</p>
-              <p className="text-3xl text-blue-600">
-                {progressData.reduce((sum, p) => sum + p.totalQuizzes, 0)}
-              </p>
-            </div>
-            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-center">
-              <Star className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-              <p className="text-gray-700 mb-1">Strong Subjects</p>
-              <p className="text-3xl text-yellow-600">
-                {progressData.filter((p) => p.averageScore >= 80).length}
-              </p>
-            </div>
+        {progressData.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-md p-12 text-center">
+            <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-gray-900 text-xl mb-2">No Performance Data Yet</h3>
+            <p className="text-gray-500 max-w-md mx-auto">
+              Once {selectedChild?.name || 'your child'} completes quizzes or exams, their performance data will appear here with detailed subject-wise analysis.
+            </p>
           </div>
-        </div>
-
-        {/* Subject-wise Performance */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Subject-wise Performance</h3>
-          <div className="space-y-4">
-            {progressData.map((subject) => (
-              <div key={subject.subject} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-gray-900">{subject.subject}</h4>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm ${subject.trend === 'improving'
-                        ? 'bg-green-100 text-green-700'
-                        : subject.trend === 'steady'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-orange-100 text-orange-700'
-                        }`}
-                    >
-                      {subject.trend === 'improving'
-                        ? '📈 Improving'
-                        : subject.trend === 'steady'
-                          ? '➡️ Steady'
-                          : '⚠️ Needs Attention'}
-                    </span>
-                  </div>
+        ) : (
+          <>
+            {/* Overall Performance */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-gray-900 mb-4">Overall Performance</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
+                  <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-gray-700 mb-1">Average Score</p>
+                  <p className="text-3xl text-green-600">
+                    {Math.round(progressData.reduce((sum, p) => sum + p.averageScore, 0) / progressData.length)}%
+                  </p>
                 </div>
-
-                <div className="grid grid-cols-3 gap-4 mb-3">
-                  <div>
-                    <p className="text-gray-600 text-sm">Average Score</p>
-                    <p className="text-gray-900">{subject.averageScore}%</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 text-sm">Last Score</p>
-                    <p className="text-gray-900">{subject.lastScore}%</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 text-sm">Total Quizzes</p>
-                    <p className="text-gray-900">{subject.totalQuizzes}</p>
-                  </div>
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
+                  <Brain className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-gray-700 mb-1">Total Assessments</p>
+                  <p className="text-3xl text-blue-600">
+                    {progressData.reduce((sum, p) => sum + p.totalQuizzes, 0)}
+                  </p>
                 </div>
-
-                {/* Progress Bar */}
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className={`h-3 rounded-full ${subject.averageScore >= 80
-                      ? 'bg-green-600'
-                      : subject.averageScore >= 60
-                        ? 'bg-blue-600'
-                        : 'bg-orange-600'
-                      }`}
-                    style={{ width: `${subject.averageScore}%` }}
-                  ></div>
+                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-center">
+                  <Star className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+                  <p className="text-gray-700 mb-1">Strong Subjects</p>
+                  <p className="text-3xl text-yellow-600">
+                    {progressData.filter((p) => p.averageScore >= 80).length}
+                  </p>
                 </div>
-
-                {subject.trend === 'needs-attention' && (
-                  <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                    <p className="text-gray-700 text-sm">
-                      💡 <strong>Suggestion:</strong> Encourage practice in {subject.subject}.
-                      Consider reviewing recent topics together.
-                    </p>
-                  </div>
-                )}
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 text-center">
+                  <BookOpen className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+                  <p className="text-gray-700 mb-1">Subjects Covered</p>
+                  <p className="text-3xl text-purple-600">
+                    {progressData.length}
+                  </p>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        {/* Strengths and Weak Areas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-              <Star className="w-5 h-5 text-yellow-600" />
-              Strengths
-            </h3>
-            <div className="space-y-2">
-              {progressData
-                .filter((p) => p.averageScore >= 80)
-                .map((subject) => (
-                  <div
-                    key={subject.subject}
-                    className="p-3 bg-green-50 rounded-lg border border-green-200"
-                  >
-                    <p className="text-gray-900">{subject.subject}</p>
-                    <p className="text-gray-600 text-sm">{subject.averageScore}% average</p>
+            {/* Subject-wise Performance */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-gray-900 mb-4">Subject-wise Performance</h3>
+              <div className="space-y-4">
+                {progressData.map((subject) => (
+                  <div key={subject.subject} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-gray-900">{subject.subject}</h4>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm ${subject.trend === 'improving'
+                            ? 'bg-green-100 text-green-700'
+                            : subject.trend === 'steady'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-orange-100 text-orange-700'
+                            }`}
+                        >
+                          {subject.trend === 'improving'
+                            ? '📈 Improving'
+                            : subject.trend === 'steady'
+                              ? '➡️ Steady'
+                              : '⚠️ Needs Attention'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 mb-3">
+                      <div>
+                        <p className="text-gray-600 text-sm">Average Score</p>
+                        <p className="text-gray-900">{subject.averageScore}%</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600 text-sm">Last Score</p>
+                        <p className="text-gray-900">{subject.lastScore}%</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600 text-sm">Assessments</p>
+                        <p className="text-gray-900">{subject.totalQuizzes}</p>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className={`h-3 rounded-full ${subject.averageScore >= 80
+                          ? 'bg-green-600'
+                          : subject.averageScore >= 60
+                            ? 'bg-blue-600'
+                            : 'bg-orange-600'
+                          }`}
+                        style={{ width: `${Math.min(subject.averageScore, 100)}%` }}
+                      ></div>
+                    </div>
+
+                    {subject.trend === 'needs-attention' && (
+                      <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                        <p className="text-gray-700 text-sm">
+                          💡 <strong>Suggestion:</strong> Encourage practice in {subject.subject}.
+                          Consider reviewing recent topics together.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
+              </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-              <Target className="w-5 h-5 text-orange-600" />
-              Areas to Focus
-            </h3>
-            <div className="space-y-2">
-              {progressData
-                .filter((p) => p.averageScore < 80)
-                .map((subject) => (
-                  <div
-                    key={subject.subject}
-                    className="p-3 bg-orange-50 rounded-lg border border-orange-200"
-                  >
-                    <p className="text-gray-900">{subject.subject}</p>
-                    <p className="text-gray-600 text-sm">{subject.averageScore}% average</p>
-                  </div>
-                ))}
+            {/* Strengths and Weak Areas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
+                  <Star className="w-5 h-5 text-yellow-600" />
+                  Strengths
+                </h3>
+                <div className="space-y-2">
+                  {progressData.filter((p) => p.averageScore >= 80).length > 0 ? (
+                    progressData
+                      .filter((p) => p.averageScore >= 80)
+                      .map((subject) => (
+                        <div
+                          key={subject.subject}
+                          className="p-3 bg-green-50 rounded-lg border border-green-200"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-gray-900">{subject.subject}</p>
+                            <p className="text-green-700 font-medium">{subject.averageScore}%</p>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">No strong subjects yet (&ge;80%)</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-orange-600" />
+                  Areas to Focus
+                </h3>
+                <div className="space-y-2">
+                  {progressData.filter((p) => p.averageScore < 80).length > 0 ? (
+                    progressData
+                      .filter((p) => p.averageScore < 80)
+                      .map((subject) => (
+                        <div
+                          key={subject.subject}
+                          className="p-3 bg-orange-50 rounded-lg border border-orange-200"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-gray-900">{subject.subject}</p>
+                            <p className="text-orange-700 font-medium">{subject.averageScore}%</p>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">All subjects above 80% — great work!</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     );
   };
@@ -1349,56 +1772,97 @@ export function ParentDashboardNew() {
   };
 
   const renderNotifications = () => {
+    const formatNotifDate = (dateStr: string) => {
+      try {
+        const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
+        if (isNaN(d.getTime())) return dateStr;
+        const now = new Date();
+        const diffMs = now.getTime() - d.getTime();
+        const diffDays = Math.floor(diffMs / 86400000);
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      } catch { return dateStr; }
+    };
+
+    const getNotifIcon = (type: string) => {
+      switch (type) {
+        case 'attendance': return <CheckCircle className="w-5 h-5 text-green-600" />;
+        case 'fee': return <DollarSign className="w-5 h-5 text-orange-600" />;
+        case 'assignment': return <BookOpen className="w-5 h-5 text-blue-600" />;
+        case 'exam': return <Award className="w-5 h-5 text-indigo-600" />;
+        case 'announcement': return <MessageSquare className="w-5 h-5 text-teal-600" />;
+        default: return <Bell className="w-5 h-5 text-purple-600" />;
+      }
+    };
+
+    const getNotifBg = (type: string) => {
+      switch (type) {
+        case 'attendance': return 'bg-green-100';
+        case 'fee': return 'bg-orange-100';
+        case 'assignment': return 'bg-blue-100';
+        case 'exam': return 'bg-indigo-100';
+        case 'announcement': return 'bg-teal-100';
+        default: return 'bg-purple-100';
+      }
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-gray-900">Notifications</h2>
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-          >
-            Back to Dashboard
-          </button>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              >
+                Mark all read
+              </button>
+            )}
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Back to Dashboard
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-3">
-          {notifications.map((notification) => (
-            <div
-              key={notification.id}
-              className={`p-4 rounded-lg border ${notification.read
-                ? 'bg-white border-gray-200'
-                : 'bg-blue-50 border-blue-300'
-                }`}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${notification.type === 'attendance'
-                    ? 'bg-green-100'
-                    : notification.type === 'fee'
-                      ? 'bg-orange-100'
-                      : 'bg-purple-100'
-                    }`}
-                >
-                  {notification.type === 'attendance' ? (
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  ) : notification.type === 'fee' ? (
-                    <DollarSign className="w-5 h-5 text-orange-600" />
-                  ) : (
-                    <Bell className="w-5 h-5 text-purple-600" />
+        {notifications.length === 0 ? (
+          <div className="text-center py-12">
+            <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">No notifications yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                onClick={() => !notification.read && markAsRead(notification.id)}
+                className={`p-4 rounded-lg border cursor-pointer transition-colors ${notification.read
+                  ? 'bg-white border-gray-200'
+                  : 'bg-blue-50 border-blue-300 hover:bg-blue-100'
+                  }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getNotifBg(notification.type)}`}>
+                    {getNotifIcon(notification.type)}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-gray-900 mb-1">{notification.title}</h4>
+                    <p className="text-gray-700 mb-2">{notification.message}</p>
+                    <p className="text-gray-500 text-sm">{formatNotifDate(notification.date)}</p>
+                  </div>
+                  {!notification.read && (
+                    <span className="w-2 h-2 bg-blue-600 rounded-full mt-2"></span>
                   )}
                 </div>
-                <div className="flex-1">
-                  <h4 className="text-gray-900 mb-1">{notification.title}</h4>
-                  <p className="text-gray-700 mb-2">{notification.message}</p>
-                  <p className="text-gray-600 text-sm">{notification.date}</p>
-                </div>
-                {!notification.read && (
-                  <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                )}
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };

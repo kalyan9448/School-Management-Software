@@ -44,7 +44,6 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
   const [activeTab, setActiveTab] = useState<'class' | 'students' | 'leaderboard'>('class');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [performanceData, setPerformanceData] = useState<any[]>([]);
-  const [quizzes, setQuizzes] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [myClasses, setMyClasses] = useState<any[]>([]);
   const [selectedClass, setSelectedClass] = useState<any>(initialClass);
@@ -66,9 +65,6 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
       if (selectedClass) {
         const data = await quizService.getClassPerformance(selectedClass.class, selectedClass.section, selectedClass.subject);
         setPerformanceData(data);
-        
-        const classQuizzes = await quizService.getQuizzesByClass(selectedClass.class, selectedClass.section);
-        setQuizzes(classQuizzes.filter(q => q.subject === selectedClass.subject));
       }
       const lb = await quizService.getTeacherLeaderboard();
       setLeaderboard(lb);
@@ -76,15 +72,21 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
     loadPerformanceData();
   }, [selectedClass]);
 
+  // Only count students who have completed at least one quiz
+  const activeStudents = performanceData.filter(s => s.completedQuizzes > 0);
+  const totalAssigned = performanceData.reduce((sum, s) => sum + s.totalQuizzes, 0);
+  const totalCompleted = performanceData.reduce((sum, s) => sum + s.completedQuizzes, 0);
+
   const stats = {
-    averageScore: performanceData.length > 0 
-      ? Math.round(performanceData.reduce((sum, s) => sum + s.averageScore, 0) / performanceData.length)
+    averageScore: activeStudents.length > 0 
+      ? Math.round(activeStudents.reduce((sum, s) => sum + s.averageScore, 0) / activeStudents.length)
       : 0,
-    completionRate: performanceData.length > 0 && quizzes.length > 0
-      ? Math.round((performanceData.reduce((sum, s) => sum + s.completedQuizzes, 0) / (performanceData.length * quizzes.length)) * 100)
+    completionRate: totalAssigned > 0
+      ? Math.round((totalCompleted / totalAssigned) * 100)
       : 0,
-    topPerformers: [...performanceData].sort((a, b) => b.averageScore - a.averageScore).slice(0, 3),
-    lowPerformers: [...performanceData].sort((a, b) => a.averageScore - b.averageScore).slice(0, 3),
+    totalAssessments: totalCompleted,
+    topPerformers: [...performanceData].filter(s => s.completedQuizzes > 0).sort((a, b) => b.averageScore - a.averageScore).slice(0, 3),
+    lowPerformers: [...performanceData].filter(s => s.completedQuizzes > 0).sort((a, b) => a.averageScore - b.averageScore).slice(0, 3),
   };
 
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F'];
@@ -94,8 +96,8 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
     if (!student) return null;
 
     const progressData = student.results.map((r: any, index: number) => ({
-      name: `Quiz ${index + 1}`,
-      score: Math.round((r.score / r.total) * 100)
+      name: r.topic ? r.topic.slice(0, 15) : `Quiz ${index + 1}`,
+      score: r.accuracy ?? (r.total > 0 ? Math.round((r.score / r.total) * 100) : 0)
     }));
 
     return (
@@ -133,7 +135,7 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
               <p className="text-blue-600 text-xs font-bold uppercase mb-1">Latest</p>
               <h3 className="text-2xl font-bold text-blue-900">
                 {student.results.length > 0 
-                  ? `${Math.round((student.results[student.results.length - 1].score / student.results[student.results.length - 1].total) * 100)}%` 
+                  ? `${student.results[student.results.length - 1].accuracy ?? Math.round((student.results[student.results.length - 1].score / (student.results[student.results.length - 1].total || 1)) * 100)}%` 
                   : 'N/A'
                 }
               </h3>
@@ -142,7 +144,6 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
 
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Progress Over Time</h3>
               <h3 className="text-lg font-bold text-gray-900 mb-4">Progress Over Time</h3>
               <div className="w-full overflow-hidden flex justify-center">
                 <LineChart 
@@ -167,8 +168,7 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
               <h3 className="text-lg font-bold text-gray-900 mb-4">Topic-wise Performance</h3>
               <div className="space-y-3">
                 {student.results.map((r: any, i: number) => {
-                  const quiz = quizzes.find(q => q.id === r.quizId);
-                  const percentage = Math.round((r.score / r.total) * 100);
+                  const percentage = r.accuracy ?? (r.total > 0 ? Math.round((r.score / r.total) * 100) : 0);
                   return (
                     <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="flex items-center gap-3">
@@ -180,8 +180,8 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
                           <BookOpen className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900">{quiz?.topic || 'Unknown Quiz'}</p>
-                          <p className="text-xs text-gray-500">{new Date(r.completedDate).toLocaleDateString()}</p>
+                          <p className="font-semibold text-gray-900">{r.topic || r.subject || 'Quiz'}</p>
+                          <p className="text-xs text-gray-500">{r.completedDate ? new Date(r.completedDate).toLocaleDateString() : '—'}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -324,8 +324,8 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
               <div className="flex items-center justify-between mb-2">
                 <Target className="w-5 h-5 text-orange-600" />
               </div>
-              <p className="text-gray-500 text-sm">Quizzes Assigned</p>
-              <h3 className="text-2xl font-bold text-gray-900">{quizzes.length}</h3>
+              <p className="text-gray-500 text-sm">Quizzes Completed</p>
+              <h3 className="text-2xl font-bold text-gray-900">{stats.totalAssessments}</h3>
             </div>
           </div>
 

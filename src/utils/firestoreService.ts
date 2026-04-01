@@ -1674,46 +1674,138 @@ export const quizService = {
     getResultsByQuiz: async (quizId: string) =>
         fetchCollection<any>('quiz_results', where('quizId', '==', quizId)),
     getResultsByStudent: async (studentId: string) =>
-        fetchCollection<any>('quiz_results', where('studentId', '==', studentId)),
+        fetchCollection<any>('quiz_results', where('student_id', '==', studentId)),
 
     getTeacherClasses: async (teacherEmail: string) => {
         const teacher = await teacherService.getByEmail(teacherEmail);
-        return teacher?.classes || [];
+        if (teacher?.classes && teacher.classes.length > 0) {
+            return teacher.classes;
+        }
+        // Fallback: derive classes from lessons logged by teacher
+        const lessons = await fetchCollection<any>(
+            'lessons',
+            where('teacherEmail', '==', teacherEmail),
+        );
+        const classMap = new Map<string, { class: string; section: string; subject: string }>();
+        for (const l of lessons) {
+            if (l.class && l.section && l.subject) {
+                const key = `${l.class}::${l.section}::${l.subject}`;
+                if (!classMap.has(key)) {
+                    classMap.set(key, { class: l.class, section: l.section, subject: l.subject });
+                }
+            }
+        }
+        return Array.from(classMap.values());
     },
 
     getClassPerformance: async (className: string, section: string, subject?: string) => {
         const students = await studentService.getByClass(className, section);
-        let quizzes = await quizService.getQuizzesByClass(className, section);
-        if (subject) quizzes = quizzes.filter((q: any) => q.subject === subject);
-        const results = await fetchCollection<any>('quiz_results');
+
+        // Fetch actual quiz results from quiz_results collection (by class/section)
+        let classResults = await quizResultService.getByClass(className, section);
+        if (subject) {
+            classResults = classResults.filter(r =>
+                (r.subject || '').toLowerCase().trim() === subject.toLowerCase().trim()
+            );
+        }
+
+        // Also fetch lessons (used as "assigned quizzes" count) for this class/section/subject
+        let lessons: any[] = [];
+        try {
+            const allLessons = await fetchCollection<any>(
+                'lessons',
+                where('class', '==', className),
+                where('section', '==', section),
+            );
+            lessons = subject
+                ? allLessons.filter(l => (l.subject || '').toLowerCase().trim() === subject.toLowerCase().trim())
+                : allLessons;
+        } catch { /* lessons query optional */ }
+
+        const totalQuizzes = lessons.length || classResults.length;
 
         return students.map(student => {
-            const quizIds = quizzes.map((q: any) => q.id);
-            const studentResults = results.filter((r: any) => r.studentId === student.id && quizIds.includes(r.quizId));
+            // Match quiz results by student_id (doc ID), student_email, or student_name
+            const studentResults = classResults.filter(r =>
+                r.student_id === student.id ||
+                (student.email && r.student_email === student.email) ||
+                (student.name && r.student_name === student.name)
+            );
+
+            const averageScore = studentResults.length > 0
+                ? Math.round(
+                    studentResults.reduce((sum, r) => {
+                        // Prefer accuracy field, then compute from correct/total
+                        if (typeof r.accuracy === 'number') return sum + r.accuracy;
+                        if (r.total > 0) return sum + (r.correct / r.total) * 100;
+                        if (r.total > 0) return sum + (r.score / r.total) * 100;
+                        return sum;
+                    }, 0) / studentResults.length
+                )
+                : 0;
+
+            // Sort results by date for progress tracking
+            const sortedResults = [...studentResults].sort((a, b) =>
+                (a.completed_at || a.created_at || '').localeCompare(b.completed_at || b.created_at || '')
+            );
+
             return {
                 studentId: student.id,
                 name: student.name,
                 rollNo: student.rollNo,
-                totalQuizzes: quizzes.length,
+                email: student.email,
+                totalQuizzes,
                 completedQuizzes: studentResults.length,
-                averageScore: studentResults.length > 0
-                    ? Math.round(studentResults.reduce((sum: number, r: any) => sum + (r.score / r.total) * 100, 0) / studentResults.length)
-                    : 0,
-                results: studentResults,
+                averageScore,
+                results: sortedResults.map(r => ({
+                    quizId: r.id,
+                    subject: r.subject,
+                    topic: r.topic,
+                    score: r.correct ?? r.score ?? 0,
+                    total: r.total ?? 0,
+                    accuracy: typeof r.accuracy === 'number' ? r.accuracy : (r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0),
+                    completedDate: r.completed_at || r.created_at || '',
+                })),
             };
         });
     },
 
     getTeacherLeaderboard: async () => {
-        // Derived from teachers collection — returns top performers
+        // Derive from actual data: for each teacher, compute avg student score across their classes
         const teachers = await teacherService.getAll();
-        return teachers.slice(0, 10).map((t, i) => ({
-            id: t.id,
-            name: t.name,
-            score: 0,
-            engagement: 0,
-            subject: t.subjects?.[0] || '',
-        }));
+        const results: any[] = [];
+        for (const t of teachers.filter(t => t.status === 'active').slice(0, 10)) {
+            let totalScore = 0;
+            let totalStudents = 0;
+            let totalQuizzes = 0;
+            for (const cls of (t.classes || []).slice(0, 3)) {
+                try {
+                    const classResults = await quizResultService.getByClass(cls.class, cls.section);
+                    const subjectResults = classResults.filter(r =>
+                        (r.subject || '').toLowerCase().trim() === (cls.subject || '').toLowerCase().trim()
+                    );
+                    if (subjectResults.length > 0) {
+                        const studIds = new Set(subjectResults.map(r => r.student_id));
+                        totalStudents += studIds.size;
+                        totalQuizzes += subjectResults.length;
+                        totalScore += subjectResults.reduce((s, r) => {
+                            if (typeof r.accuracy === 'number') return s + r.accuracy;
+                            return r.total > 0 ? s + (r.correct / r.total) * 100 : s;
+                        }, 0);
+                    }
+                } catch { /* skip class if query fails */ }
+            }
+            const avgScore = totalQuizzes > 0 ? Math.round(totalScore / totalQuizzes) : 0;
+            const engagement = totalStudents > 0 ? Math.min(100, Math.round((totalQuizzes / totalStudents) * 20)) : 0;
+            results.push({
+                id: t.id,
+                name: t.name,
+                score: avgScore,
+                engagement,
+                subject: t.subjects?.[0] || (t.classes?.[0]?.subject) || '',
+            });
+        }
+        return results.sort((a, b) => b.score - a.score);
     },
 };
 

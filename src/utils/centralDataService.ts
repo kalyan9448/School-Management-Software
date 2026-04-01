@@ -255,6 +255,9 @@ export interface ExamResult {
   grade: string;
   rank?: number;
   remarks?: string;
+  gradedBy?: string;
+  gradedAt?: string;
+  created_at?: string;
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
