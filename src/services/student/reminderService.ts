@@ -16,16 +16,32 @@ export interface Notification {
   color?: string;
 }
 
-// Generate unique ID
-let notificationIdCounter = 1000;
-const generateId = () => ++notificationIdCounter;
+// Generate stable numeric ID from type + title (survives page reloads so mark-read persists)
+const stableId = (type: string, title: string): number =>
+  Math.abs(
+    (type + "_" + title)
+      .split("")
+      .reduce((a, b) => (((a << 5) - a + b.charCodeAt(0)) | 0), 0)
+  ) % 2_000_000 + 100_000;
 
-const getTodayString = () => new Date().toISOString().split("T")[0];
+// Local YYYY-MM-DD (avoids UTC offset shifting the date)
+const getTodayString = (): string => {
+  const d = new Date();
+  return (
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(d.getDate()).padStart(2, "0")
+  );
+};
 
 const getDaysUntil = (dateStr: string): number => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
+  // Parse as local date (not UTC midnight) by splitting the parts
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const target = new Date(y, m - 1, d);
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
@@ -45,10 +61,11 @@ export const generateHomeworkReminders = async (): Promise<Notification[]> => {
     // Check if any homework for this class is pending
     const topic = hwTopics.find((t: any) => t.subject === classItem.subject);
     if (topic && topic.status === "pending") {
+      const _hwTitle = `Complete ${classItem.subject} Homework`;
       reminders.push({
-        id: generateId(),
+        id: stableId("homework", _hwTitle),
         type: "homework",
-        title: `Complete ${classItem.subject} Homework`,
+        title: _hwTitle,
         message: `You have pending homework for "${classItem.topicDetails?.mainTopic || classItem.topics?.[0]}". Complete flashcards and questions before the deadline.`,
         timestamp: todayAt(8, 0),
         read: false,
@@ -59,10 +76,11 @@ export const generateHomeworkReminders = async (): Promise<Notification[]> => {
     }
 
     if (classItem.status === "upcoming") {
+      const _classTitle = `Upcoming Class: ${classItem.subject}`;
       reminders.push({
-        id: generateId(),
+        id: stableId("reminder", _classTitle),
         type: "reminder",
-        title: `Upcoming Class: ${classItem.subject}`,
+        title: _classTitle,
         message: `Your ${classItem.subject} class with ${classItem.teacher} starts at ${classItem.time}.`,
         timestamp: todayAt(7, 30),
         read: false,
@@ -97,10 +115,11 @@ export const generateDeadlineReminders = async (): Promise<Notification[]> => {
     }
 
     if (daysUntil === 0) {
+      const _todayTitle = `Today: ${event.title}`;
       reminders.push({
-        id: generateId(),
+        id: stableId(notificationType, _todayTitle),
         type: notificationType,
-        title: `Today: ${event.title}`,
+        title: _todayTitle,
         message: `${event.description}${event.startTime ? ` at ${event.startTime}` : ""}${event.location ? ` in ${event.location}` : ""}`,
         timestamp: todayAt(6, 0),
         read: false,
@@ -109,10 +128,11 @@ export const generateDeadlineReminders = async (): Promise<Notification[]> => {
         icon: event.type === "exam" ? "📝" : "📅",
       });
     } else if (daysUntil === 1) {
+      const _tomorrowTitle = `Tomorrow: ${event.title}`;
       reminders.push({
-        id: generateId(),
+        id: stableId(notificationType, _tomorrowTitle),
         type: notificationType,
-        title: `Tomorrow: ${event.title}`,
+        title: _tomorrowTitle,
         message: `Don't forget! ${event.description}`,
         timestamp: todayAt(18, 0),
         read: false,
@@ -132,7 +152,7 @@ export const generateDailyReminder = async (): Promise<Notification> => {
   const todayEvents = calendarEvents.filter((e: any) => e.date === getTodayString());
 
   return {
-    id: generateId(),
+    id: stableId("reminder", "Good Morning! Ready for Today?"),
     type: "reminder",
     title: "Good Morning! Ready for Today?",
     message: `You have ${todayEvents.length} event${todayEvents.length !== 1 ? "s" : ""} scheduled today.`,

@@ -133,29 +133,72 @@ export const Quotes = {
   },
 };
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+/** Return the current local date as "YYYY-MM-DD" (avoids UTC-shift from toISOString). */
+function getLocalDateStr(d: Date = new Date()): string {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
 // ─── Today's Classes ─────────────────────────────────────────────────────────
 export const TodaysClasses = {
   getAll: async () => {
     const profile = await StudentProfile.get();
-    if (!profile.grade || !profile.section) return getData<any[]>("todays_classes", []);
-    
+    if (!profile.grade || !profile.section) return [];
+
+    const todayStr = getLocalDateStr();
+
+    // Helper for icon / colour
+    const iconFor = (subj: string) =>
+      subj.toLowerCase().includes("math") ? "calculator" :
+      subj.toLowerCase().includes("sci") ? "beaker" : "book";
+    const colorFor = (subj: string) =>
+      subj.toLowerCase().includes("math") ? "bg-blue-500" :
+      subj.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500";
+
+    // 1. Primary source: lesson logs the teacher created today
+    try {
+      const allLessons = await lessonService.getByClass(profile.grade, profile.section);
+      const todaysLessons = allLessons.filter(l => l.date === todayStr);
+
+      if (todaysLessons.length > 0) {
+        // Enrich with time from the timetable when available
+        const slots = await timetableService.getByClass(profile.grade, profile.section);
+
+        return todaysLessons.map(l => {
+          const matchingSlot = slots.find(
+            s => s.subject?.toLowerCase() === l.subject?.toLowerCase()
+          );
+          return {
+            id: l.id,
+            subject: l.subject,
+            topic: l.topic,
+            teacher: l.teacherName,
+            time: matchingSlot ? `${matchingSlot.startTime} - ${matchingSlot.endTime}` : (l.time || ''),
+            icon: iconFor(l.subject),
+            color: colorFor(l.subject),
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('[TodaysClasses] lesson fetch failed, falling back to timetable', e);
+    }
+
+    // 2. Fallback: static timetable for today's day-of-week
     const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const today = days[new Date().getDay()];
-    
+    const dayName = days[new Date().getDay()].toLowerCase();
     const slots = await timetableService.getByClass(profile.grade, profile.section);
-    const todaysSlots = slots.filter(s => s.day === today);
-    
-    if (todaysSlots.length === 0) return getData<any[]>("todays_classes", []);
+    const todaysSlots = slots.filter(s => (s.day || '').toLowerCase() === dayName);
 
     return todaysSlots.map(s => ({
       id: s.id,
       subject: s.subject,
+      topic: '',
       teacher: s.teacherName,
       time: `${s.startTime} - ${s.endTime}`,
-      icon: s.subject.toLowerCase().includes("math") ? "calculator" : 
-            s.subject.toLowerCase().includes("sci") ? "beaker" : "book",
-      color: s.subject.toLowerCase().includes("math") ? "bg-blue-500" :
-             s.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
+      icon: iconFor(s.subject),
+      color: colorFor(s.subject),
     }));
   },
   updateStatus: async (classId: number | string, status: string) => {
@@ -182,7 +225,7 @@ export const PendingTasks = {
 
     const tasks: any[] = [];
     let nextId = 1;
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getLocalDateStr();
 
     const SUBJECT_ICONS: Record<string, string> = {
       mathematics: "calculator", math: "calculator", maths: "calculator",
@@ -352,15 +395,16 @@ export const SubjectPerformance = {
     const getColor = (subj: string) => SUBJECT_COLORS[subj.toLowerCase()] || "bg-gray-500";
 
     try {
-      // Primary: quiz_results collection (has real subject data)
+      // Primary: quiz_results collection (all historical data)
       const quizResults = await quizResultService.getByStudent(user.uid);
 
       // Group by subject
-      const subjectMap: Record<string, { scores: number[] }> = {};
+      const subjectMap: Record<string, { scores: number[]; dates: string[] }> = {};
       for (const qr of quizResults) {
         const subj = qr.subject || "General";
-        if (!subjectMap[subj]) subjectMap[subj] = { scores: [] };
+        if (!subjectMap[subj]) subjectMap[subj] = { scores: [], dates: [] };
         subjectMap[subj].scores.push(qr.accuracy ?? Math.round((qr.correct / (qr.total || 1)) * 100));
+        subjectMap[subj].dates.push(qr.completed_at || '');
       }
 
       // Also try exam results
@@ -369,24 +413,12 @@ export const SubjectPerformance = {
         try {
           const examResults = await examResultService.getByStudent(profile.id);
           for (const er of examResults) {
-            const subj = "Exams";
-            if (!subjectMap[subj]) subjectMap[subj] = { scores: [] };
+            const subj = er.subject || "Exams";
+            if (!subjectMap[subj]) subjectMap[subj] = { scores: [], dates: [] };
             subjectMap[subj].scores.push(er.percentage);
+            subjectMap[subj].dates.push(er.gradedAt || er.created_at || '');
           }
         } catch {}
-      }
-
-      // Also incorporate homework progress
-      const hwTopics = await HomeworkService.getAll();
-      for (const hw of hwTopics) {
-        if (hw.questionsCompleted && hw.accuracy !== null) {
-          const subj = hw.subject;
-          if (!subjectMap[subj]) subjectMap[subj] = { scores: [] };
-          // Only add if not already counted (quiz_results should have it, but just in case)
-          if (quizResults.length === 0) {
-            subjectMap[subj].scores.push(hw.accuracy);
-          }
-        }
       }
 
       if (Object.keys(subjectMap).length > 0) {
@@ -431,32 +463,54 @@ export const SkillsData = {
     if (!user) return [];
 
     try {
+      // Use ALL quiz results (historical) for skills assessment
       const quizResults = await quizResultService.getByStudent(user.uid);
-      const hwTopics = await HomeworkService.getAll();
 
-      if (quizResults.length === 0 && hwTopics.length === 0) return [];
+      // Count lesson logs (all historical) for engagement metrics
+      const profile = await StudentProfile.get();
+      let totalLessons = 0;
+      if (profile.grade && profile.section) {
+        try {
+          const lessons = await lessonService.getByClass(profile.grade, profile.section);
+          totalLessons = lessons.length;
+        } catch {}
+      }
 
-      // Derive skill metrics from quiz + homework data
+      if (quizResults.length === 0 && totalLessons === 0) return [];
+
+      // Derive skill metrics from quiz results + lesson history
       const totalQuizzes = quizResults.length;
-      const totalHw = hwTopics.length;
-      const completedHw = hwTopics.filter(h => h.status === "completed").length;
+
+      // Count unique subject::topic combos that the student completed quizzes for
+      const completedTopics = new Set(
+        quizResults.map(r => `${r.subject}::${r.topic}`)
+      );
+
       const avgAccuracy = totalQuizzes > 0
         ? Math.round(quizResults.reduce((s, r) => s + (r.accuracy ?? 0), 0) / totalQuizzes)
         : 0;
-      const flashcardAvg = totalHw > 0
-        ? Math.round(hwTopics.reduce((s, h) => s + (h.flashcardProgress || 0), 0) / totalHw)
+
+      // Completion rate: how many lesson topics did the student complete vs total lessons
+      const completionRate = totalLessons > 0
+        ? Math.min(Math.round((completedTopics.size / totalLessons) * 100), 100)
         : 0;
-      const quizCompletionRate = totalHw > 0
-        ? Math.round((hwTopics.filter(h => h.questionsCompleted).length / totalHw) * 100)
-        : 0;
+
+      // Consistency: based on how many different days the student took quizzes
+      const uniqueDays = new Set(
+        quizResults.map(r => (r.completed_at || '').split('T')[0]).filter(Boolean)
+      );
+      const consistencyScore = Math.min(uniqueDays.size * 15, 100);
+
+      // Engagement: based on total quizzes + lesson coverage
+      const engagementScore = Math.min((totalQuizzes * 10 + completedTopics.size * 15), 100);
 
       return [
         { skill: "Quiz Accuracy", current: avgAccuracy, fullMark: 100, expected: 70 },
-        { skill: "Flashcard Mastery", current: flashcardAvg, fullMark: 100, expected: 80 },
-        { skill: "Completion Rate", current: totalHw > 0 ? Math.round((completedHw / totalHw) * 100) : 0, fullMark: 100, expected: 75 },
-        { skill: "Consistency", current: Math.min(totalQuizzes * 20, 100), fullMark: 100, expected: 60 },
-        { skill: "Quiz Completion", current: quizCompletionRate, fullMark: 100, expected: 70 },
-        { skill: "Engagement", current: Math.min((totalQuizzes + completedHw) * 15, 100), fullMark: 100, expected: 50 },
+        { skill: "Topics Covered", current: totalLessons > 0 ? Math.min(Math.round((completedTopics.size / totalLessons) * 100), 100) : 0, fullMark: 100, expected: 80 },
+        { skill: "Completion Rate", current: completionRate, fullMark: 100, expected: 75 },
+        { skill: "Consistency", current: consistencyScore, fullMark: 100, expected: 60 },
+        { skill: "Quizzes Done", current: Math.min(totalQuizzes * 20, 100), fullMark: 100, expected: 70 },
+        { skill: "Engagement", current: engagementScore, fullMark: 100, expected: 50 },
       ];
     } catch (err) {
       console.warn("Failed to build skills data:", err);
@@ -637,13 +691,45 @@ export const HomeworkService = {
   getAll: async (): Promise<HomeworkTopic[]> => {
     const profile = await StudentProfile.get();
     if (!profile.grade || !profile.section) return getData<HomeworkTopic[]>("homework_topics", []);
-    
-    // Load saved progress (keyed by subject) to merge with dynamic data
+
+    const todayStr = getLocalDateStr();
+    const uid = auth.currentUser?.uid || getUid();
+
+    // Load saved progress (keyed by "subject::topic" for uniqueness)
     const savedProgress = await getData<Record<string, Partial<HomeworkTopic>>>("homework_progress", {});
 
+    // Fetch quiz results so we can mark already-completed topics
+    // Only consider quizzes completed TODAY — if teacher re-assigns same topic
+    // next day, the student gets fresh homework.
+    let completedTopics = new Map<string, { accuracy: number; correct: number; total: number; completed_at: string }>();
+    try {
+      const quizResults = await quizResultService.getByStudent(uid);
+      for (const r of quizResults) {
+        if (r.subject && r.topic) {
+          const completedDate = r.completed_at ? r.completed_at.split('T')[0] : '';
+          if (completedDate === todayStr) {
+            completedTopics.set(
+              `${r.subject.toLowerCase()}::${r.topic.toLowerCase()}`,
+              { accuracy: r.accuracy ?? 0, correct: r.correct, total: r.total, completed_at: r.completed_at || '' }
+            );
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    const getCompletedResult = (subject: string, topic: string) =>
+      completedTopics.get(`${subject.toLowerCase()}::${topic.toLowerCase()}`);
+
     const mergeProgress = (topic: HomeworkTopic): HomeworkTopic => {
-      const saved = savedProgress[topic.subject];
+      // Only match progress saved for the exact same subject + topic combination
+      const key = `${topic.subject}::${topic.topic}`;
+      const saved = savedProgress[key];
       if (!saved) return topic;
+
+      // Only merge progress that was saved TODAY to avoid stale data from old topics
+      const savedDate = saved.lastAttemptDate ? saved.lastAttemptDate.split('T')[0] : null;
+      if (savedDate && savedDate !== todayStr) return topic;
+
       return {
         ...topic,
         flashcardProgress: saved.flashcardProgress ?? topic.flashcardProgress,
@@ -657,68 +743,118 @@ export const HomeworkService = {
       } as HomeworkTopic;
     };
 
-    // Try assignments first
-    const assignments = await assignmentService.getByClass(profile.grade, profile.section);
-    if (assignments.length > 0) {
-      return assignments.map((a, index) => mergeProgress({
-        id: index + 1,
-        subject: a.subject,
-        topic: a.title,
-        teacher: "",
-        icon: a.subject.toLowerCase().includes("math") ? "calculator" : 
-              a.subject.toLowerCase().includes("sci") ? "beaker" : "book",
-        color: a.subject.toLowerCase().includes("math") ? "bg-blue-500" :
-               a.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
-        status: a.status === "active" ? "pending" : "completed",
-        flashcardProgress: 0,
-        questionsProgress: 0,
-        flashcardsCompleted: false,
-        questionsCompleted: false,
-        questionsAttempted: 0,
-        totalQuestions: 5,
-        accuracy: null,
-        lastAttemptDate: null,
-      } as HomeworkTopic));
-    }
+    const iconFor = (subj: string) =>
+      subj.toLowerCase().includes("math") ? "calculator" :
+      subj.toLowerCase().includes("sci") ? "beaker" : "book";
+    const colorFor = (subj: string) =>
+      subj.toLowerCase().includes("math") ? "bg-blue-500" :
+      subj.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500";
 
-    // Fallback: generate homework topics from lessons collection
+    // ── 1. Primary source: today's lesson logs from teachers ──
     try {
-      const lessons = await lessonService.getByClass(profile.grade, profile.section);
-      if (lessons.length > 0) {
-        // Deduplicate by subject — pick latest lesson per subject
-        const subjectMap = new Map<string, typeof lessons[0]>();
-        for (const lesson of lessons) {
-          const existing = subjectMap.get(lesson.subject);
-          if (!existing || (lesson.date && existing.date && lesson.date > existing.date)) {
-            subjectMap.set(lesson.subject, lesson);
-          }
-        }
+      const allLessons = await lessonService.getByClass(profile.grade, profile.section);
+      const todaysLessons = allLessons.filter(l => l.date === todayStr);
 
-        return Array.from(subjectMap.values()).map((lesson, index) => mergeProgress({
-          id: index + 1,
-          subject: lesson.subject,
-          topic: lesson.topic,
-          teacher: lesson.teacherName,
-          icon: lesson.subject.toLowerCase().includes("math") ? "calculator" : 
-                lesson.subject.toLowerCase().includes("sci") ? "beaker" : "book",
-          color: lesson.subject.toLowerCase().includes("math") ? "bg-blue-500" :
-                 lesson.subject.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500",
-          status: "pending" as const,
-          flashcardProgress: 0,
-          questionsProgress: 0,
-          flashcardsCompleted: false,
-          questionsCompleted: false,
-          questionsAttempted: 0,
-          totalQuestions: 5,
-          accuracy: null,
-          lastAttemptDate: null,
-        } as HomeworkTopic));
+      if (todaysLessons.length > 0) {
+        // Include ALL today's lessons — completed ones shown as completed, pending as pending
+        const topics = todaysLessons.map((lesson, index) => {
+          const completedResult = getCompletedResult(lesson.subject, lesson.topic);
+          if (completedResult) {
+            // Show completed homework with its result — do not filter out
+            return {
+              id: index + 1,
+              subject: lesson.subject,
+              topic: lesson.topic,
+              teacher: lesson.teacherName,
+              icon: iconFor(lesson.subject),
+              color: colorFor(lesson.subject),
+              status: "completed" as const,
+              flashcardProgress: 100,
+              questionsProgress: 100,
+              flashcardsCompleted: true,
+              questionsCompleted: true,
+              questionsAttempted: completedResult.total,
+              totalQuestions: completedResult.total,
+              accuracy: completedResult.accuracy,
+              lastAttemptDate: completedResult.completed_at,
+            } as HomeworkTopic;
+          }
+          // Not yet completed — merge any in-progress saved data
+          return mergeProgress({
+            id: index + 1,
+            subject: lesson.subject,
+            topic: lesson.topic,
+            teacher: lesson.teacherName,
+            icon: iconFor(lesson.subject),
+            color: colorFor(lesson.subject),
+            status: "pending" as const,
+            flashcardProgress: 0,
+            questionsProgress: 0,
+            flashcardsCompleted: false,
+            questionsCompleted: false,
+            questionsAttempted: 0,
+            totalQuestions: 5,
+            accuracy: null,
+            lastAttemptDate: null,
+          } as HomeworkTopic);
+        });
+
+        return topics;
       }
     } catch (e) {
       console.warn("Failed to fetch lessons for homework:", e);
     }
 
-    return getData<HomeworkTopic[]>("homework_topics", []);
+    // ── 2. Fallback: active assignments (not yet due / not closed) ──
+    try {
+      const allAssignments = await assignmentService.getByClass(profile.grade, profile.section);
+      const activeAssignments = allAssignments.filter(a => a.status === 'active');
+      if (activeAssignments.length > 0) {
+        return activeAssignments.map((a, index) => {
+          const completedResult = getCompletedResult(a.subject, a.title);
+          if (completedResult) {
+            return {
+              id: index + 1,
+              subject: a.subject,
+              topic: a.title,
+              teacher: a.assignedBy || "",
+              icon: iconFor(a.subject),
+              color: colorFor(a.subject),
+              status: "completed" as const,
+              flashcardProgress: 100,
+              questionsProgress: 100,
+              flashcardsCompleted: true,
+              questionsCompleted: true,
+              questionsAttempted: completedResult.total,
+              totalQuestions: completedResult.total,
+              accuracy: completedResult.accuracy,
+              lastAttemptDate: completedResult.completed_at,
+            } as HomeworkTopic;
+          }
+          return mergeProgress({
+            id: index + 1,
+            subject: a.subject,
+            topic: a.title,
+            teacher: a.assignedBy || "",
+            icon: iconFor(a.subject),
+            color: colorFor(a.subject),
+            status: "pending" as const,
+            flashcardProgress: 0,
+            questionsProgress: 0,
+            flashcardsCompleted: false,
+            questionsCompleted: false,
+            questionsAttempted: 0,
+            totalQuestions: 5,
+            accuracy: null,
+            lastAttemptDate: null,
+          } as HomeworkTopic);
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to fetch assignments for homework:", e);
+    }
+
+    return [];
   },
   getById: async (id: number): Promise<HomeworkTopic | undefined> => {
     const all = await HomeworkService.getAll();
@@ -728,10 +864,11 @@ export const HomeworkService = {
     const topics = await HomeworkService.getAll();
     const target = topics.find(t => t.id === id);
     if (target) {
-      // Save progress keyed by subject so it persists across regenerations
+      // Save progress keyed by subject::topic so it persists across regenerations
       const savedProgress = await getData<Record<string, Partial<HomeworkTopic>>>("homework_progress", {});
-      savedProgress[target.subject] = {
-        ...(savedProgress[target.subject] || {}),
+      const key = `${target.subject}::${target.topic}`;
+      savedProgress[key] = {
+        ...(savedProgress[key] || {}),
         ...updates,
       };
       await saveData("homework_progress", savedProgress);
@@ -881,7 +1018,7 @@ export const Flashcards = {
 /**
  * Build CalendarEvent objects from real Firestore collections:
  *   timetable  → recurring "class" events expanded for ±30 days
- *   lessons    → "homework" events on the date the teacher logged them
+ *   lessons    → enrich class events with topic/objectives on the day they were taught
  *   exams      → "exam" events
  *   assignments→ "assignment" events (placed on dueDate)
  */
@@ -908,35 +1045,85 @@ export const CalendarService = {
       // ── 1. Timetable → recurring class events (±30 days from today) ──────
       const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       const slots = await timetableService.getByClass(profile.grade, profile.section);
+
+      // Pre-fetch lessons so we can enrich class events with topics
+      const lessons = await lessonService.getByClass(profile.grade, profile.section);
+      // Index lessons by "date::subject(lower)" for fast lookup
+      const lessonIndex = new Map<string, typeof lessons[0]>();
+      for (const l of lessons) {
+        const key = `${l.date}::${l.subject.toLowerCase()}`;
+        // Keep the latest entry if duplicates
+        if (!lessonIndex.has(key) || (l.date > (lessonIndex.get(key)!.date || ''))) {
+          lessonIndex.set(key, l);
+        }
+      }
+
+      // Pre-fetch homework progress for the current student
+      const uid = auth.currentUser?.uid || getUid();
+      let quizResultsByTopic = new Map<string, any>();
+      try {
+        const quizResults = await quizResultService.getByStudent(uid);
+        for (const r of quizResults) {
+          if (r.subject && r.topic) {
+            const key = `${r.completed_at?.split('T')[0] || ''}::${r.subject.toLowerCase()}::${r.topic.toLowerCase()}`;
+            quizResultsByTopic.set(key, r);
+          }
+        }
+      } catch { /* ignore */ }
+
       const now = new Date();
       const rangeStart = new Date(now); rangeStart.setDate(now.getDate() - 30);
       const rangeEnd = new Date(now); rangeEnd.setDate(now.getDate() + 30);
 
       for (const d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-        const dayName = DAY_NAMES[d.getDay()];
-        const dateStr = d.toISOString().split("T")[0];
+        const dayName = DAY_NAMES[d.getDay()].toLowerCase();
+        const dateStr = getLocalDateStr(d);
         for (const slot of slots) {
-          if (slot.day === dayName) {
+          if ((slot.day || '').toLowerCase() === dayName) {
+            // Check if teacher logged a lesson for this subject on this date
+            const lessonKey = `${dateStr}::${slot.subject.toLowerCase()}`;
+            const lesson = lessonIndex.get(lessonKey);
+
+            // Check if student completed homework for this topic
+            let homeworkStatus = '';
+            if (lesson) {
+              const qKey = `${dateStr}::${lesson.subject.toLowerCase()}::${lesson.topic.toLowerCase()}`;
+              const qr = quizResultsByTopic.get(qKey);
+              if (qr) {
+                homeworkStatus = ` · ✅ Completed (${qr.accuracy}%)`;
+              }
+            }
+
+            const topicLabel = lesson ? lesson.topic : '';
+            const description = lesson
+              ? `Topic: ${lesson.topic}${lesson.objectives?.length ? ' — ' + lesson.objectives.join(', ') : ''}${homeworkStatus}`
+              : `${slot.subject} class with ${slot.teacherName}`;
+
             events.push({
               id: nextId++,
-              title: `${slot.subject} Class`,
+              title: lesson ? `${slot.subject}: ${lesson.topic}` : `${slot.subject} Class`,
               subject: slot.subject,
               type: "class",
               date: dateStr,
               startTime: slot.startTime,
               endTime: slot.endTime,
-              teacher: slot.teacherName,
+              teacher: lesson?.teacherName || slot.teacherName,
               location: slot.room || undefined,
-              description: `${slot.subject} class with ${slot.teacherName}`,
+              description,
               color: getColor(slot.subject),
+              completed: !!homeworkStatus,
             });
           }
         }
       }
 
-      // ── 2. Lessons → homework events ─────────────────────────────────────
-      const lessons = await lessonService.getByClass(profile.grade, profile.section);
+      // ── 2. Lessons → homework events (only for days with actual logs) ────
       for (const lesson of lessons) {
+        // Check if student completed this homework
+        const qKey = `${lesson.date}::${lesson.subject.toLowerCase()}::${lesson.topic.toLowerCase()}`;
+        const qr = quizResultsByTopic.get(qKey);
+        const isCompleted = !!qr;
+
         events.push({
           id: nextId++,
           title: `${lesson.subject}: ${lesson.topic}`,
@@ -944,8 +1131,10 @@ export const CalendarService = {
           type: "homework",
           date: lesson.date,
           teacher: lesson.teacherName,
-          description: lesson.description || lesson.objectives?.join(", ") || lesson.topic,
+          description: (lesson.description || lesson.objectives?.join(", ") || lesson.topic)
+            + (isCompleted ? ` · ✅ Quiz: ${qr.accuracy}%` : ' · 📝 Pending'),
           color: getColor(lesson.subject),
+          completed: isCompleted,
         });
       }
 
@@ -1058,23 +1247,37 @@ export const NotificationService = {
     let firestoreNotifs: Notification[] = [];
 
     // 1. Fetch from Firestore notifications collection
-    if (user?.email) {
+    if (user) {
       try {
-        // Query by student email (personal) + class broadcast + role broadcast
-        const rawNotifs = await notificationService.getByUser(
-          user.email,
-          "student",
-          profile.grade || undefined,
-          (profile as any).section || undefined
-        );
+        // Fetch via email (personal + class broadcast + role broadcast)
+        const byEmail = user.email
+          ? await notificationService.getByUser(
+              user.email,
+              "student",
+              profile.grade || undefined,
+              profile.section || undefined
+            )
+          : [];
 
-        // Also try by UID in case some notifications use userId = uid
-        let byUid: any[] = [];
-        try {
-          const { fetchCollection } = await import("@/utils/firestoreService").then(m => ({ fetchCollection: m.default })).catch(() => ({ fetchCollection: null }));
-          // Just use the already-fetched rawNotifs; UID-based ones would need a separate query
-          // but getByUser already handles the main cases
-        } catch {}
+        // Also fetch via UID — some notifications store userId = Firebase UID
+        const byUid = user.uid
+          ? await notificationService.getByUser(
+              user.uid,
+              "student",
+              profile.grade || undefined,
+              profile.section || undefined
+            )
+          : [];
+
+        // Merge both, deduplicate by Firestore document ID
+        const seenFirestoreIds = new Set<string>();
+        const rawNotifs: any[] = [];
+        for (const n of [...byEmail, ...byUid]) {
+          if (!seenFirestoreIds.has(n.id)) {
+            seenFirestoreIds.add(n.id);
+            rawNotifs.push(n);
+          }
+        }
 
         firestoreNotifs = rawNotifs.map(fn => {
           const numId = hashId(fn.id);
@@ -1084,11 +1287,13 @@ export const NotificationService = {
             title: fn.title,
             message: fn.message,
             timestamp: fn.date || fn.created_at || new Date().toISOString(),
-            read: readState[String(numId)] ?? fn.read,
+            read: readState[String(numId)] ?? (fn.read === true),
             priority: mapFirestorePriority(fn.type),
-            actionUrl: fn.type === "assignment" ? "/homework" : fn.type === "exam" ? "/schedule" : undefined,
+            actionUrl: fn.type === "assignment" ? "/homework"
+              : fn.type === "exam" ? "/schedule"
+              : fn.link || undefined,
             icon: mapFirestoreIcon(fn.type),
-            _firestoreId: fn.id, // Keep original ID for mark-read
+            _firestoreId: fn.id,
           } as Notification & { _firestoreId?: string };
         });
       } catch (err) {
@@ -1101,7 +1306,7 @@ export const NotificationService = {
     try {
       const { generateAllReminders } = await import("./reminderService");
       smartReminders = await generateAllReminders();
-      // Apply read state to smart reminders
+      // Apply persisted read/deleted state to smart reminders
       smartReminders = smartReminders.map(r => ({
         ...r,
         read: readState[String(r.id)] ?? r.read,

@@ -27,7 +27,10 @@ import { CalendarService } from "@/services/student/studentDataService";
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-const toDateStr = (d: Date) => d.toISOString().split("T")[0];
+const toDateStr = (d: Date) =>
+  d.getFullYear() + '-' +
+  String(d.getMonth() + 1).padStart(2, '0') + '-' +
+  String(d.getDate()).padStart(2, '0');
 
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
@@ -165,19 +168,6 @@ export function SchedulePage() {
   const focusEvents = getEventsForDate(focusDate);
   const isFocusToday = isSameDay(focusDate, today);
 
-  // ── Upcoming events (next 7 days from today) ─────────────────────────────
-  const upcomingEvents = useMemo(() => {
-    const end = new Date(today);
-    end.setDate(today.getDate() + 7);
-    return calendarEvents
-      .filter(e => {
-        const d = new Date(e.date + "T00:00:00");
-        return d >= today && d <= end;
-      })
-      .filter(e => activeFilter === "all" || e.type === activeFilter)
-      .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || "").localeCompare(b.startTime || ""))
-      .slice(0, 8);
-  }, [today, activeFilter, calendarEvents]);
 
   // ── Dynamic week stats ───────────────────────────────────────────────────
   const weekStats = useMemo(() => {
@@ -777,51 +767,6 @@ export function SchedulePage() {
               </Card>
             </motion.div>
 
-            {/* Upcoming 7 Days */}
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
-              <Card className="p-6">
-                <h3 className="font-bold text-[#1A1A1A] mb-4">Upcoming (Next 7 Days)</h3>
-                <div className="space-y-3">
-                  {upcomingEvents.length === 0 ? (
-                    <p className="text-sm text-[#7A869A] text-center py-4">No upcoming events</p>
-                  ) : (
-                    upcomingEvents.map((ev, idx) => {
-                      const Icon = getEventIcon(ev.type);
-                      const evDate = new Date(ev.date + "T00:00:00");
-                      const daysUntil = Math.round((evDate.getTime() - today.getTime()) / 86400000);
-                      return (
-                        <motion.div
-                          key={ev.id}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.15 + idx * 0.05 }}
-                          className="p-3 bg-[#FAFBFF] rounded-xl border border-[#E6ECF5] hover:bg-white hover:shadow-sm transition-all cursor-pointer"
-                          onClick={() => setSelectedEvent(ev)}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: `${ev.color}20`, color: ev.color }}>
-                              <Icon className="w-3.5 h-3.5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-sm font-medium text-[#1A1A1A] truncate">{ev.title}</p>
-                                {ev.priority === "high" && (
-                                  <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                                )}
-                              </div>
-                              <p className="text-xs text-[#7A869A] mt-0.5">
-                                {daysUntil === 0 ? "Today" : daysUntil === 1 ? "Tomorrow" : `In ${daysUntil} days`}
-                                {ev.startTime && ` · ${ev.startTime}`}
-                              </p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })
-                  )}
-                </div>
-              </Card>
-            </motion.div>
 
             {/* Dynamic Week Stats */}
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>

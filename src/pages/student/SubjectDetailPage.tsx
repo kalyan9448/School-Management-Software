@@ -36,15 +36,21 @@ export function SubjectDetailPage() {
         setStudentData(profile);
         const found = classes.find((c: any) => String(c.id) === String(id));
         if (found) {
-          // Try to enrich with lesson log data (recent topic for this subject)
+          // Only enrich with a lesson log if one was recorded TODAY
+          const todayStr = new Date().getFullYear() + '-' +
+            String(new Date().getMonth() + 1).padStart(2, '0') + '-' +
+            String(new Date().getDate()).padStart(2, '0');
           try {
             const lessons = await lessonService.getByClass(profile.grade, profile.section);
-            const subjectLesson = lessons.find((l: any) => l.subject === found.subject);
-            if (subjectLesson) {
-              found.recentTopic = subjectLesson.topic;
-              found.recentObjectives = subjectLesson.objectives;
-              found.recentDescription = subjectLesson.description;
+            const todayLesson = lessons.find(
+              (l: any) => l.date === todayStr && l.subject?.toLowerCase() === (found as any).subject?.toLowerCase()
+            );
+            if (todayLesson) {
+              (found as any).recentTopic = todayLesson.topic;
+              (found as any).recentObjectives = todayLesson.objectives;
+              (found as any).recentDescription = todayLesson.description;
             }
+            // No lesson today → leave recentTopic undefined so "no topic" state shows
           } catch (e) {
             console.warn("Could not fetch lesson logs:", e);
           }
@@ -170,8 +176,13 @@ export function SubjectDetailPage() {
               <p className="text-[#7A869A] text-sm">Generating AI learning guide for {classItem.subject}...</p>
             </Card>
           ) : (
-          <Card className="p-6">
-            <p className="text-[#7A869A]">Topic details are not available for this subject.</p>
+          <Card className="p-10 flex flex-col items-center justify-center gap-3 text-center">
+            <BookOpen className="w-12 h-12 text-gray-200" />
+            <p className="text-lg font-semibold text-gray-500">No topic for today</p>
+            <p className="text-sm text-gray-400">
+              Your teacher hasn't logged a lesson for <span className="font-medium">{classItem.subject}</span> today yet.<br />
+              Check back after class.
+            </p>
           </Card>
           )
         ) : (

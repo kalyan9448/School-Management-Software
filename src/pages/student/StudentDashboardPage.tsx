@@ -33,7 +33,6 @@ import {
   Quotes,
   TodaysClasses,
   PendingTasks,
-  LearningGoals,
   DailyTasks,
   HomeworkService,
 } from "@/services/student/studentDataService";
@@ -75,7 +74,6 @@ export function Dashboard() {
   const [studentInfo, setStudentInfo] = useState<any>({ name: "" });
   const [allPendingTasks, setAllPendingTasks] = useState<any[]>([]);
   const [allClasses, setAllClasses] = useState<any[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
   const [dailyTasksBySubject, setDailyTasksBySubject] = useState<any[]>([]);
   const [hwTopics, setHwTopics] = useState<any[]>([]);
   const [quote, setQuote] = useState("");
@@ -87,11 +85,10 @@ export function Dashboard() {
 
     (async () => {
       try {
-        const [profile, tasks, classes, lg, daily, hw, q] = await Promise.allSettled([
+        const [profile, tasks, classes, daily, hw, q] = await Promise.allSettled([
           StudentProfile.get(),
           PendingTasks.getAll(),
           TodaysClasses.getAll(),
-          LearningGoals.getAll(),
           DailyTasks.getAll(),
           HomeworkService.getAll(),
           Quotes.getRandom(),
@@ -99,7 +96,6 @@ export function Dashboard() {
         if (profile.status === 'fulfilled') setStudentInfo(profile.value);
         if (tasks.status === 'fulfilled') setAllPendingTasks(tasks.value);
         if (classes.status === 'fulfilled') setAllClasses(classes.value);
-        if (lg.status === 'fulfilled') setGoals(lg.value);
         if (daily.status === 'fulfilled') setDailyTasksBySubject(daily.value);
         if (hw.status === 'fulfilled') setHwTopics(hw.value);
         if (q.status === 'fulfilled') setQuote(q.value);
@@ -218,6 +214,9 @@ export function Dashboard() {
                               </div>
                               <div>
                                 <h3 className="font-bold text-gray-900 text-sm mb-1">{classItem.subject}</h3>
+                                {classItem.topic && (
+                                  <p className="text-[10px] text-indigo-600 font-medium mb-0.5 truncate">{classItem.topic}</p>
+                                )}
                                 <p className="text-[10px] text-gray-500">👨‍🏫 {classItem.teacher}</p>
                               </div>
                             </div>
@@ -300,8 +299,7 @@ export function Dashboard() {
         </div>
 
         {/* Pending Tasks */}
-        {/* Pending Tasks + Learning Goals: side-by-side on md+ */}
-        <div className="md:grid md:grid-cols-2 md:gap-3 space-y-3 md:space-y-0">
+        <div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
               <div className="flex items-center justify-between mb-4">
@@ -387,78 +385,6 @@ export function Dashboard() {
             </Card>
           </motion.div>
 
-          {/* Learning Goals */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-50 rounded-xl">
-                    <Target className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <h2 className="text-xl font-bold text-gray-900">Today's Goals</h2>
-                </div>
-              </div>
-
-              <div className="space-y-3 flex-1 p-1">
-                {goals && goals.length > 0 ? (
-                  goals.map((goal: any, index: number) => {
-                    const Icon = iconMap[goal.icon];
-                    const progress = (goal.current / goal.target) * 100;
-                    const isComplete = goal.current >= goal.target;
-
-                    return (
-                      <motion.div
-                        key={goal.subject}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + index * 0.05 }}
-                      >
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className={`${goal.color} p-2 rounded-lg shadow-sm`}>
-                            <Icon className="w-4 h-4 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="font-bold text-gray-900 text-sm">{goal.subject}</span>
-                              <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
-                                {goal.current}/{goal.target}
-                              </span>
-                            </div>
-                            <div className="relative">
-                              <Progress value={progress} className="h-1.5 bg-gray-100" />
-                              {isComplete && (
-                                <div className="absolute -right-2 -top-2 bg-emerald-500 text-white rounded-full p-0.5 shadow-sm">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <p className="text-xs text-gray-500 font-medium leading-relaxed pl-11">{goal.goal}</p>
-                      </motion.div>
-                    );
-                  })
-                ) : (
-                  <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 max-w-sm mx-auto w-full">
-                    <Target className="w-12 h-12 mb-3 opacity-20" />
-                    <p className="text-sm font-medium">No learning goals.</p>
-                  </div>
-                )}
-              </div>
-              
-              {goals && goals.length > 0 && goals.every((g: any) => g.current >= g.target) && (
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="mt-6 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100/50 text-center"
-                >
-                  <p className="text-emerald-700 font-bold flex items-center justify-center gap-2">
-                    <span className="text-xl">🎉</span> All goals completed! Amazing work!
-                  </p>
-                </motion.div>
-              )}
-            </Card>
-          </motion.div>
         </div>
 
       </div>

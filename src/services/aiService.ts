@@ -150,11 +150,11 @@ export const aiService = {
             const parsed = JSON.parse(responseText);
             const questions = parsed.questions || [];
             console.log('[aiService] Parsed quiz questions count:', questions.length);
-            if (questions.length === 0) return getFallbackQuiz(subject, topic);
+            if (questions.length === 0) return getFallbackQuiz(subject, topic).map(shuffleQuestionOptions);
             return questions.map(shuffleQuestionOptions);
         } catch (error) {
              console.error("Failed to parse quiz:", error);
-             return getFallbackQuiz(subject, topic);
+             return getFallbackQuiz(subject, topic).map(shuffleQuestionOptions);
         }
     },
 
@@ -333,26 +333,41 @@ function getFallbackQuiz(subject: string, topic: string): any[] {
     };
 
     // Return specific fallback or a generic set
-    return fallbackMap[topic] || Array.from({ length: 5 }, (_, i) => {
-        const correctIdx = i % 4; // Rotate correct answer: 0,1,2,3,0
-        const options = [
+    // Use a non-repeating shuffled index sequence so correct positions
+    // are unpredictable (never 0,1,2,3,0,1,2,3...)
+    const makeGenericFallback = (count = 5) => {
+        // Build a pool of indices [0,1,2,3] repeated enough times, then shuffle
+        const pool: number[] = [];
+        while (pool.length < count) pool.push(...[0, 1, 2, 3]);
+        // Fisher-Yates shuffle the pool
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        const baseOptions = [
             `A key principle of ${topic}`,
             `A common misconception about ${topic}`,
             `An unrelated concept in ${subject}`,
             `A partially correct statement about ${topic}`
         ];
-        // Swap the correct-looking option into the correct index
-        const temp = options[0];
-        options[0] = options[correctIdx];
-        options[correctIdx] = temp;
-        return {
-            question: `Question ${i + 1}: What is an important concept related to ${topic} in ${subject}?`,
-            options,
-            correctAnswer: correctIdx,
-            explanation: `This is a placeholder question for ${topic}. The AI quiz generator was unavailable.`,
-            difficulty: i < 2 ? "easy" : i < 4 ? "medium" : "hard",
-            category: "General"
-        };
-    });
+        return Array.from({ length: count }, (_, i) => {
+            const correctIdx = pool[i];
+            // Rotate base options so the correct-sounding one lands at correctIdx
+            const opts = [...baseOptions];
+            const temp = opts[0];
+            opts[0] = opts[correctIdx];
+            opts[correctIdx] = temp;
+            return {
+                question: `Question ${i + 1}: What is an important concept related to ${topic} in ${subject}?`,
+                options: opts,
+                correctAnswer: correctIdx,
+                explanation: `This is a placeholder question for ${topic}. The AI quiz generator was unavailable.`,
+                difficulty: i < 2 ? "easy" : i < 4 ? "medium" : "hard",
+                category: "General"
+            };
+        });
+    };
+
+    return fallbackMap[topic] || makeGenericFallback(5);
 }
 
