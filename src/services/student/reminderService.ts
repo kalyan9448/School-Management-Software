@@ -155,27 +155,14 @@ export const generateAllReminders = async (): Promise<Notification[]> => {
   return all.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 };
 
-// Check and update reminders — merges engine-generated with stored (preserves read)
+// Check and update reminders — now just returns all notifications (reminders are generated inline)
 export const updateReminders = async (): Promise<Notification[]> => {
-  const existing = await NotificationService.getAll();
-  const newReminders = await generateAllReminders();
-
-  const existingKeys = new Set(existing.map(n => `${n.type}_${n.title}`));
-  const unique = newReminders.filter(n => !existingKeys.has(`${n.type}_${n.title}`));
-
-  if (unique.length > 0) {
-    // Add each new notification via the service (persists to Firestore)
-    for (const n of unique) {
-      await NotificationService.add(n);
-    }
-  }
-
   return NotificationService.getAll();
 };
 
 // Initialize reminders on first load
 export const initializeReminders = async (): Promise<Notification[]> => {
-  return updateReminders();
+  return NotificationService.getAll();
 };
 
 // Add a new reminder manually

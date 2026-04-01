@@ -1003,77 +1003,191 @@ export const CalendarService = {
 };
 
 // ─── Notifications ───────────────────────────────────────────────────────────
+
+// Maps Firestore notification types → student portal types
+function mapFirestoreType(type: string): Notification["type"] {
+  switch (type) {
+    case "assignment": return "homework";
+    case "attendance": return "reminder";
+    case "exam": return "deadline";
+    case "fee": return "reminder";
+    case "announcement": return "announcement";
+    default: return "reminder";
+  }
+}
+
+function mapFirestorePriority(type: string): Notification["priority"] {
+  switch (type) {
+    case "exam": return "high";
+    case "assignment": return "high";
+    case "fee": return "medium";
+    case "attendance": return "low";
+    default: return "medium";
+  }
+}
+
+function mapFirestoreIcon(type: string): string {
+  switch (type) {
+    case "assignment": return "📚";
+    case "exam": return "📝";
+    case "attendance": return "✅";
+    case "fee": return "💰";
+    case "announcement": return "📢";
+    default: return "🔔";
+  }
+}
+
+// Simple numeric hash from string ID
+function hashId(str: string): number {
+  return Math.abs(str.split("").reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0));
+}
+
 export const NotificationService = {
-  getAll: async (): Promise<Notification[]> => getData<Notification[]>("notifications", []),
+  /**
+   * Fetch all notifications for the current student:
+   * 1. Personal + broadcast from Firestore `notifications` collection
+   * 2. Smart reminders from the reminder engine (homework, deadlines, classes)
+   * 3. Merge, deduplicate, cache locally for mark-read/delete operations
+   */
+  getAll: async (): Promise<Notification[]> => {
+    const user = auth.currentUser || await waitForAuth();
+    const profile = await StudentProfile.get();
+    const readState = await getData<Record<string, boolean>>("notification_read_state", {});
+    const deletedIds = await getData<number[]>("notification_deleted_ids", []);
+
+    let firestoreNotifs: Notification[] = [];
+
+    // 1. Fetch from Firestore notifications collection
+    if (user?.email) {
+      try {
+        // Query by student email (personal) + class broadcast + role broadcast
+        const rawNotifs = await notificationService.getByUser(
+          user.email,
+          "student",
+          profile.grade || undefined,
+          (profile as any).section || undefined
+        );
+
+        // Also try by UID in case some notifications use userId = uid
+        let byUid: any[] = [];
+        try {
+          const { fetchCollection } = await import("@/utils/firestoreService").then(m => ({ fetchCollection: m.default })).catch(() => ({ fetchCollection: null }));
+          // Just use the already-fetched rawNotifs; UID-based ones would need a separate query
+          // but getByUser already handles the main cases
+        } catch {}
+
+        firestoreNotifs = rawNotifs.map(fn => {
+          const numId = hashId(fn.id);
+          return {
+            id: numId,
+            type: mapFirestoreType(fn.type),
+            title: fn.title,
+            message: fn.message,
+            timestamp: fn.date || fn.created_at || new Date().toISOString(),
+            read: readState[String(numId)] ?? fn.read,
+            priority: mapFirestorePriority(fn.type),
+            actionUrl: fn.type === "assignment" ? "/homework" : fn.type === "exam" ? "/schedule" : undefined,
+            icon: mapFirestoreIcon(fn.type),
+            _firestoreId: fn.id, // Keep original ID for mark-read
+          } as Notification & { _firestoreId?: string };
+        });
+      } catch (err) {
+        console.warn("[NotificationService] Failed to fetch Firestore notifications:", err);
+      }
+    }
+
+    // 2. Generate smart reminders from homework/calendar/timetable
+    let smartReminders: Notification[] = [];
+    try {
+      const { generateAllReminders } = await import("./reminderService");
+      smartReminders = await generateAllReminders();
+      // Apply read state to smart reminders
+      smartReminders = smartReminders.map(r => ({
+        ...r,
+        read: readState[String(r.id)] ?? r.read,
+      }));
+    } catch (err) {
+      console.warn("[NotificationService] Failed to generate reminders:", err);
+    }
+
+    // 3. Combine, deduplicate by title+type, filter deleted
+    const combined = [...firestoreNotifs, ...smartReminders];
+    const seen = new Set<string>();
+    const deduped = combined.filter(n => {
+      const key = `${n.type}_${n.title}`;
+      if (seen.has(key)) return false;
+      if (deletedIds.includes(n.id)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Sort by timestamp descending (newest first)
+    deduped.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return deduped;
+  },
+
   getUnread: async (): Promise<Notification[]> => {
     const all = await NotificationService.getAll();
     return all.filter(n => !n.read);
   },
+
   getUnreadCount: async (): Promise<number> => {
     const unread = await NotificationService.getUnread();
     return unread.length;
   },
-  markRead: async (notificationId: number): Promise<Notification[]> => {
-    const notifications = await NotificationService.getAll();
-    const updated = notifications.map(n =>
-      n.id === notificationId ? { ...n, read: true } : n
-    );
-    await saveData("notifications", updated);
-    return updated;
-  },
-  markAllRead: async (): Promise<Notification[]> => {
-    const notifications = await NotificationService.getAll();
-    const updated = notifications.map(n => ({ ...n, read: true }));
-    await saveData("notifications", updated);
-    return updated;
-  },
-  add: async (notification: Omit<Notification, "id">): Promise<Notification[]> => {
-    const notifications = await NotificationService.getAll();
-    const newNotif = { ...notification, id: Date.now() };
-    const updated = [newNotif, ...notifications];
-    await saveData("notifications", updated);
-    return updated;
-  },
-  delete: async (notificationId: number): Promise<Notification[]> => {
-    const notifications = await NotificationService.getAll();
-    const updated = notifications.filter(n => n.id !== notificationId);
-    await saveData("notifications", updated);
-    return updated;
-  },
-  fetchNotifications: async (): Promise<Notification[]> => {
-    try {
-      // 1. Fetch personal + role-based notifications from Firestore
-      const userEmail = auth.currentUser?.email;
-      const profile = await StudentProfile.get();
-      const firestoreNotifs = userEmail 
-        ? await notificationService.getByUser(userEmail, 'student', profile.grade || undefined, (profile as any).section || undefined)
-        : [];
 
-      // 2. Fetch local storage notifications (current system)
-      const localNotifs = await getData<Notification[]>("notifications", []);
+  /**
+   * Lightweight: persist read state + fire-and-forget Firestore sync.
+   * Does NOT re-fetch — the component manages local state optimistically.
+   */
+  markRead: async (notificationId: number, firestoreId?: string): Promise<void> => {
+    const readState = await getData<Record<string, boolean>>("notification_read_state", {});
+    readState[String(notificationId)] = true;
+    await saveData("notification_read_state", readState);
 
-      // 3. Map Firestore notifications to the Student Portal's interface
-      const mappedFirestoreNotifs: Notification[] = firestoreNotifs.map(fn => ({
-        id: Math.abs(fn.id.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0)), // Generate a numeric ID from hash
-        type: fn.type === 'announcement' ? 'announcement' : 
-              fn.type === 'assignment' ? 'homework' : 'reminder',
-        title: fn.title,
-        message: fn.message,
-        timestamp: fn.date || new Date().toISOString(), // Use date from Firestore, fallback to now
-        read: fn.read,
-        priority: 'medium',
-        icon: fn.type === 'announcement' ? '📢' : '📚',
-        color: fn.type === 'announcement' ? '#6366f1' : '#3b82f6'
-      }));
-
-      // Combine and sort by timestamp (descending)
-      return [...mappedFirestoreNotifs, ...localNotifs].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-    } catch (error) {
-      console.error("Failed to fetch notifications for student:", error);
-      return getData<Notification[]>("notifications", []);
+    // Fire-and-forget Firestore sync
+    if (firestoreId) {
+      notificationService.markAsRead(firestoreId).catch(() => {});
     }
+  },
+
+  /**
+   * Lightweight: mark all IDs as read locally + fire-and-forget Firestore sync.
+   */
+  markAllRead: async (ids: number[]): Promise<void> => {
+    const readState = await getData<Record<string, boolean>>("notification_read_state", {});
+    for (const id of ids) {
+      readState[String(id)] = true;
+    }
+    await saveData("notification_read_state", readState);
+
+    const user = auth.currentUser;
+    if (user?.email) {
+      notificationService.markAllAsRead(user.email).catch(() => {});
+    }
+  },
+
+  add: async (notification: Omit<Notification, "id">): Promise<void> => {
+    const stored = await getData<Notification[]>("custom_notifications", []);
+    const newNotif = { ...notification, id: Date.now() } as Notification;
+    await saveData("custom_notifications", [newNotif, ...stored]);
+  },
+
+  /**
+   * Lightweight: persist deleted ID. Does NOT re-fetch.
+   */
+  delete: async (notificationId: number): Promise<void> => {
+    const deletedIds = await getData<number[]>("notification_deleted_ids", []);
+    if (!deletedIds.includes(notificationId)) {
+      deletedIds.push(notificationId);
+      await saveData("notification_deleted_ids", deletedIds);
+    }
+  },
+
+  // Keep fetchNotifications as alias for getAll (used by NotificationCenter)
+  fetchNotifications: async (): Promise<Notification[]> => {
+    return NotificationService.getAll();
   },
 };
 
