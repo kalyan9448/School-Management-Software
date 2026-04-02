@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
-import { studentService, academicYearService, feeService } from '../utils/centralDataService';
+import { studentService, academicYearService, feeService, admissionService } from '../utils/centralDataService';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AdmissionFormProps {
@@ -155,6 +155,24 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
       if (!isUnique) {
         alert(`Error: Roll Number "${formData.rollNo}" already exists in ${formData.classAllotted || formData.classApplied} - ${formData.section} for academic year ${formData.academicYear}. Please use a unique roll number.`);
         return;
+      }
+
+      // Validate Student Email Uniqueness
+      if (formData.email && formData.email.trim()) {
+        let emailUnique = true;
+        try {
+          emailUnique = await admissionService.isEmailUnique(
+            formData.email,
+            student?.id || student?.admissionNo
+          );
+        } catch (err) {
+          console.warn('Email uniqueness check failed (proceeding with save):', err);
+        }
+
+        if (!emailUnique) {
+          alert(`Error: The student email "${formData.email.trim()}" is already registered for another student. Please use a different email address.`);
+          return;
+        }
       }
 
       // Documents are now optional as per user request

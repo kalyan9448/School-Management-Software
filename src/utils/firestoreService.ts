@@ -576,9 +576,38 @@ export const admissionService = {
         await deleteDocById('admissions', id);
         return true;
     },
+
+    getByEmail: async (email: string): Promise<Admission | null> => {
+        if (!email) return null;
+        const lowered = email.trim().toLowerCase();
+        const admissions = await fetchCollection<Admission>('admissions', where('email', '==', lowered));
+        if (admissions.length === 0) {
+            // Fallback: try original casing
+            const fallback = await fetchCollection<Admission>('admissions', where('email', '==', email.trim()));
+            return fallback[0] || null;
+        }
+        return admissions[0] || null;
+    },
+
+    isEmailUnique: async (email: string, excludeId?: string): Promise<boolean> => {
+        if (!email) return true;
+        const lowered = email.trim().toLowerCase();
+
+        // Check admissions collection
+        const admissions = await fetchCollection<Admission>('admissions', where('email', '==', lowered));
+        const admissionConflict = admissions.find(a => a.id !== excludeId);
+        if (admissionConflict) return false;
+
+        // Check students collection
+        const students = await fetchCollection<Student>('students', where('email', '==', lowered));
+        const studentConflict = students.find(s => s.id !== excludeId && s.admissionNo !== excludeId);
+        if (studentConflict) return false;
+
+        return true;
+    },
 };
 
-// ==================== TEACHER SERVICE ====================
+// ==================== TEACHER SERVICE ==
 
 export const teacherService = {
     /** Returns only active / on-leave teachers — 'inactive' records are soft-deletes. */
