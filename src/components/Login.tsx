@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   Loader2,
 } from 'lucide-react';
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Step = 'email' | 'password' | 'create-password' | 'forgot-password' | 'reset-password';

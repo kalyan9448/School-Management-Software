@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { BottomNav } from "@/components/student/BottomNav";
 import { Home, BookOpen, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 
 const sidebarNavItems = [
     { path: "/student/dashboard", icon: Home, label: "Dashboard" },

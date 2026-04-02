@@ -30,7 +30,7 @@ import {
   ArrowLeft,
   Filter,
 } from 'lucide-react';
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 import {
   studentService,
   attendanceService,

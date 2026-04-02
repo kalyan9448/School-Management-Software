@@ -32,7 +32,7 @@ import {
   Minus,
   Lightbulb,
 } from 'lucide-react';
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
 import dataService from '../utils/firestoreService';
 

@@ -20,7 +20,7 @@ import {
   FileCheck,
   ShieldCheck,
 } from 'lucide-react';
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 
 interface SidebarProps {
   activeView: ViewType;

@@ -58,7 +58,7 @@ import {
   ShieldCheck,
   Heart,
 } from 'lucide-react';
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 

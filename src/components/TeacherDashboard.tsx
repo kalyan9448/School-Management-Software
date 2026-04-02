@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Calendar, FileText, LogOut, Bell } from 'lucide-react';
-import logoImage from '../assets/logo.png';
+import logoImage from '../assets/logo.jpeg';
 import { AttendanceMarking } from './AttendanceMarking';
 import { ClassView } from './ClassView';
 import { classService, timetableService, notificationService } from '../utils/centralDataService';
