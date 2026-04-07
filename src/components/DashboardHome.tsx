@@ -4,7 +4,7 @@ import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, 
 import { studentService, attendanceService, classService, eventService, enquiryService, schoolService, feeService } from '../utils/centralDataService';
 
 interface DashboardHomeProps {
-  onNavigate?: (view: string) => void;
+  onNavigate?: (view: string, options?: any) => void;
 }
 
 export function DashboardHome({ onNavigate }: DashboardHomeProps) {
@@ -147,7 +147,13 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
             totalRecords += attStats.total;
           }
           const avgAttendance = totalRecords > 0 ? Math.round((totalPresence / totalRecords) * 100) : 0;
-          performance.push({ class: `${cls.className}-${cls.section}`, attendance: avgAttendance, color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500' });
+          performance.push({ 
+            class: `${cls.className}-${cls.section}`, 
+            className: cls.className,
+            section: cls.section,
+            attendance: avgAttendance, 
+            color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500' 
+          });
         }
         const sorted = performance.sort((a, b) => b.attendance - a.attendance).slice(0, 4);
         setClassPerformance(sorted.length > 0 ? sorted : [{ class: 'No classes', attendance: 0, color: 'bg-purple-500' }]);
@@ -478,7 +484,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-gray-900">Top Performing Classes</h3>
           <button
-            onClick={() => onNavigate?.('students')}
+            onClick={() => onNavigate?.('monitoring')}
             className="text-purple-600 hover:text-purple-700 transition-colors"
           >
             View All Classes
@@ -486,24 +492,34 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {classPerformance.map((cls, index) => (
-            <div key={index} className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 hover:shadow-2xl transition-all">
+            <div 
+              key={index} 
+              className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 hover:shadow-2xl transition-all cursor-pointer group"
+              onClick={() => {
+                if (cls.className && cls.section) {
+                  onNavigate?.('students', { tab: 'attendance', class: cls.className, section: cls.section });
+                } else {
+                  onNavigate?.('monitoring');
+                }
+              }}
+            >
               <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 ${cls.color} rounded-2xl flex items-center justify-center text-white shadow-md`}>
+                <div className={`w-12 h-12 ${cls.color} rounded-2xl flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform`}>
                   <Award className="w-6 h-6" />
                 </div>
                 <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full">
                   #{index + 1}
                 </span>
               </div>
-              <h4 className="text-gray-900 mb-2">{cls.class}</h4>
+              <h4 className="text-gray-900 mb-2 group-hover:text-purple-700 transition-colors">{cls.class}</h4>
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-gray-600">Attendance</span>
-                  <span className="text-gray-900">{cls.attendance}%</span>
+                  <span className="text-gray-900 font-bold">{cls.attendance}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                   <div
-                    className={`${cls.color} h-2 rounded-full transition-all`}
+                    className={`${cls.color} h-2 rounded-full transition-all duration-1000`}
                     style={{ width: `${cls.attendance}%` }}
                   />
                 </div>

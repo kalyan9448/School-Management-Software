@@ -5,6 +5,7 @@ import { studentService, academicYearService, attendanceService, type Student, t
 import { AcademicYear } from '../utils/classUtils';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { AdmissionForm } from './AdmissionForm';
+import { useTenant } from '../contexts/TenantContext';
 
 // --- Feature 3: CSV Export Utility ---
 function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
@@ -46,6 +47,7 @@ export function StudentInformation({
   initialClass = '',
   initialSection = ''
 }: StudentInformationProps = {}) {
+  const { schoolName } = useTenant();
   const { uniqueClasses, sectionsForClass } = useAcademicClasses();
   const [activeMainTab, setActiveMainTab] = useState<'profiles' | 'attendance'>(initialTab);
   const [attendanceTab, setAttendanceTab] = useState<'daily' | 'monthly'>('daily');
@@ -376,6 +378,105 @@ export function StudentInformation({
       'Section': selectedSection
     }));
     downloadCSV(exportData, `daily_attendance_${selectedClass}_${selectedSection}_${selectedDate}.csv`);
+  };
+
+  const exportDailyPDF = () => {
+    if (attendance.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+
+    // Header Color Strip
+    doc.setFillColor(79, 70, 229); // Indigo-600
+    doc.rect(0, 0, pageWidth, 20, 'F');
+
+    // School Name & Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(schoolName || 'School Management System', 14, 13);
+    
+    doc.setTextColor(55, 65, 81);
+    doc.setFontSize(18);
+    doc.text('Daily Attendance Report', 14, 32);
+
+    // Metadata
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Class: ${selectedClass} | Section: ${selectedSection}`, 14, 40);
+    doc.text(`Date: ${selectedDate}`, 14, 46);
+
+    // Stats Section
+    doc.setFillColor(243, 244, 246);
+    doc.roundedRect(14, 52, pageWidth - 28, 25, 3, 3, 'F');
+    
+    doc.setFontSize(10);
+    doc.setTextColor(107, 114, 128);
+    doc.text('Total Students', 20, 60);
+    doc.text('Present', 70, 60);
+    doc.text('Absent', 120, 60);
+    doc.text('Attendance %', 170, 60);
+
+    doc.setFontSize(12);
+    doc.setTextColor(17, 24, 39);
+    doc.setFont('helvetica', 'bold');
+    doc.text(String(stats.total), 20, 70);
+    doc.text(String(stats.present), 70, 70);
+    doc.text(String(stats.absent), 120, 70);
+    doc.text(`${attendancePercentage}%`, 170, 70);
+
+    // Table
+    let yPos = 88;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(55, 65, 81);
+    
+    doc.text('Roll', 14, yPos);
+    doc.text('Student Name', 40, yPos);
+    doc.text('Parent Phone', 110, yPos);
+    doc.text('Status', 160, yPos);
+
+    doc.setDrawColor(229, 231, 235);
+    doc.line(14, yPos + 2, pageWidth - 14, yPos + 2);
+    yPos += 8;
+
+    doc.setFont('helvetica', 'normal');
+    attendance.forEach((record, index) => {
+      if (yPos > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      // Alternating row background
+      if (index % 2 === 0) {
+        doc.setFillColor(252, 253, 255);
+        doc.rect(14, yPos - 5, pageWidth - 28, 8, 'F');
+      }
+
+      doc.text(String(record.rollNo), 14, yPos);
+      doc.text(record.studentName, 40, yPos);
+      doc.text(record.parentPhone || 'N/A', 110, yPos);
+      
+      const status = record.status.toUpperCase();
+      if (status === 'PRESENT') doc.setTextColor(22, 163, 74);
+      else if (status === 'ABSENT') doc.setTextColor(220, 38, 38);
+      else doc.setTextColor(202, 138, 4);
+      
+      doc.text(status, 160, yPos);
+      doc.setTextColor(55, 65, 81);
+
+      yPos += 8;
+    });
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(156, 163, 175);
+    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 285);
+
+    doc.save(`daily_attendance_${selectedClass}_${selectedSection}_${selectedDate}.pdf`);
   };
 
   const exportMonthlyAttendance = () => {
@@ -1038,7 +1139,15 @@ export function StudentInformation({
                   className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
                 >
                   <Download className="w-5 h-5" />
-                  Export Report
+                  CSV
+                </button>
+
+                <button
+                  onClick={exportDailyPDF}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all shadow-md flex items-center gap-2 font-bold transform active:scale-95"
+                >
+                  <FileText className="w-5 h-5" />
+                  Download Daily PDF
                 </button>
               </div>
             </>
