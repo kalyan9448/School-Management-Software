@@ -215,11 +215,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 //    Note: saveUserToFirestore may be blocked by Firestore rules if
                 //    role='superadmin'; the backend sync below handles that case.
                 if (!appUser) {
+                    // Before defaulting to 'admin', check if this email belongs
+                    // to a student or teacher provisioned during admission.
+                    let resolvedRole = resolveRoleForNewUser(email);
+                    let resolvedName = firebaseUser.displayName || email.split('@')[0] || 'User';
+                    let resolvedSchoolId: string | undefined;
+
+                    if (resolvedRole !== 'superadmin') {
+                        const emailLower = email.toLowerCase().trim();
+                        const teacherQ = query(collection(db, 'teachers'), where('email', '==', emailLower));
+                        const teacherSnap = await getDocs(teacherQ);
+                        if (!teacherSnap.empty) {
+                            const td = teacherSnap.docs[0].data();
+                            resolvedRole = 'teacher';
+                            resolvedName = td.name || resolvedName;
+                            resolvedSchoolId = td.school_id;
+                        } else {
+                            const studentQ = query(collection(db, 'students'), where('email', '==', emailLower));
+                            const studentSnap = await getDocs(studentQ);
+                            if (!studentSnap.empty) {
+                                const sd = studentSnap.docs[0].data();
+                                resolvedRole = 'student';
+                                resolvedName = sd.name || resolvedName;
+                                resolvedSchoolId = sd.school_id;
+                            }
+                        }
+                    }
+
                     appUser = {
                         id: firebaseUser.uid,
                         email,
-                        name: firebaseUser.displayName || email.split('@')[0] || 'User',
-                        role: resolveRoleForNewUser(email),
+                        name: resolvedName,
+                        role: resolvedRole,
+                        school_id: resolvedSchoolId,
                     };
                     await saveUserToFirestore(firebaseUser.uid, appUser);
                 }

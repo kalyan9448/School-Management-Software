@@ -393,16 +393,11 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                 studentId = createdStudent.id;
               }
               
-              // 1. Provision Student Login Account (Only if email is provided)
-              if (studentData.email) {
-                await userService.create({
-                  email: studentData.email,
-                  name: studentData.name,
-                  role: 'student',
-                  school_id: user?.school_id,
-                  isFirstLogin: true
-                });
-              }
+              // Student login accounts are NOT created in the 'users' collection.
+              // The AuthContext and backend auth route automatically resolve the
+              // 'student' role from the 'students' collection when the student
+              // logs in for the first time. Writing to 'users' is unnecessary
+              // and risks role conflicts (e.g. overwriting an admin with same email).
 
               // 2. Provision/Link Parent Login Account
               const allUsers = await userService.getAll();
