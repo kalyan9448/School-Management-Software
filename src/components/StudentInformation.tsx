@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { studentService, academicYearService, attendanceService, type Student, type AttendanceRecord } from '../utils/firestoreService';
+import { studentService, academicYearService, attendanceService, feeInvoiceService, type Student, type AttendanceRecord, type FeeInvoice } from '../utils/firestoreService';
 import { AcademicYear } from '../utils/classUtils';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { AdmissionForm } from './AdmissionForm';
@@ -66,6 +66,7 @@ export function StudentInformation({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [view, setView] = useState<'list' | 'edit'>('list'); // 'list' for student list/attendance, 'edit' for AdmissionForm
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const loadAcademicYears = async () => {
@@ -94,21 +95,79 @@ export function StudentInformation({
     loadAcademicYears();
   }, [selectedAcademicYear]);
 
-  // Robust student loading function
+  // Dynamic data loading for Students, Attendance, and Fees
   const loadDynamicStudents = useCallback(async () => {
     try {
-      const allStudents = await studentService.getAll();
-      setStudents(allStudents as Student[]);
+      setLoading(true);
+      // Fetch all core data in parallel for speed
+      const [allStudents, allAttendance, allInvoices] = await Promise.all([
+        studentService.getAll(),
+        attendanceService.getAll(),
+        feeInvoiceService.getAll()
+      ]);
+
+      // 1. Group attendance by studentId
+      const attendanceMap = new Map<string, { present: number; total: number }>();
+      (allAttendance as AttendanceRecord[]).forEach(record => {
+        if (!attendanceMap.has(record.studentId)) {
+          attendanceMap.set(record.studentId, { present: 0, total: 0 });
+        }
+        const stats = attendanceMap.get(record.studentId)!;
+        stats.total++;
+        if (record.status === 'present' || record.status === 'late') {
+          stats.present++;
+        }
+      });
+
+      // 2. Group fee invoices by studentId
+      const feeMap = new Map<string, { totalDue: number; totalPaid: number }>();
+      (allInvoices as FeeInvoice[]).forEach(inv => {
+        if (!feeMap.has(inv.studentId)) {
+          feeMap.set(inv.studentId, { totalDue: 0, totalPaid: 0 });
+        }
+        const stats = feeMap.get(inv.studentId)!;
+        stats.totalDue += (inv.totalDue || 0);
+        stats.totalPaid += (inv.totalPaid || 0);
+      });
+
+      // 3. Enrich student objects with dynamic stats
+      const enrichedStudents = (allStudents as Student[]).map(student => {
+        const attStats = attendanceMap.get(student.id) || { present: 0, total: 0 };
+        const fStats = feeMap.get(student.id) || { totalDue: 0, totalPaid: 0 };
+        
+        const balance = fStats.totalDue - fStats.totalPaid;
+        let fStatus: 'paid' | 'partial' | 'pending' = 'pending';
+        if (fStats.totalDue > 0) {
+            if (balance <= 0) fStatus = 'paid';
+            else if (fStats.totalPaid > 0) fStatus = 'partial';
+            else fStatus = 'pending';
+        }
+
+        return {
+          ...student,
+          presentDays: attStats.present,
+          totalDays: attStats.total,
+          attendance: attStats.total > 0 ? Math.round((attStats.present / attStats.total) * 100) : 0,
+          feeStatus: fStatus,
+          dueFee: Math.max(0, balance),
+          totalFee: fStats.totalDue,
+          paidFee: fStats.totalPaid
+        };
+      });
+
+      setStudents(enrichedStudents);
     } catch (error) {
-      console.error("Failed to load students from Firestore", error);
+      console.error("Failed to load students and dynamic metrics:", error);
       setStudents([]);
+    } finally {
+        setLoading(false);
     }
   }, []);
 
-  // Sync data on mount
+  // Sync data on mount or when navigation parameters suggest a change
   useEffect(() => {
     loadDynamicStudents();
-  }, [loadDynamicStudents]);
+  }, [loadDynamicStudents, initialClass, initialSection]);
 
   // Attendance and Search state
   const [selectedClass, setSelectedClass] = useState(initialClass);
@@ -456,9 +515,9 @@ export function StudentInformation({
         doc.rect(14, yPos - 5, pageWidth - 28, 8, 'F');
       }
 
-      doc.text(String(record.rollNo), 14, yPos);
-      doc.text(record.studentName, 40, yPos);
-      doc.text(record.parentPhone || 'N/A', 110, yPos);
+      doc.text(String(record.rollNo || ''), 14, yPos);
+      doc.text(String(record.studentName || ''), 40, yPos);
+      doc.text(String(record.parentPhone || 'N/A'), 110, yPos);
       
       const status = record.status.toUpperCase();
       if (status === 'PRESENT') doc.setTextColor(22, 163, 74);

@@ -1,26 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List, Trash2 } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Calendar, CheckCircle, Clock, Bell, AlertCircle, X, Grid3x3, List, Trash2, MessageCircle } from 'lucide-react';
 import { enquiryService } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
+import { useTenant } from '../contexts/TenantContext';
 
-interface Enquiry {
-  id: string;
-  parentName: string;
-  phone: string;
-  email: string;
-  childName: string;
-  classInterest: string;
-  enquiryDate: string;
-  followUpDate: string;
-  notes: string;
-  status: 'pending' | 'followed-up' | 'converted' | 'closed';
-}
+import { Enquiry } from '../utils/centralDataService';
 
 interface EnquiryModuleProps {
   onConvert?: (enquiry: Enquiry) => void;
 }
 
 export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
+  const { schoolName } = useTenant();
   const { uniqueClasses } = useAcademicClasses();
   const [showForm, setShowForm] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
@@ -50,8 +41,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
     parentName: '',
     phone: '',
     email: '',
-    childName: '',
-    classInterest: '',
+    studentName: '',
+    classApplied: '',
     followUpDate: '',
     notes: '',
   });
@@ -62,9 +53,9 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
     today.setHours(0, 0, 0, 0);
 
     const reminders = enquiries
-      .filter(e => e.status === 'pending' && e.followUpDate)
+      .filter(e => e.status === 'new' && e.followUpDate)
       .map(e => {
-        const followUpDate = new Date(e.followUpDate);
+        const followUpDate = new Date(e.followUpDate || '');
         followUpDate.setHours(0, 0, 0, 0);
         const diffTime = followUpDate.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -88,7 +79,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
       await enquiryService.create({
         ...formData,
         enquiryDate: new Date().toISOString().split('T')[0],
-        status: 'pending' as const,
+        status: 'new' as const,
+        source: 'walk-in' as const,
       });
       await loadEnquiries();
 
@@ -96,8 +88,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
         parentName: '',
         phone: '',
         email: '',
-        childName: '',
-        classInterest: '',
+        studentName: '',
+        classApplied: '',
         followUpDate: '',
         notes: '',
       });
@@ -131,14 +123,37 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
     }
   };
 
+  const handleWhatsApp = (enquiry: Enquiry | any) => {
+    const cleanPhone = enquiry.phone.replace(/\D/g, '');
+    const student = enquiry.studentName || enquiry.childName || 'the student';
+    const parent = enquiry.parentName || 'Parent';
+    const cls = enquiry.classApplied || enquiry.classInterest || '';
+    
+    let message = '';
+    const status = (enquiry.status || '').toLowerCase();
+
+    if (status === 'converted') {
+      message = `Hi ${parent}, welcome to ${schoolName || 'our school'}! We've successfully processed the admission for ${student}. We look forward to having them with us.`;
+    } else if (status === 'contacted' || status === 'followed-up') {
+      message = `Hi ${parent}, checking back in on your enquiry for ${student}. Do you have any further questions about our admission process at ${schoolName || 'the school'}?`;
+    } else {
+      message = `Hi ${parent}, thank you for inquiring about admission for ${student} ${cls ? `to Class ${cls}` : ''} at ${schoolName || 'our school'}. We'd love to discuss this further with you!`;
+    }
+
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('91') ? cleanPhone : '91' + cleanPhone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
   const getStatusBadge = (status: string) => {
     const styles = {
-      pending: 'bg-yellow-100 text-yellow-700',
-      'followed-up': 'bg-blue-100 text-blue-700',
+      new: 'bg-yellow-100 text-yellow-700',
+      contacted: 'bg-blue-100 text-blue-700',
+      visited: 'bg-indigo-100 text-indigo-700',
       converted: 'bg-green-100 text-green-700',
-      closed: 'bg-gray-100 text-gray-700',
+      lost: 'bg-gray-100 text-gray-700',
     };
-    return styles[status as keyof typeof styles] || styles.pending;
+    return styles[status as keyof typeof styles] || styles.new;
   };
 
   const getReminderStyle = (daysUntil: number) => {
@@ -183,7 +198,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
   const filteredEnquiries = enquiries.filter(enquiry =>
     enquiry.parentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    enquiry.childName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    enquiry.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     enquiry.phone.includes(searchTerm)
   );
 
@@ -300,7 +315,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                           <div className="flex-1">
                             <div className="flex items-start justify-between mb-2">
                               <div>
-                                <h3 className="text-gray-900 mb-1">{reminder.childName}</h3>
+                                <h3 className="text-gray-900 mb-1">{reminder.studentName}</h3>
                                 <p className="text-gray-700">Parent: {reminder.parentName}</p>
                               </div>
                               <span className={`px-4 py-2 rounded-full ${style.badge} whitespace-nowrap border-2`}>
@@ -318,7 +333,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                                 <span className="text-gray-700">Follow-up: {reminder.followUpDate}</span>
                               </div>
                               <div className="p-2 bg-white/50 rounded-xl text-gray-700">
-                                <span>Class {reminder.classInterest} Interest</span>
+                                <span>Class {reminder.classApplied} Interest</span>
                               </div>
                             </div>
 
@@ -331,7 +346,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                             <div className="flex items-center gap-2 flex-wrap">
                               <button
                                 onClick={() => {
-                                  handleStatusChange(reminder.id, 'followed-up');
+                                  handleStatusChange(reminder.id, 'contacted');
                                   // Close popup if no more reminders
                                   if (followUpReminders.length === 1) {
                                     setShowReminders(false);
@@ -358,6 +373,14 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                                   Send Email
                                 </a>
                               )}
+                              <button
+                                onClick={() => handleWhatsApp(reminder)}
+                                className="px-6 py-2.5 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/30 hover:scale-105 active:scale-95 font-semibold"
+                                style={{ backgroundColor: '#25D366' }}
+                              >
+                                <MessageCircle className="w-5 h-5 text-white" />
+                                <span className="text-white">WhatsApp</span>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -383,15 +406,15 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
         <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-yellow-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-yellow-200 to-yellow-300 rounded-bl-full opacity-50"></div>
           <div className="relative">
-            <p className="text-yellow-700 mb-1">Pending</p>
-            <p className="text-yellow-900">{enquiries.filter(e => e.status === 'pending').length}</p>
+            <p className="text-yellow-700 mb-1">New Enquiries</p>
+            <p className="text-yellow-900">{enquiries.filter(e => e.status === 'new').length}</p>
           </div>
         </div>
         <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-indigo-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-indigo-200 to-indigo-300 rounded-bl-full opacity-50"></div>
           <div className="relative">
-            <p className="text-indigo-700 mb-1">Followed Up</p>
-            <p className="text-indigo-900">{enquiries.filter(e => e.status === 'followed-up').length}</p>
+            <p className="text-indigo-700 mb-1">Contacted</p>
+            <p className="text-indigo-900">{enquiries.filter(e => e.status === 'contacted').length}</p>
           </div>
         </div>
         <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-green-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
@@ -503,8 +526,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                         <label className="block text-gray-700 mb-2">Child Name *</label>
                         <input
                           type="text"
-                          value={formData.childName}
-                          onChange={(e) => setFormData({ ...formData, childName: e.target.value })}
+                          value={formData.studentName}
+                          onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
                           required
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Enter child name"
@@ -514,8 +537,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                       <div>
                         <label className="block text-gray-700 mb-2">Class of Interest *</label>
                         <select
-                          value={formData.classInterest}
-                          onChange={(e) => setFormData({ ...formData, classInterest: e.target.value })}
+                          value={formData.classApplied}
+                          onChange={(e) => setFormData({ ...formData, classApplied: e.target.value })}
                           required
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
@@ -608,13 +631,17 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
               <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-200 to-pink-200 rounded-bl-full opacity-30"></div>
               <div className="relative space-y-3">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-gray-900 mb-1">{enquiry.childName}</h3>
-                    <p className="text-gray-600">Class {enquiry.classInterest} Interest</p>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-gray-900 mb-1 truncate">
+                      {(enquiry as any).studentName || (enquiry as any).childName || 'Unnamed Enquiry'}
+                    </h3>
+                    <p className="text-gray-600 text-sm">
+                      {(enquiry as any).classApplied || (enquiry as any).classInterest ? `Class ${(enquiry as any).classApplied || (enquiry as any).classInterest} Interest` : 'Admission Interest'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1.5 rounded-xl border ${getStatusBadge(enquiry.status)}`}>
-                      {enquiry.status.replace('-', ' ').toUpperCase()}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${getStatusBadge(enquiry.status)}`}>
+                      {enquiry.status ? enquiry.status.toUpperCase() : 'NEW'}
                     </span>
                     <button
                       onClick={() => handleDeleteEnquiry(enquiry.id)}
@@ -656,7 +683,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
                 <div className="flex items-center gap-2 pt-2">
                   <button
-                    onClick={() => handleStatusChange(enquiry.id, 'followed-up')}
+                    onClick={() => handleStatusChange(enquiry.id, 'contacted')}
                     className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
                   >
                     Follow Up
@@ -666,6 +693,15 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                     className="flex-1 px-3 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
                   >
                     Convert
+                  </button>
+                  <button
+                    onClick={() => handleWhatsApp(enquiry)}
+                    className="flex-1 px-3 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 font-bold"
+                    title="Connect on WhatsApp"
+                    style={{ backgroundColor: '#25D366' }}
+                  >
+                    <MessageCircle className="w-4 h-4 text-white" />
+                    <span className="text-white">WhatsApp</span>
                   </button>
                 </div>
               </div>
@@ -682,10 +718,14 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                   <CheckCircle className="w-5 h-5" />
                 </div>
 
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+                 <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
                   <div>
-                    <h4 className="text-gray-900 truncate">{enquiry.childName}</h4>
-                    <p className="text-gray-500">Class {enquiry.classInterest}</p>
+                    <h4 className="text-gray-900 truncate">
+                      {(enquiry as any).studentName || (enquiry as any).childName || 'Unnamed'}
+                    </h4>
+                    <p className="text-gray-500 text-sm">
+                      Class {(enquiry as any).classApplied || (enquiry as any).classInterest || '-'}
+                    </p>
                   </div>
 
                   <div>
@@ -705,16 +745,16 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
                   <div className="text-right">
                     <span className={`inline-block px-3 py-1.5 rounded-xl border ${getStatusBadge(enquiry.status)}`}>
-                      {enquiry.status.replace('-', ' ').toUpperCase()}
+                      {enquiry.status.toUpperCase()}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleStatusChange(enquiry.id, 'followed-up')}
+                    onClick={() => handleStatusChange(enquiry.id, 'contacted')}
                     className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
-                    title="Mark as Followed Up"
+                    title="Mark as Contacted"
                   >
                     <CheckCircle className="w-4 h-4" />
                   </button>
@@ -724,6 +764,14 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                     title="Convert to Admission"
                   >
                     <CheckCircle className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleWhatsApp(enquiry)}
+                    className="p-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md hover:shadow-lg flex items-center justify-center"
+                    title="WhatsApp Connect"
+                    style={{ backgroundColor: '#25D366' }}
+                  >
+                    <MessageCircle className="w-4 h-4 text-white" />
                   </button>
                   <button
                     onClick={() => handleDeleteEnquiry(enquiry.id)}
