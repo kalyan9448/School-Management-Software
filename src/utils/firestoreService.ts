@@ -41,7 +41,7 @@ export type {
     FeePayment,
     Announcement,
     Enquiry,
-    Event,
+    CalendarEvent,
     Notification,
     DayOfWeek,
     TimetableSlot,
@@ -90,7 +90,7 @@ import type {
     FeePayment,
     Announcement,
     Enquiry,
-    Event,
+    CalendarEvent,
     Notification,
     TimetableSlot,
     Admission,
@@ -1345,34 +1345,62 @@ export const enquiryService = {
     },
 };
 
-// ==================== EVENT SERVICE ====================
+// ==================== CALENDAR SERVICE ====================
 
-export const eventService = {
-    getAll: async (): Promise<Event[]> => {
-        return fetchCollection<Event>('events');
+export const calendarService = {
+    getAll: async (): Promise<CalendarEvent[]> => {
+        return fetchCollection<CalendarEvent>('calendar');
     },
 
-    getUpcoming: async (): Promise<Event[]> => {
-        const events = await eventService.getAll();
+    getUpcoming: async (limitCount: number = 5): Promise<CalendarEvent[]> => {
+        const events = await calendarService.getAll();
         const today = new Date().toISOString().split('T')[0];
-        return events.filter(e => e.date >= today).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        return events
+            .filter(e => e.endDate >= today)
+            .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+            .slice(0, limitCount);
     },
 
-    create: async (event: Partial<Event>): Promise<Event> => {
-        return createDoc<Event>('events', {
+    create: async (event: Partial<CalendarEvent>): Promise<CalendarEvent> => {
+        return createDoc<CalendarEvent>('calendar', {
+            school_id: event.school_id || '',
             title: event.title || '',
+            type: event.type || 'custom',
+            startDate: event.startDate || '',
+            endDate: event.endDate || '',
             description: event.description || '',
-            type: event.type || 'other',
-            date: event.date || '',
-            startTime: event.startTime,
-            endTime: event.endTime,
-            venue: event.venue,
-            organizer: event.organizer,
-            targetAudience: event.targetAudience || 'all',
-            class: event.class,
-            section: event.section,
+            classIds: event.classIds || [],
+            sectionIds: event.sectionIds || [],
+            createdAt: new Date().toISOString(),
         });
     },
+
+    update: async (id: string, updates: Partial<CalendarEvent>): Promise<void> => {
+        await updateDocById('calendar', id, updates);
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('calendar', id);
+    },
+
+    isHoliday: async (date: string): Promise<boolean> => {
+        const events = await calendarService.getAll();
+        return events.some(e => 
+            e.type === 'holiday' && 
+            date >= e.startDate && 
+            date <= e.endDate
+        );
+    },
+
+    isExamDay: async (date: string, classId?: string): Promise<boolean> => {
+        const events = await calendarService.getAll();
+        return events.some(e => 
+            e.type === 'exam' && 
+            date >= e.startDate && 
+            date <= e.endDate &&
+            (!classId || !e.classIds || e.classIds.length === 0 || e.classIds.includes(classId))
+        );
+    }
 };
 
 // ==================== NOTIFICATION SERVICE ====================
@@ -2281,7 +2309,7 @@ const firestoreDataService = {
     fee: feeService,
     announcement: announcementService,
     enquiry: enquiryService,
-    event: eventService,
+    event: calendarService,
     notification: notificationService,
     timetable: timetableService,
     statistics: statisticsService,

@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Copy, ArrowRightLef
 import { StudentPromotionTool } from './StudentPromotionTool.tsx';
 import SubjectMappingView from './SubjectMappingView';
 import { TimetableManagement } from './TimetableManagement';
+import { CalendarModule } from './CalendarModule';
 import { AcademicYear, ClassSection } from '../utils/classUtils';
 import { Teacher, classService, teacherService, academicYearService, studentService } from '../utils/centralDataService';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +18,7 @@ const CLASS_OPTIONS = [
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
 export function AcademicStructureView() {
-  const [activeTab, setActiveTab] = useState<'years' | 'classes' | 'subject-mapping' | 'timetable' | 'promotion'>('years');
+  const [activeTab, setActiveTab] = useState<'years' | 'classes' | 'subject-mapping' | 'timetable' | 'promotion' | 'calendar'>('years');
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [classSections, setClassSections] = useState<ClassSection[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -469,6 +470,15 @@ export function AcademicStructureView() {
         >
           Timetable
         </button>
+        <button
+          onClick={() => setActiveTab('calendar')}
+          className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'calendar'
+            ? 'border-purple-600 text-purple-600 font-medium'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+        >
+          Calendar
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">
@@ -664,6 +674,11 @@ export function AcademicStructureView() {
         {/* Timetable Tab */}
         {activeTab === 'timetable' && (
           <TimetableManagement />
+        )}
+
+        {/* Calendar Tab */}
+        {activeTab === 'calendar' && (
+          <CalendarModule />
         )}
       </div>
 

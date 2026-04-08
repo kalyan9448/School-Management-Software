@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { studentService, academicYearService, feeService, admissionService } from '../utils/centralDataService';
 import { useAuth } from '../contexts/AuthContext';
@@ -218,7 +218,7 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
 
 
   return (
-    <div className="p-8">
+    <div className="p-8 pb-32">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <button
@@ -712,22 +712,29 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
 
 
 
-        {/* Actions */}
-        <div className="flex items-center gap-4">
-          <button
-            type="submit"
-            disabled={submitting}
-            className={`px-8 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/30 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {submitting ? 'Saving...' : (student ? 'Update Admission' : 'Create Admission')}
-          </button>
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-2xl hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
+        {/* Sticky Action Footer */}
+        <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40">
+          <div className="max-w-7xl mx-auto flex items-center justify-end gap-4 px-4 sm:px-6 lg:px-8">
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-bold text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className={`px-8 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/30 flex items-center gap-2 font-bold text-sm ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {submitting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              {submitting ? 'Saving...' : (student ? 'Update Admission' : 'Create Admission')}
+            </button>
+          </div>
         </div>
       </form >
     </div >

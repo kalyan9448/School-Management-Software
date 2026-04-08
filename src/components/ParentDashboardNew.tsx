@@ -36,7 +36,7 @@ import logoImage from '../assets/logo.jpeg';
 import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
 import dataService from '../utils/firestoreService';
 
-type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions';
+type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar';
 type ReportPeriod = 'weekly' | 'monthly';
 
 interface Child {
@@ -263,6 +263,37 @@ export function ParentDashboardNew() {
       cancelled = true;
     };
   }, [selectedChild?.id, selectedChild?.email, selectedChild?.name, selectedChild?.class, selectedChild?.section]);
+
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [isHolidayToday, setIsHolidayToday] = useState(false);
+  const [holidayInfo, setHolidayInfo] = useState<any | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadCalendarInfo = async () => {
+      try {
+        const events = await dataService.event.getUpcoming(5);
+        if (isMounted) setUpcomingEvents(events);
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+        const allEvents = await dataService.event.getAll();
+        const todayHoliday = allEvents.find((e: any) => 
+            e.type === 'holiday' && 
+            todayStr >= e.startDate && 
+            todayStr <= e.endDate
+        );
+        
+        if (isMounted) {
+            setIsHolidayToday(!!todayHoliday);
+            setHolidayInfo(todayHoliday || null);
+        }
+      } catch (error) {
+        console.error('Error loading calendar data:', error);
+      }
+    };
+    loadCalendarInfo();
+    return () => { isMounted = false; };
+  }, []);
 
   // Local date helper (avoids UTC offset shifting the date)
   const getLocalDateStr = (d: Date = new Date()): string =>
@@ -1048,6 +1079,21 @@ export function ParentDashboardNew() {
 
     return (
       <div className="space-y-6">
+        {/* Holiday Alert */}
+        {isHolidayToday && holidayInfo && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-xl shadow-md animate-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                <Star className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-red-900 font-bold">{holidayInfo.title}</h3>
+                <p className="text-red-700 text-sm">{holidayInfo.description || 'School is closed today.'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Child Info Card */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
@@ -1270,6 +1316,44 @@ export function ParentDashboardNew() {
             </div>
           </div>
         )}
+
+        {/* Upcoming Events Card */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-gray-900">Upcoming School Events</h3>
+                <button 
+                  onClick={() => setCurrentView('calendar')}
+                  className="text-purple-600 text-sm font-bold hover:underline"
+                >
+                  View Calendar
+                </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {upcomingEvents.length > 0 ? (
+                    upcomingEvents.map(event => (
+                        <div key={event.id} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
+                            <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0 ${
+                                event.type === 'holiday' ? 'bg-red-500' : 
+                                event.type === 'exam' ? 'bg-orange-500' : 
+                                'bg-purple-500'
+                            }`}>
+                                <span className="text-[10px] font-bold uppercase">{new Date(event.startDate).toLocaleDateString('en-US', { month: 'short' })}</span>
+                                <span className="text-lg font-black leading-none">{new Date(event.startDate).getDate()}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-bold text-gray-900 truncate">{event.title}</h4>
+                                <p className="text-xs text-gray-500 truncate">{event.description || 'School event'}</p>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="col-span-full py-8 text-center text-gray-400">
+                        <Calendar className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                        <p>No upcoming events scheduled</p>
+                    </div>
+                )}
+            </div>
+        </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2072,6 +2156,33 @@ export function ParentDashboardNew() {
         return renderReports();
       case 'ai-suggestions':
         return renderAISuggestions();
+      case 'calendar':
+        return (
+            <div className="space-y-6 h-full flex flex-col">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-black text-gray-900">School Calendar</h2>
+                        <p className="text-gray-500 font-medium">Academic schedule, holidays, and events.</p>
+                    </div>
+                    <button
+                        onClick={() => setCurrentView('dashboard')}
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-bold text-sm"
+                    >
+                        Back to Dashboard
+                    </button>
+                </div>
+                <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden p-6">
+                    <p className="text-gray-500 italic">Calendar view is integrated with the school's central schedule.</p>
+                    <div className="mt-4">
+                        <div className="p-12 text-center text-gray-400">
+                            <Calendar className="w-24 h-24 mx-auto mb-4 opacity-10" />
+                            <h3 className="text-xl font-bold">Full Academic Calendar</h3>
+                            <p className="max-w-md mx-auto mt-2">The school has published the academic calendar for the current session. You can view all holidays and exam dates here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
       default:
         return renderDashboard();
     }
@@ -2103,7 +2214,7 @@ export function ParentDashboardNew() {
             </button>
             <button
               onClick={logout}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-800 hover:bg-purple-700 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all border border-white/20 font-bold text-sm"
             >
               <LogOut className="w-4 h-4" />
               Logout
@@ -2111,6 +2222,22 @@ export function ParentDashboardNew() {
           </div>
         </div>
       </header>
+
+      {/* Floating WhatsApp Action */}
+      <a
+        href="https://wa.me/919448000000" // Placeholder school number
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-8 right-8 z-50 flex items-center gap-3 p-4 bg-[#25D366] text-white rounded-full shadow-2xl shadow-[#25D366]/40 hover:scale-110 hover:rotate-3 active:scale-95 transition-all group"
+        title="Contact School on WhatsApp"
+      >
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold pl-2">
+          Contact Support
+        </span>
+        <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.72.937 3.659 1.432 5.631 1.433h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+        </svg>
+      </a>
 
       {/* Navigation */}
       <DashboardNav

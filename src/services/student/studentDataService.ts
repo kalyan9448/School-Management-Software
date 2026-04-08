@@ -21,7 +21,8 @@ import {
   examService,
   notificationService,
   lessonService,
-  quizResultService 
+  quizResultService,
+  calendarService
 } from "@/utils/firestoreService";
 
 import {
@@ -1027,8 +1028,8 @@ export const CalendarService = {
     const profile = await StudentProfile.get();
     if (!profile.grade || !profile.section) return [];
 
-    const events: CalendarEvent[] = [];
-    let nextId = 1;
+    const events: any[] = [];
+    let nextId = 1000; // Offset IDs to avoid collision with synthesized ones
 
     const SUBJECT_COLORS: Record<string, string> = {
       mathematics: "#3b82f6", math: "#3b82f6", maths: "#3b82f6",
@@ -1042,6 +1043,28 @@ export const CalendarService = {
       SUBJECT_COLORS[subj.toLowerCase()] || SUBJECT_COLORS.default;
 
     try {
+      // ── 0. Central School Calendar (Holidays, Exams, etc.) ────────────────
+      const schoolEvents = await calendarService.getAll();
+      for (const se of schoolEvents) {
+          // Check if event applies to this student's class
+          if (se.classIds && (se as any).classIds.length > 0) {
+              if (!(se as any).classIds.includes(profile.grade)) continue;
+          }
+
+          // Map to student portal event structure
+          events.push({
+              id: `school-${se.id}`,
+              title: se.title,
+              subject: se.type.toUpperCase(),
+              type: se.type === 'holiday' ? 'holiday' : (se.type === 'exam' ? 'exam' : 'event'),
+              date: se.startDate, 
+              endDate: se.endDate,
+              description: se.description || se.title,
+              color: se.type === 'holiday' ? '#ef4444' : (se.type === 'exam' ? '#f59e0b' : '#3b82f6'),
+              priority: se.type === 'holiday' || se.type === 'exam' ? 'high' : 'medium',
+          });
+      }
+
       // ── 1. Timetable → recurring class events (±30 days from today) ──────
       const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       const slots = await timetableService.getByClass(profile.grade, profile.section);
@@ -1176,17 +1199,28 @@ export const CalendarService = {
 
   getByDate: async (date: string): Promise<CalendarEvent[]> => {
     const all = await CalendarService.getAll();
-    return all.filter(e => e.date === date);
+    return all.filter(e => (e as any).date === date || ((e as any).startDate <= date && (e as any).endDate >= date));
   },
-  toggleCompleted: async (eventId: number): Promise<CalendarEvent[]> => {
-    // Toggling completion of dynamic events is not persisted for Firestore-sourced events
+  getUpcoming: async (limit: number = 5): Promise<CalendarEvent[]> => {
+    const all = await CalendarService.getAll();
+    const today = getLocalDateStr();
+    return all
+      .filter(e => (e as any).date >= today || (e as any).endDate >= today)
+      .sort((a, b) => ((a as any).date || (a as any).startDate).localeCompare((b as any).date || (b as any).startDate))
+      .slice(0, limit);
+  },
+  isHolidayToday: async (): Promise<any | null> => {
+    const today = getLocalDateStr();
+    const holiday = await calendarService.isHoliday(today);
+    return holiday;
+  },
+  toggleCompleted: async (eventId: number | string): Promise<CalendarEvent[]> => {
     return CalendarService.getAll();
   },
   add: async (event: Omit<CalendarEvent, "id">): Promise<CalendarEvent[]> => {
-    // Custom events could be saved to student_portal — for now just refresh
     return CalendarService.getAll();
   },
-  delete: async (eventId: number): Promise<CalendarEvent[]> => {
+  delete: async (eventId: number | string): Promise<CalendarEvent[]> => {
     return CalendarService.getAll();
   },
 };

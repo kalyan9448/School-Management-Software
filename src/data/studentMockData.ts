@@ -1264,10 +1264,10 @@ export const objectiveQuestions: ObjectiveQuestion[] = [
 // Calendar Events Data
 
 export interface CalendarEvent {
-  id: number;
+  id: number | string;
   title: string;
   subject: string;
-  type: 'class' | 'homework' | 'exam' | 'assignment' | 'event';
+  type: "class" | "homework" | "exam" | "assignment" | "event" | "holiday";
   date: string; // YYYY-MM-DD
   startTime?: string;
   endTime?: string;

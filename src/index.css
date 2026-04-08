@@ -4152,3 +4152,6 @@ html {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.grid-cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+}

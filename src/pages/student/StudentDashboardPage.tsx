@@ -35,6 +35,7 @@ import {
   PendingTasks,
   DailyTasks,
   HomeworkService,
+  CalendarService,
 } from "@/services/student/studentDataService";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/contexts/AuthContext";
@@ -77,6 +78,9 @@ export function Dashboard() {
   const [dailyTasksBySubject, setDailyTasksBySubject] = useState<any[]>([]);
   const [hwTopics, setHwTopics] = useState<any[]>([]);
   const [quote, setQuote] = useState("");
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [isHolidayToday, setIsHolidayToday] = useState(false);
+  const [holidayInfo, setHolidayInfo] = useState<any | null>(null);
 
   useEffect(() => {
     // Don't fetch until auth is resolved — on refresh, auth.currentUser
@@ -99,6 +103,15 @@ export function Dashboard() {
         if (daily.status === 'fulfilled') setDailyTasksBySubject(daily.value);
         if (hw.status === 'fulfilled') setHwTopics(hw.value);
         if (q.status === 'fulfilled') setQuote(q.value);
+
+        // Fetch Calendar Data
+        const [events, isHoliday] = await Promise.all([
+          CalendarService.getUpcoming(3),
+          CalendarService.isHolidayToday()
+        ]);
+        setUpcomingEvents(events);
+        setIsHolidayToday(!!isHoliday);
+        if (isHoliday) setHolidayInfo(isHoliday);
       } catch (err) {
         console.error('[StudentDashboard] Data fetch failed:', err);
       }
@@ -171,6 +184,22 @@ export function Dashboard() {
       </motion.div>
 
       <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-4 space-y-3">
+        {isHolidayToday && holidayInfo && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-red-50 border-2 border-red-100 rounded-3xl p-6 flex items-center gap-6 shadow-sm"
+          >
+            <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-red-600 flex-shrink-0">
+              <Calendar className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-red-900 font-bold text-lg">{holidayInfo.title}</h3>
+              <p className="text-red-700">{holidayInfo.description || "No classes today. Enjoy your holiday!"}</p>
+            </div>
+          </motion.div>
+        )}
+
         <WelcomeBanner />
 
         {/* Classes and Homework row */}
@@ -297,6 +326,56 @@ export function Dashboard() {
             </Card>
           </motion.div>
         </div>
+
+        {/* Upcoming Events */}
+        {upcomingEvents.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+            <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-rose-50 rounded-xl">
+                            <Calendar className="w-5 h-5 text-rose-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900">Upcoming Events</h2>
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-rose-600 font-bold hover:bg-rose-50" onClick={() => navigate('/timeline')}>
+                        Full Calendar
+                    </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {upcomingEvents.map((event, idx) => (
+                        <div key={event.id} className="p-4 rounded-2xl border border-gray-100 bg-white hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0 ${
+                                    event.type === 'holiday' ? 'bg-red-500' :
+                                    event.type === 'exam' ? 'bg-orange-500' :
+                                    'bg-indigo-500'
+                                }`}>
+                                    <span className="text-[10px] font-bold uppercase">{new Date(event.startDate).toLocaleDateString('en-US', { month: 'short' })}</span>
+                                    <span className="text-lg font-black leading-none">{new Date(event.startDate).getDate()}</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="font-bold text-gray-900 text-sm truncate">{event.title}</h4>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <Badge variant="outline" className={`text-[9px] h-4 px-1.5 capitalize ${
+                                            event.type === 'holiday' ? 'text-red-500 border-red-100' :
+                                            event.type === 'exam' ? 'text-orange-500 border-orange-100' :
+                                            'text-blue-500 border-blue-100'
+                                        }`}>
+                                            {event.type}
+                                        </Badge>
+                                        <span className="text-[10px] text-gray-400 font-medium">
+                                            {event.startDate === event.endDate ? 'Single day' : 'Multi-day'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Pending Tasks */}
         <div>

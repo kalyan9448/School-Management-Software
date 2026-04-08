@@ -374,20 +374,17 @@ export interface Enquiry {
   assignedTo?: string;
 }
 
-export interface Event {
+export interface CalendarEvent {
   id: string;
-  school_id?: string;
+  school_id: string;
   title: string;
+  type: 'holiday' | 'exam' | 'cultural' | 'announcement' | 'custom';
+  startDate: string;
+  endDate: string;
   description: string;
-  type: 'holiday' | 'exam' | 'ptm' | 'sports' | 'cultural' | 'other';
-  date: string;
-  startTime?: string;
-  endTime?: string;
-  venue?: string;
-  organizer?: string;
-  targetAudience: 'all' | 'specific-class';
-  class?: string;
-  section?: string;
+  classIds?: string[];
+  sectionIds?: string[];
+  createdAt: string;
 }
 
 export interface Notification {
@@ -425,7 +422,7 @@ import {
   feeService,
   announcementService,
   enquiryService,
-  eventService,
+  calendarService,
   notificationService,
   timetableService,
   statisticsService,
@@ -459,7 +456,7 @@ export {
   feeService,
   announcementService,
   enquiryService,
-  eventService,
+  calendarService,
   notificationService,
   timetableService,
   statisticsService,
@@ -494,7 +491,7 @@ export default {
   fee: feeService,
   announcement: announcementService,
   enquiry: enquiryService,
-  event: eventService,
+  event: calendarService,
   notification: notificationService,
   timetable: timetableService,
   statistics: statisticsService,

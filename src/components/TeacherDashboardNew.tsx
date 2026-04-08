@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { format } from 'date-fns';
 
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -29,6 +30,7 @@ import {
   MessageSquare,
   ArrowLeft,
   Filter,
+  Star,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import {
@@ -37,9 +39,11 @@ import {
   lessonService,
   teacherService,
   timetableService,
+  calendarService,
   notificationService,
   studentNoteService,
   Notification,
+  CalendarEvent,
   TimetableSlot,
   StudentNote,
 } from '../utils/centralDataService';
@@ -198,6 +202,9 @@ export function TeacherDashboardNew() {
   const [noteContent, setNoteContent] = useState<string>('');
   const [recentNotes, setRecentNotes] = useState<StudentNote[]>([]);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
+  const [isHolidayToday, setIsHolidayToday] = useState(false);
+  const [holidayInfo, setHolidayInfo] = useState<CalendarEvent | null>(null);
 
   // Update currentTime every minute for period highlighting
   useEffect(() => {
@@ -272,6 +279,29 @@ export function TeacherDashboardNew() {
       }
     };
     loadRecentNotes();
+
+    const loadCalendarInfo = async () => {
+      try {
+        const events = await calendarService.getUpcoming(3);
+        if (isMounted) setUpcomingEvents(events);
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+        const allEvents = await calendarService.getAll();
+        const todayHoliday = allEvents.find(e => 
+            e.type === 'holiday' && 
+            todayStr >= e.startDate && 
+            todayStr <= e.endDate
+        );
+        
+        if (isMounted) {
+            setIsHolidayToday(!!todayHoliday);
+            setHolidayInfo(todayHoliday || null);
+        }
+      } catch (error) {
+        console.error('Error loading calendar data:', error);
+      }
+    };
+    loadCalendarInfo();
 
     return () => {
       isMounted = false;
@@ -834,6 +864,19 @@ export function TeacherDashboardNew() {
           </p>
         </div>
 
+        {/* Holiday Banner */}
+        {isHolidayToday && holidayInfo && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-xl shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0 text-red-600">
+              <Star className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-red-900 font-bold text-lg">{holidayInfo.title}</h3>
+              <p className="text-red-700">{holidayInfo.description || 'School is closed today for a public holiday.'}</p>
+            </div>
+          </div>
+        )}
+
         {/* Quick Stats - Matching the Design */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* My Classes Card */}
@@ -912,7 +955,13 @@ export function TeacherDashboardNew() {
               <p>{scheduleDebug}</p>
             </div>
           )}
-          {scheduleLoading ? (
+          {isHolidayToday ? (
+            <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+              <Star className="w-16 h-16 mx-auto mb-4 text-red-300" />
+              <p className="text-xl font-bold text-gray-700">No Classes - Holiday</p>
+              <p className="text-gray-500">The regular timetable is suspended for {holidayInfo?.title}.</p>
+            </div>
+          ) : scheduleLoading ? (
             <div className="flex items-center justify-center py-8 gap-3 text-gray-400">
               <Clock className="w-5 h-5 animate-spin" />
               <span className="text-sm">Loading schedule…</span>
@@ -1069,32 +1118,74 @@ export function TeacherDashboardNew() {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-gray-900 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <button
-              onClick={() => setCurrentView('student-notes')}
-              className="flex items-center gap-3 p-4 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors border border-orange-200"
-            >
-              <MessageSquare className="w-5 h-5 text-orange-600" />
-              <span className="text-gray-700">Add Student Note</span>
-            </button>
-            <button
-              onClick={() => setCurrentView('performance')}
-              className="flex items-center gap-3 p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors border border-green-200"
-            >
-              <BarChart3 className="w-5 h-5 text-green-600" />
-              <span className="text-gray-700">View Performance</span>
-            </button>
-            <button className="flex items-center gap-3 p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200">
-              <Target className="w-5 h-5 text-purple-600" />
-              <span className="text-gray-700">Learning Objectives</span>
-            </button>
-            <button className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200">
-              <Award className="w-5 h-5 text-blue-600" />
-              <span className="text-gray-700">Student Achievements</span>
-            </button>
+        {/* Quick Actions & Calendar */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-xl shadow-md p-6 h-full">
+                <h3 className="text-gray-900 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button
+                        onClick={() => setCurrentView('student-notes')}
+                        className="flex items-center gap-3 p-4 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors border border-orange-200"
+                    >
+                        <MessageSquare className="w-5 h-5 text-orange-600" />
+                        <span className="text-gray-700">Add Student Note</span>
+                    </button>
+                    <button
+                        onClick={() => setCurrentView('performance')}
+                        className="flex items-center gap-3 p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors border border-green-200"
+                    >
+                        <BarChart3 className="w-5 h-5 text-green-600" />
+                        <span className="text-gray-700">View Performance</span>
+                    </button>
+                    <button className="flex items-center gap-3 p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200">
+                        <Target className="w-5 h-5 text-purple-600" />
+                        <span className="text-gray-700">Learning Objectives</span>
+                    </button>
+                    <button className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200">
+                        <Award className="w-5 h-5 text-blue-600" />
+                        <span className="text-gray-700">Student Achievements</span>
+                    </button>
+                </div>
+            </div>
+          </div>
+
+          <div>
+              <div className="bg-white rounded-xl shadow-md p-6 h-full">
+                  <h3 className="text-gray-900 mb-4">Academic Calendar</h3>
+                  <div className="space-y-4">
+                      {upcomingEvents.length > 0 ? (
+                          upcomingEvents.map(event => (
+                              <div key={event.id} className="flex gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100">
+                                  <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 text-white ${
+                                      event.type === 'holiday' ? 'bg-red-500' : 
+                                      event.type === 'exam' ? 'bg-orange-500' :
+                                      event.type === 'cultural' ? 'bg-blue-500' : 
+                                      'bg-purple-500'
+                                  }`}>
+                                      <span className="text-[10px] font-bold uppercase">{format(new Date(event.startDate), 'MMM')}</span>
+                                      <span className="text-lg font-black leading-none">{format(new Date(event.startDate), 'd')}</span>
+                                  </div>
+                                  <div className="flex-1 overflow-hidden">
+                                      <h4 className="text-sm font-bold text-gray-900 truncate">{event.title}</h4>
+                                      <p className="text-xs text-gray-500 capitalize">{event.type}</p>
+                                  </div>
+                              </div>
+                          ))
+                      ) : (
+                          <div className="text-center py-8 text-gray-400">
+                              <Calendar className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                              <p className="text-xs">No upcoming events</p>
+                          </div>
+                      )}
+                      <button 
+                        onClick={() => {}} // Could navigate to a full calendar view for teacher
+                        className="w-full py-2 text-sm font-bold text-purple-600 hover:bg-purple-50 rounded-lg transition-colors mt-2"
+                      >
+                          View Full Calendar
+                      </button>
+                  </div>
+              </div>
           </div>
         </div>
       </div>

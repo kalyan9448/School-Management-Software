@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
-import { studentService, attendanceService, classService, eventService, enquiryService, schoolService, feeService } from '../utils/centralDataService';
+import { studentService, attendanceService, classService, calendarService, enquiryService, schoolService, feeService } from '../utils/centralDataService';
 
 interface DashboardHomeProps {
   onNavigate?: (view: string, options?: any) => void;
@@ -103,12 +103,12 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         });
 
         // 5. Upcoming Events
-        const upcoming = await eventService.getUpcoming();
+        const upcoming = await calendarService.getUpcoming();
         const events = upcoming.slice(0, 3).map((e: any, idx: number) => ({
           id: e.id,
           title: e.title,
-          date: e.date,
-          time: e.startTime || 'All Day',
+          date: e.startDate,
+          time: 'All Day',
           color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
         }));
         setUpcomingEvents(events);
