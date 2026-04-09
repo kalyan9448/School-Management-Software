@@ -28,36 +28,48 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   const [classPerformance, setClassPerformance] = useState<any[]>([]);
   const [overdueEnquiries, setOverdueEnquiries] = useState<any[]>([]);
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadDashboard = async () => {
       try {
+        setIsLoading(true);
         // Fetch School Code
         if (schoolId) {
-          const schools = await schoolService.getAll();
-          const school = schools.find((s: any) => s.id === schoolId);
-          if (school?.schoolCode) setSchoolCode(school.schoolCode);
+          try {
+            const schools = await schoolService.getAll();
+            const school = schools.find((s: any) => s.id === schoolId);
+            if (school?.schoolCode) setSchoolCode(school.schoolCode);
+          } catch (err) {
+            console.warn('School code fetch failed:', err);
+          }
         }
 
-        // 1. Fetch Students
-        const allStudents = await studentService.getAll();
+        // 1. Fetch Basic Data
+        const [allStudents, allEnquiries, allPayments, allAttendance] = await Promise.all([
+          studentService.getAll(),
+          enquiryService.getAll(),
+          feeService.getAllPayments(),
+          attendanceService.getAll()
+        ]);
+
         const totalStudentsCount = allStudents.length;
 
         // 2. Calculate Today's Attendance
         const today = new Date().toISOString().split('T')[0];
-        const todaysAttendance = await attendanceService.getByDate(today);
+        const todaysAttendance = allAttendance.filter((r: any) => r.date === today);
         const presentTodayCount = todaysAttendance.filter((r: any) => r.status === 'present').length;
 
-        // 3. Fetch Enquiries
-        const allEnquiries = await enquiryService.getAll();
-        const pendingAdmissionsCount = allStudents.filter((s: any) => s.status === 'pending').length;
+        // 3. Fetch Pending Admissions
+        const pendingAdmissionsCount = allStudents.filter((s: any) => 
+          s.status === 'enquiry' || s.status === 'in-process' || s.status === 'confirmed'
+        ).length;
 
-        // 4. Fetch Fees & Revenue
-        const allPayments = await feeService.getAllPayments();
+        // 4. Calculate Fees & Revenue
         const totalRev = allPayments.reduce((sum: number, p: any) => sum + (p.totalAmount || p.amount || 0), 0);
         const totalDues = allPayments.filter((p: any) => p.status === 'pending' || p.status === 'partial').reduce((sum: number, p: any) => sum + (p.dueAmount || 0), 0);
 
-        // 4a. Compute dynamic badges
+        // 4a. Compute dynamic stats
         const now = new Date();
         const thisMonth = now.getMonth();
         const thisYear = now.getFullYear();
@@ -82,7 +94,6 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         const pendingFeeCount = allPayments.filter((p: any) => (p.dueAmount || 0) > 0).length;
 
         // Average attendance
-        const allAttendance = await attendanceService.getAll();
         let avgAtt = 0;
         if (allAttendance.length > 0) {
           const presentCount = allAttendance.filter((r: any) => r.status === 'present').length;
@@ -103,62 +114,91 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         });
 
         // 5. Upcoming Events
-        const upcoming = await calendarService.getUpcoming();
-        const events = upcoming.slice(0, 3).map((e: any, idx: number) => ({
-          id: e.id,
-          title: e.title,
-          date: e.startDate,
-          time: 'All Day',
-          color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
-        }));
-        setUpcomingEvents(events);
+        try {
+          const upcoming = await calendarService.getUpcoming(3);
+          const events = upcoming.map((e: any, idx: number) => ({
+            id: e.id,
+            title: e.title,
+            date: e.startDate,
+            time: 'All Day',
+            color: idx === 0 ? 'from-pink-400 to-pink-500' : idx === 1 ? 'from-orange-400 to-orange-500' : 'from-teal-400 to-teal-500'
+          }));
+          setUpcomingEvents(events);
+        } catch (err) {
+          console.error('Calendar load error:', err);
+        }
 
         // 6. Recent Activities
         const activities: any[] = [];
 
-        allStudents.filter((s: any) => s.status === 'pending').slice(-2).forEach((adm: any) => {
-          activities.push({ id: `adm-${adm.id}`, type: 'admission', message: `Admission pending: ${adm.name}`, time: 'Today', timestamp: Date.now() });
-        });
+        // Recent Admissions (Active/Admitted students)
+        allStudents
+          .filter((s: any) => s.status === 'active' || s.status === 'admitted')
+          .sort((a, b) => new Date(b.admissionDate || '').getTime() - new Date(a.admissionDate || '').getTime())
+          .slice(0, 2)
+          .forEach((adm: any) => {
+            activities.push({ 
+              id: `adm-${adm.id}`, 
+              type: 'admission', 
+              message: `New student admitted: ${adm.name}`, 
+              time: 'Recent', 
+              timestamp: new Date(adm.admissionDate || '').getTime() 
+            });
+          });
 
-        allPayments.slice(-2).forEach((p: any) => {
-          activities.push({ id: `fee-${p.id}`, type: 'fee', message: `Payment received: ₹${(p.totalAmount || p.amount || 0).toLocaleString()} from ${p.studentName || 'Student'}`, time: p.paymentDate || p.date, timestamp: Date.now() - 1000 });
+        // Pending Admissions
+        allStudents
+          .filter((s: any) => s.status === 'enquiry' || s.status === 'in-process')
+          .slice(-2)
+          .forEach((adm: any) => {
+            activities.push({ 
+              id: `pend-${adm.id}`, 
+              type: 'admission', 
+              message: `Admission in process: ${adm.name}`, 
+              time: 'Pending', 
+              timestamp: Date.now() - 5000 
+            });
+          });
+
+        allPayments.slice(-3).forEach((p: any) => {
+          activities.push({ id: `fee-${p.id}`, type: 'fee', message: `Payment: ₹${(p.totalAmount || p.amount || 0).toLocaleString()} from ${p.studentName || 'Student'}`, time: p.paymentDate || p.date, timestamp: new Date(p.paymentDate || p.date).getTime() || Date.now() - 1000 });
         });
 
         allEnquiries.slice(-2).forEach((e: any) => {
-          activities.push({ id: `enq-${e.id}`, type: 'enquiry', message: `New enquiry for ${e.studentName || e.childName} (Class ${e.classApplied})`, time: e.enquiryDate, timestamp: Date.now() - 2000 });
+          activities.push({ id: `enq-${e.id}`, type: 'enquiry', message: `New enquiry: ${e.studentName || e.childName}`, time: e.enquiryDate, timestamp: new Date(e.enquiryDate).getTime() || Date.now() - 2000 });
         });
 
         if (todaysAttendance.length > 0) {
-          activities.push({ id: `attendance-today`, type: 'attendance', message: `${todaysAttendance.length} students attendance marked for today`, time: 'Just now', timestamp: Date.now() + 1000 });
+          activities.push({ id: `attendance-today`, type: 'attendance', message: `${todaysAttendance.length} attendance records marked today`, time: 'Today', timestamp: Date.now() });
         }
 
-        setRecentActivities(activities.sort((a, b) => b.timestamp - a.timestamp).slice(0, 5));
+        setRecentActivities(activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 5));
 
-        // 7. Class Performance
-        const classes = await classService.getAll();
-        const performance: any[] = [];
-        for (const cls of classes) {
-          const classStudents = await studentService.getByClass(cls.className, cls.section);
-          let totalPresence = 0;
-          let totalRecords = 0;
-          for (const s of classStudents) {
-            const attStats = await attendanceService.getAttendanceStats(s.id);
-            totalPresence += attStats.present;
-            totalRecords += attStats.total;
-          }
-          const avgAttendance = totalRecords > 0 ? Math.round((totalPresence / totalRecords) * 100) : 0;
-          performance.push({ 
-            class: `${cls.className}-${cls.section}`, 
-            className: cls.className,
-            section: cls.section,
-            attendance: avgAttendance, 
-            color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500' 
+        // 7. Class Performance (Optimized)
+        try {
+          const classes = await classService.getAll();
+          const performance = classes.map(cls => {
+            const classAtt = allAttendance.filter(r => r.class === cls.className && r.section === cls.section);
+            const totalRecords = classAtt.length;
+            const totalPresence = classAtt.filter(r => r.status === 'present').length;
+            const avgAttendance = totalRecords > 0 ? Math.round((totalPresence / totalRecords) * 100) : 0;
+            
+            return {
+              class: `${cls.className}-${cls.section}`,
+              className: cls.className,
+              section: cls.section,
+              attendance: avgAttendance,
+              color: cls.className.includes('8') ? 'bg-purple-500' : cls.className.includes('7') ? 'bg-pink-500' : 'bg-blue-500'
+            };
           });
-        }
-        const sorted = performance.sort((a, b) => b.attendance - a.attendance).slice(0, 4);
-        setClassPerformance(sorted.length > 0 ? sorted : [{ class: 'No classes', attendance: 0, color: 'bg-purple-500' }]);
 
-        // 8. Overdue enquiry follow-up reminders
+          const sorted = performance.sort((a, b) => b.attendance - a.attendance).slice(0, 4);
+          setClassPerformance(sorted.length > 0 ? sorted : [{ class: 'No classes', attendance: 0, color: 'bg-gray-400' }]);
+        } catch (err) {
+          console.error('Class performance load error:', err);
+        }
+
+        // 8. Overdue enquiries
         const todayDate = new Date();
         todayDate.setHours(0, 0, 0, 0);
         const overdue = allEnquiries.filter((e: any) => {
@@ -169,6 +209,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         });
         setOverdueEnquiries(overdue);
         setShowOverdueBanner(overdue.length > 0);
+        setIsLoading(false);
       } catch (err) {
         console.error('Dashboard load error:', err);
       }
@@ -419,29 +460,50 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
           </div>
           <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6">
             <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-md ${activity.type === 'admission' ? 'bg-gradient-to-br from-purple-400 to-purple-500' :
-                    activity.type === 'fee' ? 'bg-gradient-to-br from-yellow-400 to-yellow-500' :
-                      activity.type === 'enquiry' ? 'bg-gradient-to-br from-orange-400 to-orange-500' :
-                        activity.type === 'communication' ? 'bg-gradient-to-br from-blue-400 to-blue-500' :
-                          'bg-gradient-to-br from-pink-400 to-pink-500'
-                    }`}>
-                    {activity.type === 'admission' && <Users className="w-5 h-5 text-white" />}
-                    {activity.type === 'fee' && <DollarSign className="w-5 h-5 text-white" />}
-                    {activity.type === 'enquiry' && <Bell className="w-5 h-5 text-white" />}
-                    {activity.type === 'attendance' && <Calendar className="w-5 h-5 text-white" />}
-                    {activity.type === 'communication' && <MessageSquare className="w-5 h-5 text-white" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-gray-900 mb-1">{activity.message}</p>
-                    <p className="text-gray-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {activity.time}
-                    </p>
-                  </div>
+              {isLoading ? (
+                <div className="animate-pulse space-y-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex gap-4 p-4">
+                      <div className="w-12 h-12 bg-gray-200 rounded-2xl"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : recentActivities.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Clock className="w-8 h-8 text-gray-300" />
+                  </div>
+                  <p className="text-gray-500">No recent activities found.</p>
+                </div>
+              ) : (
+                recentActivities.map((activity) => (
+                  <div key={activity.id} className="flex items-start gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-md ${activity.type === 'admission' ? 'bg-gradient-to-br from-purple-400 to-purple-500' :
+                      activity.type === 'fee' ? 'bg-gradient-to-br from-yellow-400 to-yellow-500' :
+                        activity.type === 'enquiry' ? 'bg-gradient-to-br from-orange-400 to-orange-500' :
+                          activity.type === 'communication' ? 'bg-gradient-to-br from-blue-400 to-blue-500' :
+                            'bg-gradient-to-br from-pink-400 to-pink-500'
+                      }`}>
+                      {activity.type === 'admission' && <Users className="w-5 h-5 text-white" />}
+                      {activity.type === 'fee' && <DollarSign className="w-5 h-5 text-white" />}
+                      {activity.type === 'enquiry' && <Bell className="w-5 h-5 text-white" />}
+                      {activity.type === 'attendance' && <Calendar className="w-5 h-5 text-white" />}
+                      {activity.type === 'communication' && <MessageSquare className="w-5 h-5 text-white" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-900 mb-1 font-medium">{activity.message}</p>
+                      <p className="text-gray-500 flex items-center gap-1 text-sm">
+                        <Clock className="w-3 h-3" />
+                        {activity.time}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -491,7 +553,21 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {classPerformance.map((cls, index) => (
+          {isLoading ? (
+            [1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 animate-pulse">
+                <div className="flex justify-between mb-4">
+                  <div className="w-12 h-12 bg-gray-200 rounded-2xl"></div>
+                  <div className="w-10 h-6 bg-gray-200 rounded-full"></div>
+                </div>
+                <div className="h-5 bg-gray-200 rounded w-1/2 mb-4"></div>
+                <div className="space-y-2">
+                  <div className="h-3 bg-gray-200 rounded w-full"></div>
+                  <div className="h-2 bg-gray-200 rounded w-full"></div>
+                </div>
+              </div>
+            ))
+          ) : classPerformance.map((cls, index) => (
             <div 
               key={index} 
               className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 hover:shadow-2xl transition-all cursor-pointer group"
@@ -507,17 +583,19 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                 <div className={`w-12 h-12 ${cls.color} rounded-2xl flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform`}>
                   <Award className="w-6 h-6" />
                 </div>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full">
-                  #{index + 1}
-                </span>
+                {cls.attendance > 0 && (
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
+                    #{index + 1}
+                  </span>
+                )}
               </div>
-              <h4 className="text-gray-900 mb-2 group-hover:text-purple-700 transition-colors">{cls.class}</h4>
+              <h4 className="text-gray-900 mb-2 group-hover:text-purple-700 transition-colors font-bold">{cls.class}</h4>
               <div className="mb-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-gray-600">Attendance</span>
+                <div className="flex items-center justify-between mb-1 text-sm">
+                  <span className="text-gray-500">Attendance</span>
                   <span className="text-gray-900 font-bold">{cls.attendance}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                   <div
                     className={`${cls.color} h-2 rounded-full transition-all duration-1000`}
                     style={{ width: `${cls.attendance}%` }}

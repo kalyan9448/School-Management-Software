@@ -472,6 +472,14 @@ export interface TimetableSlot {
 
 // ----- School Settings -----
 
+export interface PeriodDefinition {
+    id: string;
+    label: string;
+    startTime: string;
+    endTime: string;
+    type: 'period' | 'break';
+}
+
 export interface SchoolSettings {
     id: string;
     school_id: string;
@@ -502,6 +510,7 @@ export interface SchoolSettings {
         secondaryColor?: string;
         tagline?: string;
     };
+    periods?: PeriodDefinition[];
     created_at?: string;
     updated_at?: string;
 }

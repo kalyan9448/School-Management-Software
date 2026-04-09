@@ -1885,6 +1885,14 @@ export const schoolSettingsService = {
             feeRules: settings.feeRules || {},
             notificationRules: settings.notificationRules || { emailEnabled: true, smsEnabled: false, pushEnabled: false },
             branding: settings.branding || {},
+            periods: settings.periods || [
+                { id: 'p1', label: 'Period 1', startTime: '09:00', endTime: '10:00', type: 'period' },
+                { id: 'p2', label: 'Period 2', startTime: '10:00', endTime: '11:00', type: 'period' },
+                { id: 'p3', label: 'Period 3', startTime: '11:00', endTime: '12:00', type: 'period' },
+                { id: 'break', label: 'Break', startTime: '12:00', endTime: '13:00', type: 'break' },
+                { id: 'p4', label: 'Period 4', startTime: '13:00', endTime: '14:00', type: 'period' },
+                { id: 'p5', label: 'Period 5', startTime: '14:00', endTime: '15:00', type: 'period' },
+            ],
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
         });
