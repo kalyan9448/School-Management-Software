@@ -22,8 +22,10 @@ import {
   notificationService,
   lessonService,
   quizResultService,
-  calendarService
+  calendarService,
+  subjectMappingService
 } from "@/utils/firestoreService";
+import { type CurriculumTag } from "@/utils/centralDataService";
 
 import {
   type HomeworkTopic,
@@ -63,6 +65,41 @@ async function getData<T>(key: string, fallback: T): Promise<T> {
 /** Write a student-portal document (merge to avoid overwrites). */
 async function saveData<T>(key: string, data: T): Promise<void> {
   await setDoc(doc(db, "student_portal", getUid(), "data", key), { value: data }, { merge: true });
+}
+
+// ─── Curriculum Filtering ─────────────────────────────────────────────────────
+let curriculumTagsCache: Record<string, CurriculumTag[]> | null = null;
+
+async function getCurriculumTags(subject: string): Promise<CurriculumTag[]> {
+  if (!curriculumTagsCache) {
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return [];
+    
+    try {
+      const mappings = await subjectMappingService.getByClass(profile.grade, profile.section);
+      curriculumTagsCache = {};
+      mappings.forEach((m: any) => {
+        if (m.subjectName && m.curriculumTags) {
+          curriculumTagsCache![m.subjectName.toLowerCase()] = m.curriculumTags as CurriculumTag[];
+        }
+      });
+    } catch (err) {
+      console.warn("Failed to fetch curriculum mappings:", err);
+      curriculumTagsCache = {};
+    }
+  }
+  return curriculumTagsCache[subject.toLowerCase()] || [];
+}
+
+async function isContentRelevant(subject: string, contentTag?: CurriculumTag): Promise<boolean> {
+  if (!contentTag) return true; // Global content is always relevant
+  const studentTags = await getCurriculumTags(subject);
+  
+  // If no tags are defined for this subject in the mapping, we treat it as "global mapping"
+  // but if tags ARE defined, the content tag must be one of them.
+  if (studentTags.length === 0) return true; 
+  
+  return studentTags.includes(contentTag);
 }
 
 // ─── No-op initialize (Firestore needs no seeding) ──────────────────────────
@@ -164,10 +201,20 @@ export const TodaysClasses = {
       const todaysLessons = allLessons.filter(l => l.date === todayStr);
 
       if (todaysLessons.length > 0) {
+        // Filter by curriculum relevance
+        const relevantLessons = [];
+        for (const l of todaysLessons) {
+          if (await isContentRelevant(l.subject, l.curriculumTag)) {
+            relevantLessons.push(l);
+          }
+        }
+
+        if (relevantLessons.length === 0) return [];
+
         // Enrich with time from the timetable when available
         const slots = await timetableService.getByClass(profile.grade, profile.section);
 
-        return todaysLessons.map(l => {
+        return relevantLessons.map(l => {
           const matchingSlot = slots.find(
             s => s.subject?.toLowerCase() === l.subject?.toLowerCase()
           );
@@ -179,6 +226,7 @@ export const TodaysClasses = {
             time: matchingSlot ? `${matchingSlot.startTime} - ${matchingSlot.endTime}` : (l.time || ''),
             icon: iconFor(l.subject),
             color: colorFor(l.subject),
+            curriculumTag: l.curriculumTag,
           };
         });
       }
@@ -269,6 +317,10 @@ export const PendingTasks = {
       const assignments = await assignmentService.getByClass(profile.grade, profile.section);
       for (const a of assignments) {
         if (a.status !== "active") continue;
+        
+        // Skip irrelevant content
+        if (!(await isContentRelevant(a.subject, a.curriculumTag))) continue;
+
         const isDueToday = a.dueDate === todayStr;
         const isPastDue = a.dueDate < todayStr;
         const dueLabel = isDueToday ? "Today" : isPastDue ? "Overdue" : a.dueDate;
@@ -283,6 +335,7 @@ export const PendingTasks = {
           priority: isDueToday || isPastDue ? "high" : "medium",
           type: "assignment",
           assignmentId: a.id,
+          curriculumTag: a.curriculumTag,
         });
       }
     } catch (error) {
@@ -414,7 +467,7 @@ export const SubjectPerformance = {
         try {
           const examResults = await examResultService.getByStudent(profile.id);
           for (const er of examResults) {
-            const subj = er.subject || "Exams";
+            const subj = "Exams"; // ExamResult doesn't have subject directly
             if (!subjectMap[subj]) subjectMap[subj] = { scores: [], dates: [] };
             subjectMap[subj].scores.push(er.percentage);
             subjectMap[subj].dates.push(er.gradedAt || er.created_at || '');
@@ -639,6 +692,9 @@ export const DailyTasks = {
       // Group lessons by subject and build daily task items
       const subjectMap = new Map<string, any>();
       for (const lesson of lessons) {
+        // Skip irrelevant content
+        if (!(await isContentRelevant(lesson.subject, lesson.curriculumTag))) continue;
+
         if (!subjectMap.has(lesson.subject)) {
           subjectMap.set(lesson.subject, {
             subject: lesson.subject,
@@ -649,6 +705,7 @@ export const DailyTasks = {
             teacher: lesson.teacherName,
             topic: lesson.topic,
             objectives: lesson.objectives || [],
+            curriculumTag: lesson.curriculumTag,
             tasks: (lesson.objectives || []).map((obj: string, i: number) => ({
               id: `${lesson.id}-${i}`,
               text: obj,
@@ -757,13 +814,17 @@ export const HomeworkService = {
       const todaysLessons = allLessons.filter(l => l.date === todayStr);
 
       if (todaysLessons.length > 0) {
-        // Include ALL today's lessons — completed ones shown as completed, pending as pending
-        const topics = todaysLessons.map((lesson, index) => {
+        const topics: HomeworkTopic[] = [];
+        for (let i = 0; i < todaysLessons.length; i++) {
+          const lesson = todaysLessons[i];
+          
+          // Skip irrelevant content
+          if (!(await isContentRelevant(lesson.subject, lesson.curriculumTag))) continue;
+
           const completedResult = getCompletedResult(lesson.subject, lesson.topic);
           if (completedResult) {
-            // Show completed homework with its result — do not filter out
-            return {
-              id: index + 1,
+            topics.push({
+              id: i + 1,
               subject: lesson.subject,
               topic: lesson.topic,
               teacher: lesson.teacherName,
@@ -778,27 +839,31 @@ export const HomeworkService = {
               totalQuestions: completedResult.total,
               accuracy: completedResult.accuracy,
               lastAttemptDate: completedResult.completed_at,
-            } as HomeworkTopic;
+              curriculumTag: lesson.curriculumTag,
+              mistakePatterns: [],
+            } as HomeworkTopic);
+          } else {
+            topics.push(mergeProgress({
+              id: i + 1,
+              subject: lesson.subject,
+              topic: lesson.topic,
+              teacher: lesson.teacherName,
+              icon: iconFor(lesson.subject),
+              color: colorFor(lesson.subject),
+              status: "pending" as const,
+              flashcardProgress: 0,
+              questionsProgress: 0,
+              flashcardsCompleted: false,
+              questionsCompleted: false,
+              questionsAttempted: 0,
+              totalQuestions: 5,
+              accuracy: null,
+              lastAttemptDate: null,
+              curriculumTag: lesson.curriculumTag,
+              mistakePatterns: [],
+            } as HomeworkTopic));
           }
-          // Not yet completed — merge any in-progress saved data
-          return mergeProgress({
-            id: index + 1,
-            subject: lesson.subject,
-            topic: lesson.topic,
-            teacher: lesson.teacherName,
-            icon: iconFor(lesson.subject),
-            color: colorFor(lesson.subject),
-            status: "pending" as const,
-            flashcardProgress: 0,
-            questionsProgress: 0,
-            flashcardsCompleted: false,
-            questionsCompleted: false,
-            questionsAttempted: 0,
-            totalQuestions: 5,
-            accuracy: null,
-            lastAttemptDate: null,
-          } as HomeworkTopic);
-        });
+        }
 
         return topics;
       }
@@ -811,11 +876,17 @@ export const HomeworkService = {
       const allAssignments = await assignmentService.getByClass(profile.grade, profile.section);
       const activeAssignments = allAssignments.filter(a => a.status === 'active');
       if (activeAssignments.length > 0) {
-        return activeAssignments.map((a, index) => {
+        const topics: HomeworkTopic[] = [];
+        for (let i = 0; i < activeAssignments.length; i++) {
+          const a = activeAssignments[i];
+          
+          // Skip irrelevant content
+          if (!(await isContentRelevant(a.subject, a.curriculumTag))) continue;
+
           const completedResult = getCompletedResult(a.subject, a.title);
           if (completedResult) {
-            return {
-              id: index + 1,
+            topics.push({
+              id: i + 1,
               subject: a.subject,
               topic: a.title,
               teacher: a.assignedBy || "",
@@ -830,26 +901,32 @@ export const HomeworkService = {
               totalQuestions: completedResult.total,
               accuracy: completedResult.accuracy,
               lastAttemptDate: completedResult.completed_at,
-            } as HomeworkTopic;
+              curriculumTag: a.curriculumTag,
+              mistakePatterns: [],
+            } as HomeworkTopic);
+          } else {
+            topics.push(mergeProgress({
+              id: i + 1,
+              subject: a.subject,
+              topic: a.title,
+              teacher: a.assignedBy || "",
+              icon: iconFor(a.subject),
+              color: colorFor(a.subject),
+              status: "pending" as const,
+              flashcardProgress: 0,
+              questionsProgress: 0,
+              flashcardsCompleted: false,
+              questionsCompleted: false,
+              questionsAttempted: 0,
+              totalQuestions: 5,
+              accuracy: null,
+              lastAttemptDate: null,
+              curriculumTag: a.curriculumTag,
+              mistakePatterns: [],
+            } as HomeworkTopic));
           }
-          return mergeProgress({
-            id: index + 1,
-            subject: a.subject,
-            topic: a.title,
-            teacher: a.assignedBy || "",
-            icon: iconFor(a.subject),
-            color: colorFor(a.subject),
-            status: "pending" as const,
-            flashcardProgress: 0,
-            questionsProgress: 0,
-            flashcardsCompleted: false,
-            questionsCompleted: false,
-            questionsAttempted: 0,
-            totalQuestions: 5,
-            accuracy: null,
-            lastAttemptDate: null,
-          } as HomeworkTopic);
-        });
+        }
+        return topics;
       }
     } catch (e) {
       console.warn("Failed to fetch assignments for homework:", e);

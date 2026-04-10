@@ -1,7 +1,7 @@
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { SubjectMappingForm, ClassData, SubjectMapping } from './SubjectMappingForm';
-import { subjectService, subjectMappingService, academicYearService, SubjectMappingRecord } from '../utils/centralDataService';
+import { subjectService, subjectMappingService, academicYearService, SubjectMappingRecord, CurriculumTag } from '../utils/centralDataService';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?: boolean }) {
@@ -32,7 +32,8 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
             name: m.subjectName,
             teacher: m.teacherName,
             teacherEmail: m.teacherEmail,
-            periods: m.periods
+            periods: m.periods,
+            curriculumTags: m.curriculumTags || []
           });
           return acc;
         }, {} as Record<string, ClassData>);
@@ -47,7 +48,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
 
   // TODO: Persist classDataList changes to Firestore when a subject mapping service is available
 
-  const handleSaveMapping = async (data: { class: string; section: string; subject: string; teacher: string; teacherEmail: string; periods: number }, originalId?: string) => {
+  const handleSaveMapping = async (data: { class: string; section: string; subject: string; teacher: string; teacherEmail: string; periods: number; curriculumTags: CurriculumTag[] }, originalId?: string) => {
     const schoolId = user?.school_id || sessionStorage.getItem('active_school_id') || '';
     const activeYear = await academicYearService.getCurrent(schoolId);
     
@@ -62,7 +63,8 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
           subjectName: data.subject,
           teacherName: data.teacher,
           teacherEmail: data.teacherEmail,
-          periods: data.periods
+          periods: data.periods,
+          curriculumTags: data.curriculumTags
         });
       } else {
         await subjectMappingService.create({
@@ -73,7 +75,8 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
           subjectName: data.subject,
           teacherName: data.teacher,
           teacherEmail: data.teacherEmail,
-          periods: data.periods
+          periods: data.periods,
+          curriculumTags: data.curriculumTags
         });
       }
       
@@ -118,6 +121,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
       teacher: subject.teacher,
       teacherEmail: subject.teacherEmail,
       periods: subject.periods,
+      curriculumTags: subject.curriculumTags || [],
     });
     setView('form');
   };
@@ -233,6 +237,7 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
                         <th className="px-4 py-2 text-left text-gray-600 text-sm">Subject</th>
+                        <th className="px-4 py-2 text-left text-gray-600 text-sm">Tags</th>
                         <th className="px-4 py-2 text-left text-gray-600 text-sm">Teacher</th>
                         <th className="px-4 py-2 text-left text-gray-600 text-sm">Weekly Periods</th>
                         <th className="px-4 py-2 text-left text-gray-600 text-sm">Actions</th>
@@ -242,6 +247,19 @@ export default function SubjectMappingView({ isEmbedded = false }: { isEmbedded?
                       {classData.subjects.map((subject, subIndex) => (
                         <tr key={subIndex} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-gray-900">{subject.name}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {subject.curriculumTags && subject.curriculumTags.length > 0 ? (
+                                subject.curriculumTags.map((tag: string) => (
+                                  <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-medium rounded-full border border-gray-200">
+                                    {tag}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-gray-400 text-xs">—</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-gray-700">{subject.teacher}</td>
                           <td className="px-4 py-3 text-gray-700">{subject.periods} periods/week</td>
                           <td className="px-4 py-3">

@@ -42,10 +42,12 @@ import {
   calendarService,
   notificationService,
   studentNoteService,
+  subjectMappingService,
   Notification,
   CalendarEvent,
   TimetableSlot,
   StudentNote,
+  CurriculumTag,
 } from '../utils/centralDataService';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
@@ -57,6 +59,8 @@ import {
   ClassDelta 
 } from '../utils/performanceAnalytics';
 import { TeacherPerformanceAnalytics } from './TeacherPerformanceAnalytics';
+import { aiService } from '../services/aiService';
+import { AILessonPlan } from '../types';
 
 type ViewType =
   | 'dashboard'
@@ -97,6 +101,7 @@ interface LessonLog {
   objectives: string[];
   studentsNeedingAttention: string[];
   notes: string;
+  aiPlan?: AILessonPlan;
 }
 
 export function TeacherDashboardNew() {
@@ -195,6 +200,8 @@ export function TeacherDashboardNew() {
   const [lessonsLoading, setLessonsLoading] = useState(false);
   const [allTimetableSlots, setAllTimetableSlots] = useState<TimetableSlot[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string>('');
+  const [availableCurriculumTags, setAvailableCurriculumTags] = useState<CurriculumTag[]>([]);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   
   // Student Notes state
   const [selectedNoteStudentId, setSelectedNoteStudentId] = useState<string>('');
@@ -582,7 +589,44 @@ export function TeacherDashboardNew() {
     teachingDepth: 'Moderate' as 'Basic' | 'Moderate' | 'Advanced',
     aiSuggestions: [] as string[],
     time: '09:00',
+    curriculumTag: undefined as CurriculumTag | undefined,
+    aiPlan: undefined as AILessonPlan | undefined,
   });
+
+  // Effect to load curriculum tags when class/subject changes
+  useEffect(() => {
+    async function loadCurriculumTags() {
+      if (selectedLessonClass && selectedSubject && selectedSubject !== 'All Subjects') {
+        try {
+          const schoolId = sessionStorage.getItem('active_school_id') || user?.school_id;
+          if (schoolId) {
+            const mapping = await subjectMappingService.getByClassAndSubject(
+              schoolId,
+              selectedLessonClass.class,
+              selectedLessonClass.section,
+              selectedSubject
+            );
+            if (mapping && mapping.curriculumTags && mapping.curriculumTags.length > 0) {
+              setAvailableCurriculumTags(mapping.curriculumTags as CurriculumTag[]);
+              // If there's only one tag, pre-select it
+              if (mapping.curriculumTags.length === 1) {
+                setLessonForm(prev => ({ ...prev, curriculumTag: mapping.curriculumTags![0] as CurriculumTag }));
+              }
+            } else {
+              setAvailableCurriculumTags([]);
+              setLessonForm(prev => ({ ...prev, curriculumTag: undefined }));
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching curriculum tags:', error);
+          setAvailableCurriculumTags([]);
+        }
+      } else {
+        setAvailableCurriculumTags([]);
+      }
+    }
+    loadCurriculumTags();
+  }, [selectedLessonClass, selectedSubject, user?.school_id]);
 
   const [showAiSuggestions, setShowAiSuggestions] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState<any>(null);
@@ -1562,6 +1606,68 @@ export function TeacherDashboardNew() {
     );
   };
 
+  /**
+   * Triggers the AI lesson plan generation workflow.
+   * Aggregates class performance, student ages, and curriculum tags.
+   */
+  const handleGenerateAILessonPlan = async () => {
+    if (!selectedLessonClass || !selectedSubject || selectedSubject === 'All Subjects') {
+      alert('Please select a timetable slot or a specific class and subject first.');
+      return;
+    }
+    if (!lessonForm.topic) {
+      alert('Please enter a topic to generate a plan for.');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    try {
+      // 1. Fetch Performance Analysis
+      const performanceAnalysis = await performanceAnalyticsService.getClassPerformanceAnalysis(
+        selectedLessonClass.class,
+        selectedLessonClass.section,
+        selectedSubject
+      );
+
+      // 2. Fetch Student Age Profile
+      const ageProfile = await performanceAnalyticsService.getStudentAgeProfile(
+        selectedLessonClass.class,
+        selectedLessonClass.section
+      );
+
+      // 3. Collect tags
+      const currentTags = lessonForm.curriculumTag ? [lessonForm.curriculumTag] : [];
+
+      // 4. Generate AI Plan
+      const aiPlan = await aiService.generateAILessonPlan(
+        selectedSubject,
+        lessonForm.topic,
+        { class: selectedLessonClass.class, section: selectedLessonClass.section },
+        performanceAnalysis || { performanceCategory: 'Not enough data', averageScore: 0, strugglingStudentNames: [] },
+        ageProfile || { averageAge: 15, ageRange: '14-16' },
+        currentTags
+      );
+
+      if (aiPlan) {
+        // 5. Update form state
+        setLessonForm(prev => ({
+          ...prev,
+          objectives: Array.from(new Set([...prev.objectives, ...(aiPlan.learningObjectives || [])])),
+          studentsNeedingAttention: Array.from(new Set([...prev.studentsNeedingAttention, ...(aiPlan.studentsNeedingAttention || [])])),
+          notes: `${prev.notes ? prev.notes + '\n\n' : ''}AI Recommended Plan:\n${aiPlan.topicExplanation}`,
+          aiPlan: aiPlan
+        }));
+        
+        alert('✨ AI Lesson Plan generated and applied to the form!');
+      }
+    } catch (error) {
+      console.error('Failed to generate AI lesson plan:', error);
+      alert('Failed to generate AI lesson plan. Please try again.');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
   // Save lesson function
   const saveLessonLog = async () => {
     if (!selectedLessonClass) {
@@ -1591,6 +1697,8 @@ export function TeacherDashboardNew() {
         teacherId: user?.email || 'teacher',
         teacherName: user?.name || 'Teacher',
         time: lessonForm.time,
+        curriculumTag: lessonForm.curriculumTag,
+        aiPlan: lessonForm.aiPlan,
       });
 
       setLessonLogs((prevLessons) => [lesson, ...prevLessons]);
@@ -1612,6 +1720,8 @@ export function TeacherDashboardNew() {
         teachingDepth: 'Moderate',
         aiSuggestions: [],
         time: '09:00',
+        curriculumTag: undefined,
+        aiPlan: undefined,
       });
 
       setShowLessonForm(false);
@@ -1785,6 +1895,11 @@ export function TeacherDashboardNew() {
                                 <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-bold uppercase tracking-wider">
                                   {lesson.class}-{lesson.section}
                                 </span>
+                                {lesson.curriculumTag && (
+                                  <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold uppercase tracking-wider">
+                                    {lesson.curriculumTag}
+                                  </span>
+                                )}
                               </div>
 
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
@@ -1925,7 +2040,7 @@ export function TeacherDashboardNew() {
                       time: `${slot.startTime} - ${slot.endTime}`
                     });
                     setSelectedSubject(slot.subject);
-                    setLessonForm(prev => ({ ...prev, time: slot.startTime }));
+                    setLessonForm(prev => ({ ...prev, time: slot.startTime, aiPlan: undefined }));
                   }
                 }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
@@ -1965,21 +2080,64 @@ export function TeacherDashboardNew() {
               <input
                 type="time"
                 value={lessonForm.time}
-                onChange={(e) => setLessonForm({ ...lessonForm, time: e.target.value })}
+                onChange={(e) => setLessonForm({ ...lessonForm, time: e.target.value, aiPlan: undefined })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
               />
             </div>
+
+            {/* Curriculum Tag Selection */}
+            {availableCurriculumTags.length > 0 && (
+              <div>
+                <label className="block text-gray-700 font-semibold mb-2">🏷️ Curriculum Tag</label>
+                <select
+                  value={lessonForm.curriculumTag || ''}
+                  onChange={(e) => setLessonForm({ ...lessonForm, curriculumTag: e.target.value as CurriculumTag })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                >
+                  <option value="">No specific curriculum</option>
+                  {availableCurriculumTags.map(tag => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Based on subject mapping configuration</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Topic Input with Suggestions */}
+        {/* Topic Input with AI Button */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <label className="block text-gray-700 font-semibold mb-3">🎯 Topic Covered *</label>
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-gray-700 font-semibold flex items-center gap-2">
+              🎯 Topic Covered *
+            </label>
+            <button
+              onClick={handleGenerateAILessonPlan}
+              disabled={isGeneratingAI || !lessonForm.topic}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-sm
+                ${isGeneratingAI 
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-purple-200 active:scale-95'
+                }`}
+            >
+              {isGeneratingAI ? (
+                <>
+                  <Clock className="w-4 h-4 animate-spin" />
+                  Analyzing Class Matrix...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  ✨ Generate AI Plan
+                </>
+              )}
+            </button>
+          </div>
           <div className="relative">
             <input
               type="text"
               value={lessonForm.topic}
-              onChange={(e) => setLessonForm({ ...lessonForm, topic: e.target.value })}
+              onChange={(e) => setLessonForm({ ...lessonForm, topic: e.target.value, aiPlan: undefined })}
               placeholder="e.g., Linear Equations in One Variable"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
             />
@@ -1991,7 +2149,7 @@ export function TeacherDashboardNew() {
                     <button
                       key={idx}
                       className="w-full px-4 py-2 text-left hover:bg-purple-50 text-gray-700 text-sm"
-                      onClick={() => setLessonForm({ ...lessonForm, topic: suggestion })}
+                      onClick={() => setLessonForm({ ...lessonForm, topic: suggestion, aiPlan: undefined })}
                     >
                       {suggestion}
                     </button>
@@ -2004,7 +2162,7 @@ export function TeacherDashboardNew() {
             {aiTopicSuggestions[selectedSubject]?.slice(0, 3).map((suggestion, idx) => (
               <button
                 key={idx}
-                onClick={() => setLessonForm({ ...lessonForm, topic: suggestion })}
+                onClick={() => setLessonForm({ ...lessonForm, topic: suggestion, aiPlan: undefined })}
                 className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-purple-100 hover:text-purple-700 transition-colors"
               >
                 {suggestion}
@@ -2044,11 +2202,13 @@ export function TeacherDashboardNew() {
                               setLessonForm({
                                 ...lessonForm,
                                 objectives: [...lessonForm.objectives, objective],
+                                aiPlan: undefined,
                               });
                             } else {
                               setLessonForm({
                                 ...lessonForm,
                                 objectives: lessonForm.objectives.filter((o) => o !== objective),
+                                aiPlan: undefined,
                               });
                             }
                           }}
@@ -2083,6 +2243,7 @@ export function TeacherDashboardNew() {
                           setLessonForm({
                             ...lessonForm,
                             objectives: [...lessonForm.objectives, val],
+                            aiPlan: undefined,
                           });
                           input.value = '';
                         }
@@ -2098,6 +2259,7 @@ export function TeacherDashboardNew() {
                         setLessonForm({
                           ...lessonForm,
                           objectives: [...lessonForm.objectives, val],
+                          aiPlan: undefined,
                         });
                         input.value = '';
                       }
@@ -2142,6 +2304,7 @@ export function TeacherDashboardNew() {
                             ...lessonForm.studentsNeedingAttention,
                             student.name,
                           ],
+                          aiPlan: undefined,
                         });
                       } else {
                         setLessonForm({
@@ -2150,6 +2313,7 @@ export function TeacherDashboardNew() {
                             lessonForm.studentsNeedingAttention.filter(
                               (n) => n !== student.name
                             ),
+                          aiPlan: undefined,
                         });
                       }
                     }}
@@ -2169,7 +2333,7 @@ export function TeacherDashboardNew() {
           <label className="block text-gray-700 font-semibold mb-3">📝 Additional Notes (Optional)</label>
           <textarea
             value={lessonForm.notes}
-            onChange={(e) => setLessonForm({ ...lessonForm, notes: e.target.value })}
+            onChange={(e) => setLessonForm({ ...lessonForm, notes: e.target.value, aiPlan: undefined })}
             rows={3}
             placeholder="Add any additional notes about the lesson, teaching methods, or observations..."
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
@@ -2182,15 +2346,17 @@ export function TeacherDashboardNew() {
             onClick={() => {
               setShowLessonForm(false);
               // Reset form
-                setLessonForm({
-                  topic: '',
-                  objectives: [],
-                  studentsNeedingAttention: [],
-                  notes: '',
-                  teachingDepth: 'Moderate',
-                  aiSuggestions: [],
-                  time: '09:00',
-                });
+                  setLessonForm({
+                    topic: '',
+                    objectives: [],
+                    studentsNeedingAttention: [],
+                    notes: '',
+                    teachingDepth: 'Moderate',
+                    aiSuggestions: [],
+                    time: '09:00',
+                    curriculumTag: undefined,
+                    aiPlan: undefined,
+                  });
             }}
             className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
           >

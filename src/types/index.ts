@@ -151,6 +151,8 @@ export interface Class {
     updated_at?: string;
 }
 
+export type CurriculumTag = 'CBSE' | 'State' | 'Montessori' | 'International' | 'Vedic' | 'Abacus' | 'Learning-by-Doing';
+
 export interface Subject {
     id: string;
     school_id: string;
@@ -158,6 +160,7 @@ export interface Subject {
     code: string;
     description?: string;
     classLevels?: string[];
+    curriculumTag?: CurriculumTag;
     status?: 'active' | 'inactive';
     created_at?: string;
     updated_at?: string;
@@ -187,6 +190,17 @@ export interface AttendanceRecord {
 
 // ----- Lessons & Assignments -----
 
+export interface AILessonPlan {
+    topicExplanation: string;
+    keyDefinitions: Array<{ term: string; definition: string }>;
+    formulas: Array<{ name: string; formula: string; description: string }>;
+    realWorldExamples: string[];
+    instructionalSteps: Array<{ title: string; content: string[]; duration: string }>;
+    pedagogyAdjustments: string[];
+    learningObjectives: string[];
+    studentsNeedingAttention: string[];
+}
+
 export interface LessonLog {
     id: string;
     school_id: string;
@@ -208,6 +222,8 @@ export interface LessonLog {
     attachments?: string[];
     academicYear?: string;
     completionStatus?: 'planned' | 'in_progress' | 'completed';
+    curriculumTag?: CurriculumTag;
+    aiPlan?: AILessonPlan;
     created_at?: string;
     updated_at?: string;
 }
@@ -226,6 +242,7 @@ export interface Assignment {
     totalMarks: number;
     attachments?: string[];
     status: 'active' | 'closed';
+    curriculumTag?: CurriculumTag;
 }
 
 export interface AssignmentSubmission {
@@ -309,6 +326,7 @@ export interface QuizResult {
     answers: QuizAnswer[];
     questions: any[];
     completed_at: string;
+    curriculumTag?: CurriculumTag;
     created_at?: string;
 }
 

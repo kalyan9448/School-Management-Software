@@ -1,7 +1,8 @@
 import { ArrowLeft, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { Teacher, teacherService } from '../utils/centralDataService';
+import { Teacher, teacherService, CurriculumTag } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
+import { Check, ChevronDown } from 'lucide-react';
 
 export interface SubjectMapping {
     id?: string;
@@ -9,6 +10,7 @@ export interface SubjectMapping {
     teacher: string;
     teacherEmail: string;
     periods: number;
+    curriculumTags?: CurriculumTag[];
 }
 
 export interface ClassData {
@@ -24,9 +26,10 @@ interface SubjectMappingFormProps {
         teacher: string;
         teacherEmail?: string;
         periods: number;
+        curriculumTags?: CurriculumTag[];
         originalId?: string;
     } | null;
-    onSave: (data: { class: string; section: string; subject: string; teacher: string; teacherEmail: string; periods: number }, originalId?: string) => void;
+    onSave: (data: { class: string; section: string; subject: string; teacher: string; teacherEmail: string; periods: number; curriculumTags: CurriculumTag[] }, originalId?: string) => void;
     onCancel: () => void;
 }
 
@@ -38,7 +41,9 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
         teacher: initialData?.teacher || '',
         teacherEmail: initialData?.teacherEmail || '',
         periods: initialData?.periods?.toString() || '',
+        curriculumTags: initialData?.curriculumTags || [] as CurriculumTag[],
     });
+    const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
 
     const [teachers, setTeachers] = useState<Teacher[]>([]);
 
@@ -72,6 +77,15 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
         'Physical Education',
         'Dance',
     ];
+    const tagsList: CurriculumTag[] = [
+        'CBSE',
+        'State',
+        'Montessori',
+        'International',
+        'Vedic',
+        'Abacus',
+        'Learning-by-Doing'
+    ];
 
     const handleSave = () => {
         if (!formData.class || !formData.section || !formData.subject || !formData.teacher || !formData.periods) {
@@ -98,11 +112,45 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
             teacher: formData.teacher,
             teacherEmail: email,
             periods: parseInt(formData.periods, 10),
+            curriculumTags: formData.curriculumTags,
         }, initialData?.originalId);
     };
 
+    const toggleTag = (tag: CurriculumTag) => {
+        const currentTags = [...formData.curriculumTags];
+        const index = currentTags.indexOf(tag);
+        if (index > -1) {
+            currentTags.splice(index, 1);
+        } else {
+            currentTags.push(tag);
+        }
+        setFormData({ ...formData, curriculumTags: currentTags });
+    };
+
+    const toggleAllTags = () => {
+        if (formData.curriculumTags.length === tagsList.length) {
+            setFormData({ ...formData, curriculumTags: [] });
+        } else {
+            setFormData({ ...formData, curriculumTags: [...tagsList] });
+        }
+    };
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (!target.closest('.tag-dropdown-container')) {
+                setIsTagDropdownOpen(false);
+            }
+        };
+        if (isTagDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isTagDropdownOpen]);
+
     return (
-        <div className="p-8">
+        <div className="p-8 bg-gray-50/50 min-h-screen">
             {/* Header */}
             <div className="flex items-center gap-4 mb-8">
                 <button
@@ -121,8 +169,8 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
 
             <div className="max-w-4xl mx-auto space-y-8 pb-24">
                 {/* Mapping Form */}
-                <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                    <div className="p-6 border-b border-gray-200 bg-gray-50">
+                <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                    <div className="p-6 border-b border-gray-200 bg-gray-50 rounded-t-xl">
                         <h2 className="text-lg font-semibold text-gray-900">Mapping Details</h2>
                     </div>
                     <div className="p-6 space-y-6">
@@ -136,7 +184,7 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                     value={formData.class}
                                     onChange={(e) => setFormData({ ...formData, class: e.target.value })}
                                     disabled={!!initialData} // Cannot change class once mapped
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+                                    className="w-full h-[42px] px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 transition-all"
                                 >
                                     <option value="">Select Class</option>
                                     {classes.map((cls) => (
@@ -154,7 +202,7 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                     value={formData.section}
                                     onChange={(e) => setFormData({ ...formData, section: e.target.value })}
                                     disabled={!!initialData} // Cannot change section once mapped
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+                                    className="w-full h-[42px] px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 transition-all"
                                 >
                                     <option value="">Select Section</option>
                                     {sections.map((sec) => (
@@ -171,7 +219,7 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                 <select
                                     value={formData.subject}
                                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full h-[42px] px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                 >
                                     <option value="">Select Subject</option>
                                     {subjectsList.map((sub) => (
@@ -196,7 +244,7 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                             teacherEmail: selectedTeacher?.email || ''
                                         });
                                     }}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full h-[42px] px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                 >
                                     <option value="">Select Teacher</option>
                                     {teachers.map((teacher) => (
@@ -220,9 +268,65 @@ export function SubjectMappingForm({ initialData, onSave, onCancel }: SubjectMap
                                     max="20"
                                     value={formData.periods}
                                     onChange={(e) => setFormData({ ...formData, periods: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full h-[42px] px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                     placeholder="e.g., 5"
                                 />
+                            </div>
+
+                            {/* Curriculum Tags (Multi-select) */}
+                            <div className="md:col-span-2 relative tag-dropdown-container">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Tag (Optional)
+                                </label>
+                                <div 
+                                    className={`w-full min-h-[42px] px-4 py-2 border rounded-lg cursor-pointer bg-white flex items-center justify-between gap-2 transition-all ${isTagDropdownOpen ? 'border-purple-500 ring-2 ring-purple-500/20 shadow-sm' : 'border-gray-300 hover:border-gray-400'}`}
+                                    onClick={() => setIsTagDropdownOpen(!isTagDropdownOpen)}
+                                >
+                                    <div className="flex flex-wrap gap-1.5 items-center min-w-0">
+                                        {formData.curriculumTags.length === 0 ? (
+                                            <span className="text-gray-400 font-normal leading-none select-none">Select curriculum tags</span>
+                                        ) : (
+                                            formData.curriculumTags.map(tag => (
+                                                <span key={tag} className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center border border-purple-100 whitespace-nowrap animate-in fade-in zoom-in-95 duration-200">
+                                                    {tag}
+                                                </span>
+                                            ))
+                                        )}
+                                    </div>
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-300 ${isTagDropdownOpen ? 'rotate-180 text-purple-500' : ''}`} />
+                                </div>
+
+                                {isTagDropdownOpen && (
+                                    <div className="absolute z-[100] mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] py-1.5 max-h-64 overflow-y-auto ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1 duration-200">
+                                        <div 
+                                            className="px-4 py-2.5 hover:bg-purple-50 border-b border-gray-100 flex items-center justify-between cursor-pointer group transition-colors"
+                                            onClick={toggleAllTags}
+                                        >
+                                            <span className={`text-sm font-semibold transition-colors ${formData.curriculumTags.length === tagsList.length ? 'text-purple-700' : 'text-gray-700'}`}>
+                                                Select All
+                                            </span>
+                                            <div className={`w-5 h-5 rounded flex items-center justify-center transition-all ${formData.curriculumTags.length === tagsList.length ? 'bg-purple-600 border-purple-600 scale-105 shadow-sm' : 'border border-gray-300 group-hover:border-purple-400'}`}>
+                                                {formData.curriculumTags.length === tagsList.length && <Check className="w-3 h-3 text-white stroke-[3px]" />}
+                                            </div>
+                                        </div>
+                                        <div className="py-1">
+                                            {tagsList.map(tag => (
+                                                <div 
+                                                    key={tag}
+                                                    className="px-4 py-2 hover:bg-gray-50 flex items-center justify-between cursor-pointer group transition-colors"
+                                                    onClick={() => toggleTag(tag)}
+                                                >
+                                                    <span className={`text-sm tracking-wide transition-colors ${formData.curriculumTags.includes(tag) ? 'text-purple-800 font-medium' : 'text-gray-600 font-normal'}`}>
+                                                        {tag}
+                                                    </span>
+                                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-all ${formData.curriculumTags.includes(tag) ? 'bg-purple-600 border-purple-600 scale-105 shadow-sm' : 'border border-gray-300 group-hover:border-purple-400 shadow-inner'}`}>
+                                                        {formData.curriculumTags.includes(tag) && <Check className="w-3 h-3 text-white stroke-[3px]" />}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

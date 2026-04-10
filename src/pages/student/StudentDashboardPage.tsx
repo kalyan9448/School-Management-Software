@@ -246,7 +246,14 @@ export function Dashboard() {
                                 {classItem.topic && (
                                   <p className="text-[10px] text-indigo-600 font-medium mb-0.5 truncate">{classItem.topic}</p>
                                 )}
-                                <p className="text-[10px] text-gray-500">👨‍🏫 {classItem.teacher}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[10px] text-gray-500">👨‍🏫 {classItem.teacher}</p>
+                                  {classItem.curriculumTag && (
+                                    <Badge variant="outline" className="text-[8px] py-0 px-1.5 h-4 border-indigo-100 text-indigo-500 bg-indigo-50/50">
+                                      {classItem.curriculumTag}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </Card>
@@ -300,6 +307,11 @@ export function Dashboard() {
                                 <SubjectIcon className="w-4 h-4 text-white" />
                               </div>
                               <h3 className="font-bold text-gray-900 text-xs truncate flex-1">{hw.subject}</h3>
+                              {hw.curriculumTag && (
+                                <Badge variant="outline" className="text-[8px] py-0 px-1.5 h-4 border-indigo-100 text-indigo-500 bg-indigo-50/50">
+                                  {hw.curriculumTag}
+                                </Badge>
+                              )}
                             </div>
                             <div className="p-2 bg-indigo-50/50 rounded-lg text-[10px] font-semibold text-indigo-700 mb-2 truncate">
                               {hw.topic || "Check tasks"}

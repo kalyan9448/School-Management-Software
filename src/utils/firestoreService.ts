@@ -1006,6 +1006,7 @@ export const lessonService = {
             teacherName: lesson.teacherName || '',
             time: lesson.time,
             attachments: lesson.attachments || [],
+            curriculumTag: lesson.curriculumTag,
         });
     },
 };
@@ -1043,6 +1044,7 @@ export const assignmentService = {
             totalMarks: assignment.totalMarks || 0,
             attachments: assignment.attachments || [],
             status: assignment.status || 'active',
+            curriculumTag: assignment.curriculumTag,
         });
 
         // Notify students' parents
@@ -2170,6 +2172,33 @@ export const subjectMappingService = {
         return fetchCollection<SubjectMappingRecord>('subject_mappings', ...constraints);
     },
 
+    getByClass: async (className: string, section: string): Promise<SubjectMappingRecord[]> => {
+        return fetchCollection<SubjectMappingRecord>(
+            'subject_mappings',
+            where('className', '==', className),
+            where('section', '==', section)
+        );
+    },
+
+    getByClassAndSubject: async (schoolId: string, className: string, section: string, subjectName: string): Promise<SubjectMappingRecord | null> => {
+        const results = await fetchCollection<SubjectMappingRecord>(
+            'subject_mappings',
+            where('school_id', '==', schoolId),
+            where('className', '==', className),
+            where('section', '==', section),
+            where('subjectName', '==', subjectName)
+        );
+        return results.length > 0 ? results[0] : null;
+    },
+
+    getByTeacher: async (schoolId: string, teacherEmail: string): Promise<SubjectMappingRecord[]> => {
+        return fetchCollection<SubjectMappingRecord>(
+            'subject_mappings',
+            where('school_id', '==', schoolId),
+            where('teacherEmail', '==', teacherEmail)
+        );
+    },
+
     create: async (mapping: Partial<SubjectMappingRecord>): Promise<SubjectMappingRecord> => {
         return createDoc<SubjectMappingRecord>('subject_mappings', {
             school_id: mapping.school_id || '',
@@ -2180,6 +2209,7 @@ export const subjectMappingService = {
             teacherName: mapping.teacherName || '',
             teacherEmail: mapping.teacherEmail || '',
             periods: mapping.periods || 0,
+            curriculumTags: mapping.curriculumTags || [],
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
         });

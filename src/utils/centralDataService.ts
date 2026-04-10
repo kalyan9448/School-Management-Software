@@ -2,6 +2,7 @@
 // This service manages all data operations across the application
 
 // ==================== INTERFACES ====================
+import { AILessonPlan } from '../types';
 
 export interface User {
   id: string;
@@ -128,6 +129,8 @@ export interface ScheduledReport {
   updated_at?: string;
 }
 
+export type CurriculumTag = 'CBSE' | 'State' | 'Montessori' | 'International' | 'Vedic' | 'Abacus' | 'Learning-by-Doing';
+
 export interface SubjectMappingRecord {
   id: string;
   school_id: string;
@@ -138,6 +141,7 @@ export interface SubjectMappingRecord {
   teacherName: string;
   teacherEmail: string;
   periods: number;
+  curriculumTags?: CurriculumTag[];
   created_at?: string;
   updated_at?: string;
 }
@@ -194,6 +198,8 @@ export interface LessonLog {
   teacherName: string;
   time?: string;
   attachments?: string[];
+  curriculumTag?: CurriculumTag;
+  aiPlan?: AILessonPlan;
 }
 
 
@@ -212,6 +218,7 @@ export interface Assignment {
   totalMarks: number;
   attachments?: string[];
   status: 'active' | 'closed';
+  curriculumTag?: CurriculumTag;
 }
 
 export interface AssignmentSubmission {
@@ -436,6 +443,7 @@ import {
   subjectMappingService,
   studentNoteService,
   reportsService,
+  quizResultService,
   StudentNote,
 } from './firestoreService';
 
@@ -470,6 +478,7 @@ export {
   subjectMappingService,
   studentNoteService,
   reportsService,
+  quizResultService,
 };
 
 export type { StudentNote };
@@ -502,4 +511,5 @@ export default {
   feeInvoice: feeInvoiceService,
   auditLog: auditLogService,
   studentNote: studentNoteService,
+  quizResult: quizResultService,
 };

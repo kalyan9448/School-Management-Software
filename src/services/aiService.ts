@@ -230,6 +230,74 @@ export const aiService = {
     prompt: async (text: string): Promise<string> => {
         return callAI([{ role: 'user', content: text }]);
     },
+
+    /**
+     * Generate a personalized, pedagogical micro-learning lesson plan
+     * based on class context, performance, and curriculum tags.
+     */
+    generateAILessonPlan: async (
+        subject: string, 
+        topic: string, 
+        classContext: { class: string; section: string },
+        performanceAnalysis: any,
+        ageProfile: any,
+        curriculumTags: string[] = []
+    ): Promise<any> => {
+        const prompt = `You are a world-class pedagogical consultant. Create a step-by-step micro-learning lesson plan for:
+        Subject: ${subject}
+        Topic: ${topic}
+        Class: ${classContext.class} - ${classContext.section}
+        Target Student Age: ${ageProfile.averageAge} years (Range: ${ageProfile.ageRange})
+        Curriculum Context: ${curriculumTags.join(', ') || 'Standard'}
+
+        --- CLASS PERFORMANCE CONTEXT ---
+        Recent Performance Analytics:
+        - Class Category: ${performanceAnalysis.performanceCategory}
+        - Average Accuracy: ${performanceAnalysis.averageScore}%
+        - Struggling Students (${performanceAnalysis.strugglingCount}): ${performanceAnalysis.strugglingStudentNames.join(', ')}
+        - Previously Covered Topics: ${performanceAnalysis.topicsCovered.join(', ') || 'None recorded'}
+
+        --- INSTRUCTIONS ---
+        Generate a detailed, step-by-step teaching guide that is customized for this specific class. 
+        If the class is "Needs Focus", simplify concepts and use more visual analogies. 
+        If "Exceeding Expectations", include challenge problems and deeper inquiry.
+        Adjust the complexity of vocabulary and examples to suit the student age (${ageProfile.averageAge} years).
+        
+        Respond ONLY with a JSON object containing:
+        - "topicExplanation": A rich background for the teacher (3-4 sentences).
+        - "keyDefinitions": Array of { "term": string, "definition": string }.
+        - "formulas": Array of { "name": string, "formula": string, "description": string }.
+        - "realWorldExamples": Array of 3-4 strings showing application.
+        - "instructionalSteps": Array of { "title": string, "content": string[], "duration": string } for a 40-minute class.
+        - "pedagogyAdjustments": Array of strings explaining HOW you adjusted the plan for this specific classes' performance and age.
+        - "learningObjectives": Array of 3-5 strings starting with action verbs.
+        - "studentsNeedingAttention": Array of names of students the teacher should specifically check in with during the lesson.
+
+        Pure valid JSON only, no markdown formatting.`;
+
+        const messages: ChatMessage[] = [
+            { role: 'system', content: 'You are a master educator and pedagogical AI.' },
+            { role: 'user', content: prompt }
+        ];
+
+        try {
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
+            return JSON.parse(responseText);
+        } catch (error) {
+            console.error("Failed to generate AI Lesson Plan:", error);
+            // Fallback to minimal structure if it fails
+            return {
+                topicExplanation: `A professional overview of ${topic} for ${classContext.class}.`,
+                keyDefinitions: [],
+                formulas: [],
+                realWorldExamples: [],
+                instructionalSteps: [{ title: "Introduction", content: ["Basic introduction to the topic"], duration: "10 mins" }],
+                pedagogyAdjustments: ["General adaptation for grade level"],
+                learningObjectives: [`Understand the basics of ${topic}`],
+                studentsNeedingAttention: performanceAnalysis.strugglingStudentNames || []
+            };
+        }
+    },
 };
 
 /**
