@@ -228,7 +228,7 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
         </div>
 
         {myClasses.length > 0 && (
-          <div className="relative z-[60] mt-2">
+          <div className="relative z-[70] mt-2">
             <button
               onClick={() => setIsClassDropdownOpen(!isClassDropdownOpen)}
               className="w-full bg-white px-6 py-5 rounded-[2rem] border-2 border-gray-100 shadow-xl shadow-purple-50/50 transition-all hover:border-purple-200 focus:border-purple-500 text-left group overflow-hidden"
@@ -495,56 +495,72 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
       )}
 
       {activeTab === 'leaderboard' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* My Stats Card */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg overflow-hidden relative">
-              <Zap className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
-                  <Trophy className="w-8 h-8 text-yellow-300" />
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold">My Performance</h4>
-                  <p className="text-purple-100 text-sm">March 2024</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
-                  <p className="text-purple-100 text-xs mb-1">Student Outcomes</p>
-                  <p className="text-2xl font-bold">92%</p>
-                </div>
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
-                  <p className="text-purple-100 text-xs mb-1">Engagement</p>
-                  <p className="text-2xl font-bold">95%</p>
-                </div>
-              </div>
-              
-              <button className="w-full mt-6 py-3 bg-white text-purple-700 rounded-xl font-bold hover:bg-purple-50 transition-colors">
-                View Detailed Report
-              </button>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Milestones</h3>
-              <div className="space-y-4">
-                {[
-                  { label: 'Perfect Attendance Week', date: 'Mar 12', icon: <CheckCircle className="w-5 h-5 text-green-500" /> },
-                  { label: 'Top Subject: Math', date: 'Mar 15', icon: <Award className="w-5 h-5 text-purple-500" /> },
-                  { label: 'High Quiz Engagement', date: 'Mar 18', icon: <TrendingUp className="w-5 h-5 text-blue-500" /> },
-                ].map((m, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 border border-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {m.icon}
-                      <span className="text-sm font-medium text-gray-700">{m.label}</span>
+          {(() => {
+            const me = leaderboard.find(t => t.email === teacherEmail);
+            return (
+              <div className="lg:col-span-1 flex flex-col gap-6">
+                <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg relative h-fit overflow-hidden">
+                  <Zap className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
+                      <Trophy className="w-8 h-8 text-yellow-300" />
                     </div>
-                    <span className="text-xs text-gray-400">{m.date}</span>
+                    <div>
+                      <h4 className="text-xl font-bold">My Performance</h4>
+                      <p className="text-purple-100 text-sm">Last 30 Days</p>
+                    </div>
                   </div>
-                ))}
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                      <p className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1">Outcomes</p>
+                      <p className="text-2xl font-bold">{me ? me.outcomes : '--'}%</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                      <p className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1">Consistency</p>
+                      <p className="text-2xl font-bold">{me ? me.consistency : '--'}%</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                      <p className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1">Attendance</p>
+                      <p className="text-2xl font-bold">{me ? me.accuracy : '--'}%</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                      <p className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1">Participation</p>
+                      <p className="text-2xl font-bold">{me ? me.engagement : '--'}%</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 flex items-center justify-between">
+                    <p className="text-xs text-purple-200">Overall Rank</p>
+                    <p className="text-lg font-bold">
+                      #{leaderboard.findIndex(t => t.email === teacherEmail) + 1 || '--'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm h-fit">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">Milestones</h3>
+                  <div className="space-y-4">
+                    {[
+                      { label: 'Perfect Attendance Week', date: 'Mar 12', icon: <CheckCircle className="w-5 h-5 text-green-500" /> },
+                      { label: 'Top Subject: Math', date: 'Mar 15', icon: <Award className="w-5 h-5 text-purple-500" /> },
+                      { label: 'High Quiz Engagement', date: 'Mar 18', icon: <TrendingUp className="w-5 h-5 text-blue-500" /> },
+                    ].map((m, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 border border-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {m.icon}
+                          <span className="text-sm font-medium text-gray-700">{m.label}</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{m.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Teacher Leaderboard */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -558,7 +574,7 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
             </div>
             <div className="divide-y divide-gray-50">
               {leaderboard.map((teacher, i) => (
-                <div key={teacher.id} className={`flex items-center justify-between p-6 transition-colors ${teacher.name === 'John Teacher' ? 'bg-purple-50/50' : 'hover:bg-gray-50'}`}>
+                <div key={teacher.id} className={`flex items-center justify-between p-6 transition-colors ${teacher.email === teacherEmail ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
                   <div className="flex items-center gap-4">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                       i === 0 ? 'bg-yellow-400 text-white' : 
@@ -574,18 +590,22 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
                     <div>
                       <h4 className="font-bold text-gray-900 flex items-center gap-2">
                         {teacher.name}
-                        {teacher.name === 'John Teacher' && <span className="text-[10px] bg-purple-600 text-white px-2 py-0.5 rounded-full uppercase">You</span>}
+                        {teacher.email === teacherEmail && <span className="text-[10px] bg-purple-600 text-white px-2 py-0.5 rounded-full uppercase">You</span>}
                       </h4>
                       <p className="text-gray-500 text-sm">{teacher.subject}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-12 text-right">
                     <div>
+                      <p className="text-xs text-gray-400 mb-1">Consistency</p>
+                      <p className="font-bold text-gray-900 text-center">{teacher.consistency}%</p>
+                    </div>
+                    <div>
                       <p className="text-xs text-gray-400 mb-1">Outcomes</p>
-                      <p className="font-bold text-gray-900">{teacher.score}%</p>
+                      <p className="font-bold text-gray-900 text-center">{teacher.outcomes}%</p>
                     </div>
                     <div className="hidden sm:block">
-                      <p className="text-xs text-gray-400 mb-1">Engagement</p>
+                      <p className="text-xs text-gray-400 mb-1">Participation</p>
                       <p className="font-bold text-gray-900">{teacher.engagement}%</p>
                     </div>
                     <div>

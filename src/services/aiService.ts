@@ -268,7 +268,8 @@ export const aiService = {
         - "keyDefinitions": Array of { "term": string, "definition": string }.
         - "formulas": Array of { "name": string, "formula": string, "description": string }.
         - "realWorldExamples": Array of 3-4 strings showing application.
-        - "instructionalSteps": Array of { "title": string, "content": string[], "duration": string } for a 40-minute class.
+        - "stepByStepPlan": Array of { "step": string, "description": string }.
+        - "teachingMethodology": { "approach": string, "activity": string }.
         - "pedagogyAdjustments": Array of strings explaining HOW you adjusted the plan for this specific classes' performance and age.
         - "learningObjectives": Array of 3-5 strings starting with action verbs.
         - "studentsNeedingAttention": Array of names of students the teacher should specifically check in with during the lesson.
@@ -291,7 +292,8 @@ export const aiService = {
                 keyDefinitions: [],
                 formulas: [],
                 realWorldExamples: [],
-                instructionalSteps: [{ title: "Introduction", content: ["Basic introduction to the topic"], duration: "10 mins" }],
+                stepByStepPlan: [{ step: "Introduction", description: "Basic introduction to the topic" }],
+                teachingMethodology: { approach: "General approach", activity: "Standard activity" },
                 pedagogyAdjustments: ["General adaptation for grade level"],
                 learningObjectives: [`Understand the basics of ${topic}`],
                 studentsNeedingAttention: performanceAnalysis.strugglingStudentNames || []

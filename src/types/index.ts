@@ -195,7 +195,8 @@ export interface AILessonPlan {
     keyDefinitions: Array<{ term: string; definition: string }>;
     formulas: Array<{ name: string; formula: string; description: string }>;
     realWorldExamples: string[];
-    instructionalSteps: Array<{ title: string; content: string[]; duration: string }>;
+    stepByStepPlan: Array<{ step: string; description: string }>;
+    teachingMethodology: { approach: string; activity: string };
     pedagogyAdjustments: string[];
     learningObjectives: string[];
     studentsNeedingAttention: string[];

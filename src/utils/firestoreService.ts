@@ -1830,40 +1830,75 @@ export const quizService = {
     },
 
     getTeacherLeaderboard: async () => {
-        // Derive from actual data: for each teacher, compute avg student score across their classes
         const teachers = await teacherService.getAll();
+        const activeTeachers = teachers.filter(t => t.status === 'active');
         const results: any[] = [];
-        for (const t of teachers.filter(t => t.status === 'active').slice(0, 10)) {
-            let totalScore = 0;
-            let totalStudents = 0;
-            let totalQuizzes = 0;
-            for (const cls of (t.classes || []).slice(0, 3)) {
+        
+        // Calculate date 30 days ago for consistency checks
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const startDateStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+        for (const t of activeTeachers.slice(0, 15)) {
+            const email = t.email;
+            
+            // 1. Outcomes Score (Avg Quiz Accuracy)
+            let totalQuizScore = 0;
+            let totalQuizCount = 0;
+            let uniqueStudents = new Set();
+            
+            for (const cls of (t.classes || [])) {
                 try {
                     const classResults = await quizResultService.getByClass(cls.class, cls.section);
                     const subjectResults = classResults.filter(r =>
                         (r.subject || '').toLowerCase().trim() === (cls.subject || '').toLowerCase().trim()
                     );
                     if (subjectResults.length > 0) {
-                        const studIds = new Set(subjectResults.map(r => r.student_id));
-                        totalStudents += studIds.size;
-                        totalQuizzes += subjectResults.length;
-                        totalScore += subjectResults.reduce((s, r) => {
-                            if (typeof r.accuracy === 'number') return s + r.accuracy;
-                            return r.total > 0 ? s + (r.correct / r.total) * 100 : s;
-                        }, 0);
+                        subjectResults.forEach(r => {
+                            uniqueStudents.add(r.student_id);
+                            totalQuizCount++;
+                            totalQuizScore += typeof r.accuracy === 'number' ? r.accuracy : (r.total > 0 ? (r.correct / r.total) * 100 : 0);
+                        });
                     }
-                } catch { /* skip class if query fails */ }
+                } catch { /* skip class */ }
             }
-            const avgScore = totalQuizzes > 0 ? Math.round(totalScore / totalQuizzes) : 0;
-            const engagement = totalStudents > 0 ? Math.min(100, Math.round((totalQuizzes / totalStudents) * 20)) : 0;
+            const outcomes = totalQuizCount > 0 ? Math.round(totalQuizScore / totalQuizCount) : 0;
+            
+            // 2. Lesson Consistency (Logs per 30 days)
+            // Target: 15 logs per month = 100%
+            const lessons = await lessonService.getByTeacher(email);
+            const recentLessons = lessons.filter(l => l.date >= startDateStr);
+            const consistency = Math.min(100, Math.round((recentLessons.length / 15) * 100));
+            
+            // 3. Attendance Accuracy (Days marked in 30 days)
+            // Target: 20 days per month = 100%
+            // In a real system we'd query attendance records for the teacher's classes.
+            // For now, we'll use a heuristic based on lessons that have attendance-link indicators 
+            // or simply the frequency of days attendance was marked in their classes.
+            const attendanceRecords = await attendanceService.getAll();
+            const teacherClassIds = new Set((t.classes || []).map(c => `${c.class}-${c.section}`));
+            const myClassAttendance = attendanceRecords.filter(r => 
+                r.date >= startDateStr && teacherClassIds.has(`${r.class}-${r.section}`)
+            );
+            const uniqueAttendanceDays = new Set(myClassAttendance.map(r => r.date));
+            const accuracy = Math.min(100, Math.round((uniqueAttendanceDays.size / 20) * 100));
+
+            // Weighted Overall Score
+            const overallScore = Math.round((outcomes * 0.4) + (consistency * 0.3) + (accuracy * 0.3));
+
             results.push({
                 id: t.id,
                 name: t.name,
-                score: avgScore,
-                engagement,
-                subject: t.subjects?.[0] || (t.classes?.[0]?.subject) || '',
+                email: email,
+                subject: (t.classes && t.classes.length > 0) ? t.classes[0].subject : 'General',
+                score: overallScore,
+                outcomes: outcomes,
+                consistency: consistency,
+                accuracy: accuracy,
+                engagement: uniqueStudents.size > 0 ? Math.min(100, Math.round((totalQuizCount / uniqueStudents.size) * 20)) : 0
             });
         }
+        
         return results.sort((a, b) => b.score - a.score);
     },
 };
