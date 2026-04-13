@@ -6,7 +6,8 @@ import {
   FileText, 
   MessageSquare,
   Award,
-  BarChart3
+  BarChart3,
+  CheckCircle
 } from 'lucide-react';
 
 interface NavItem {
@@ -53,7 +54,8 @@ export function DashboardNav({ currentView, onViewChange, items }: DashboardNavP
 export const teacherNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <Home className="w-5 h-5" /> },
   { id: 'my-classes', label: 'My Classes', icon: <Users className="w-5 h-5" /> },
-  { id: 'attendance', label: 'Attendance', icon: <Calendar className="w-5 h-5" /> },
+  { id: 'attendance', label: 'Attendance', icon: <CheckCircle className="w-5 h-5" /> },
+  { id: 'calendar', label: 'Calendar', icon: <Calendar className="w-5 h-5" /> },
   { id: 'lesson-log', label: 'Lesson Log', icon: <BookOpen className="w-5 h-5" /> },
   { id: 'student-notes', label: 'Student Notes', icon: <MessageSquare className="w-5 h-5" /> },
   { id: 'performance', label: 'Performance', icon: <Award className="w-5 h-5" /> },

@@ -49,7 +49,9 @@ import {
   StudentNote,
   CurriculumTag,
 } from '../utils/centralDataService';
+import { AttendanceOverview } from './AttendanceOverview';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
+import { CalendarModule } from './CalendarModule';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { 
@@ -66,11 +68,13 @@ type ViewType =
   | 'dashboard'
   | 'my-classes'
   | 'attendance'
+  | 'attendance-overview'
   | 'lesson-log'
   | 'teaching-flow'
   | 'student-notes'
   | 'performance'
-  | 'notifications';
+  | 'notifications'
+  | 'calendar';
 
 interface ClassInfo {
   id: string;
@@ -1223,7 +1227,7 @@ export function TeacherDashboardNew() {
                           </div>
                       )}
                       <button 
-                        onClick={() => {}} // Could navigate to a full calendar view for teacher
+                        onClick={() => setCurrentView('calendar')}
                         className="w-full py-2 text-sm font-bold text-purple-600 hover:bg-purple-50 rounded-lg transition-colors mt-2"
                       >
                           View Full Calendar
@@ -2647,7 +2651,7 @@ export function TeacherDashboardNew() {
                       setAttendanceClassFilter(cls.class);
                       setAttendanceSectionFilter(cls.section);
                       setAttendanceSubjectFilter(cls.subject);
-                      setCurrentView('attendance');
+                      setCurrentView('attendance-overview');
                     }}
                     className="px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                   >
@@ -2826,6 +2830,8 @@ export function TeacherDashboardNew() {
         return renderMyClasses();
       case 'attendance':
         return renderAttendance();
+      case 'attendance-overview':
+        return renderAttendanceOverview();
       case 'lesson-log':
         return renderLessonLog();
       case 'teaching-flow':
@@ -2836,9 +2842,52 @@ export function TeacherDashboardNew() {
         return renderPerformance();
       case 'notifications':
         return renderAllNotifications();
+      case 'calendar':
+        return renderFullCalendar();
       default:
         return renderDashboard();
     }
+  };
+
+  const renderAttendanceOverview = () => {
+    return (
+      <AttendanceOverview
+        classInfo={{
+          class: attendanceClassFilter,
+          section: attendanceSectionFilter,
+          subject: attendanceSubjectFilter
+        }}
+        onBack={() => setCurrentView('my-classes')}
+        onMarkAttendance={(date) => {
+          if (date) {
+            setAttendanceDate(date);
+          } else {
+            setAttendanceDate(new Date().toISOString().split('T')[0]);
+          }
+          setCurrentView('attendance');
+        }}
+      />
+    );
+  };
+
+  const renderFullCalendar = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-gray-900">Academic Calendar</h2>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-bold text-sm"
+          >
+            <ChevronLeft className="w-4 h-4 inline mr-1" />
+            Back to Dashboard
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 min-h-[600px]">
+          <CalendarModule viewOnly={true} />
+        </div>
+      </div>
+    );
   };
 
   return (

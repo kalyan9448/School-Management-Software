@@ -943,6 +943,28 @@ export const attendanceService = {
 
         return { total, present, absent, late, leave, percentage };
     },
+
+    getByClassRange: async (className: string, section: string, startDate: string, endDate: string): Promise<AttendanceRecord[]> => {
+        try {
+            const records = await fetchCollection<AttendanceRecord>(
+                'attendance',
+                where('class', '==', className),
+                where('section', '==', section),
+                where('date', '>=', startDate),
+                where('date', '<=', endDate)
+            );
+            return records.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        } catch (error) {
+            console.warn('Attendance range query failed. Falling back to memory filter.', error);
+            const all = await fetchCollection<AttendanceRecord>(
+                'attendance',
+                where('class', '==', className),
+                where('section', '==', section)
+            );
+            return all.filter(r => r.date >= startDate && r.date <= endDate)
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }
+    },
 };
 
 // ==================== LESSON SERVICE ====================

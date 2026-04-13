@@ -57,7 +57,11 @@ const EVENT_BG_LIGHT: Record<string, string> = {
   custom: 'bg-gray-50',
 };
 
-export function CalendarModule() {
+interface CalendarModuleProps {
+  viewOnly?: boolean;
+}
+
+export function CalendarModule({ viewOnly = false }: CalendarModuleProps) {
   const { user } = useAuth();
   const [view, setView] = useState<'month' | 'year'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -313,24 +317,26 @@ export function CalendarModule() {
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setEditingEvent(null);
-            setFormData({
-              title: '',
-              type: 'custom',
-              startDate: format(new Date(), 'yyyy-MM-dd'),
-              endDate: format(new Date(), 'yyyy-MM-dd'),
-              description: '',
-              classIds: [],
-            });
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 shadow-md transition-all font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          Add Event
-        </button>
+        {!viewOnly && (
+          <button
+            onClick={() => {
+              setEditingEvent(null);
+              setFormData({
+                title: '',
+                type: 'custom',
+                startDate: format(new Date(), 'yyyy-MM-dd'),
+                endDate: format(new Date(), 'yyyy-MM-dd'),
+                description: '',
+                classIds: [],
+              });
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 shadow-md transition-all font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            Add Event
+          </button>
+        )}
       </div>
 
       {/* Main Content */}
@@ -367,8 +373,12 @@ export function CalendarModule() {
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <div>
-                <h3 className="text-xl font-black text-gray-900">{editingEvent ? 'Edit Event' : 'Create New Event'}</h3>
-                <p className="text-sm text-gray-500 font-medium tracking-tight">Schedule an academic event or holiday.</p>
+                <h3 className="text-xl font-black text-gray-900">
+                  {viewOnly ? 'Event Details' : (editingEvent ? 'Edit Event' : 'Create New Event')}
+                </h3>
+                <p className="text-sm text-gray-500 font-medium tracking-tight">
+                  {viewOnly ? 'View scheduled academic events and holidays.' : 'Schedule an academic event or holiday.'}
+                </p>
               </div>
               <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
                 <X className="w-6 h-6 text-gray-500" />
@@ -381,9 +391,10 @@ export function CalendarModule() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">Event Title *</label>
                   <input
                     type="text"
+                    readOnly={viewOnly}
                     value={formData.title}
-                    onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium"
+                    onChange={e => !viewOnly && setFormData(f => ({ ...f, title: e.target.value }))}
+                    className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium ${viewOnly ? 'cursor-default' : ''}`}
                     placeholder="e.g. Annual Sports Day"
                   />
                 </div>
@@ -391,9 +402,10 @@ export function CalendarModule() {
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Event Type</label>
                   <select
+                    disabled={viewOnly}
                     value={formData.type}
-                    onChange={e => setFormData(f => ({ ...f, type: e.target.value as any }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium"
+                    onChange={e => !viewOnly && setFormData(f => ({ ...f, type: e.target.value as any }))}
+                    className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium ${viewOnly ? 'cursor-default' : ''}`}
                   >
                     <option value="cultural">Cultural</option>
                     <option value="holiday">Holiday</option>
@@ -426,11 +438,13 @@ export function CalendarModule() {
                   <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {classes.map(c => (
-                        <label key={c.id} className="flex items-center gap-2 cursor-pointer group">
+                        <label key={c.id} className={`flex items-center gap-2 transition-colors ${viewOnly ? 'cursor-default' : 'cursor-pointer group'}`}>
                           <input
                             type="checkbox"
+                            disabled={viewOnly}
                             checked={formData.classIds.includes(c.id)}
                             onChange={e => {
+                              if (viewOnly) return;
                               const newIds = e.target.checked 
                                 ? [...formData.classIds, c.id]
                                 : formData.classIds.filter(id => id !== c.id);
@@ -457,9 +471,10 @@ export function CalendarModule() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">Start Date</label>
                   <input
                     type="date"
+                    readOnly={viewOnly}
                     value={formData.startDate}
-                    onChange={e => setFormData(f => ({ ...f, startDate: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium"
+                    onChange={e => !viewOnly && setFormData(f => ({ ...f, startDate: e.target.value }))}
+                    className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium ${viewOnly ? 'cursor-default' : ''}`}
                   />
                 </div>
 
@@ -467,26 +482,28 @@ export function CalendarModule() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">End Date</label>
                   <input
                     type="date"
+                    readOnly={viewOnly}
                     value={formData.endDate}
-                    onChange={e => setFormData(f => ({ ...f, endDate: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium"
+                    onChange={e => !viewOnly && setFormData(f => ({ ...f, endDate: e.target.value }))}
+                    className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium ${viewOnly ? 'cursor-default' : ''}`}
                   />
                 </div>
 
                 <div className="col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
                   <textarea
+                    readOnly={viewOnly}
                     value={formData.description}
-                    onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium h-24 resize-none"
+                    onChange={e => !viewOnly && setFormData(f => ({ ...f, description: e.target.value }))}
+                    className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none transition-all font-medium h-24 resize-none ${viewOnly ? 'cursor-default' : ''}`}
                     placeholder="Details about the event..."
                   />
                 </div>
               </div>
             </div>
 
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-              {editingEvent ? (
+            <div className={`p-6 bg-gray-50 border-t border-gray-100 flex items-center ${viewOnly ? 'justify-end' : 'justify-between'}`}>
+              {!viewOnly && editingEvent ? (
                 <button
                   onClick={() => handleDelete(editingEvent.id)}
                   className="flex items-center gap-2 px-5 py-2.5 text-red-600 hover:bg-red-50 rounded-2xl transition-all font-bold text-sm bg-white border border-red-100 shadow-sm overflow-hidden group relative"
@@ -501,15 +518,17 @@ export function CalendarModule() {
                   onClick={() => setShowAddModal(false)}
                   className="px-6 py-2.5 text-gray-600 hover:bg-gray-200 bg-gray-100 rounded-2xl transition-all font-bold text-sm"
                 >
-                  Discard
+                  {viewOnly ? 'Close' : 'Discard'}
                 </button>
-                <button
-                  onClick={handleCreateOrUpdate}
-                  className="px-8 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all font-bold text-sm flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  {editingEvent ? 'Update Event' : 'Create Event'}
-                </button>
+                {!viewOnly && (
+                  <button
+                    onClick={handleCreateOrUpdate}
+                    className="px-8 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all font-bold text-sm flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {editingEvent ? 'Update Event' : 'Create Event'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
