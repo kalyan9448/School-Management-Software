@@ -621,3 +621,22 @@ export interface AuditLog {
     userAgent?: string;
     created_at: string;
 }
+
+// ----- Teacher Knowledge Evaluation -----
+
+export interface TeacherEvaluationQuestion {
+    id: string;
+    question: string;
+    topic: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+}
+
+export interface TeacherEvaluationResult {
+    question: string;
+    answer: string;
+    feedback: string;
+    understandingLevel: 'Novice' | 'Proficient' | 'Expert' | string;
+    suggestions: string[];
+    isSufficient: boolean;
+    promptRevision?: string;
+}

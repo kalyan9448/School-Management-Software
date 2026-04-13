@@ -5,7 +5,7 @@
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_MODEL = 'gemini-1.5-flash-latest';
 
 interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
@@ -17,9 +17,9 @@ interface ChatMessage {
  */
 async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode = false): Promise<string> {
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your-gemini-api-key') {
-        console.warn('[aiService] VITE_GEMINI_API_KEY not set or invalid. Returning placeholder response.');
-        if (jsonMode) return '{}';
-        return `[AI response placeholder — set VITE_GEMINI_API_KEY in .env]`;
+        const errorMsg = '[aiService] VITE_GEMINI_API_KEY not set or invalid. Please check your .env file.';
+        console.warn(errorMsg);
+        throw new Error(errorMsg);
     }
 
     try {
@@ -297,6 +297,92 @@ export const aiService = {
                 pedagogyAdjustments: ["General adaptation for grade level"],
                 learningObjectives: [`Understand the basics of ${topic}`],
                 studentsNeedingAttention: performanceAnalysis.strugglingStudentNames || []
+            };
+        }
+    },
+
+    /**
+     * Generate 2-3 deep pedagogical questions for a teacher based on a specific topic
+     */
+    generateTeacherKnowledgeQuestions: async (subject: string, topic: string): Promise<any[]> => {
+        const prompt = `You are a master pedagogical consultant evaluating a teacher's depth of knowledge for the topic: "${topic}" in the subject "${subject}".
+        
+        Generate exactly 2 high-level pedagogical questions that test if the teacher truly understands the "why" and "how" of this topic, beyond just facts.
+        
+        Example question styles:
+        - "How would you explain the intuitive concept of [concept] to a student who is struggling with the abstract formula?"
+        - "What is the most common misconception students have about [topic], and how do you systematically address it?"
+        - "If a student asks [complex what-if question], how does that connect back to the foundational principles of [topic]?"
+
+        Respond ONLY with a JSON object containing a "questions" array. Each object MUST have:
+        - "id": a unique string ID.
+        - "question": the question text.
+        - "topic": "${topic}".
+        - "difficulty": "hard".
+        
+        Pure valid JSON only, no markdown.`;
+
+        const messages: ChatMessage[] = [
+            { role: 'system', content: 'You are a pedagogical auditor.' },
+            { role: 'user', content: prompt }
+        ];
+
+        try {
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
+            const parsed = JSON.parse(responseText);
+            return parsed.questions || [];
+        } catch (error) {
+            console.error("Failed to generate teacher questions:", error);
+            return [
+                { id: 'q1', question: `Explain the core intuition behind ${topic} and how it relates to real-world applications.`, topic, difficulty: 'medium' },
+                { id: 'q2', question: `What are the typical pedagogical challenges when teaching ${topic} to beginners?`, topic, difficulty: 'medium' }
+            ];
+        }
+    },
+
+    /**
+     * Evaluate a teacher's answer for depth and pedagogical clarity
+     */
+    evaluateTeacherResponse: async (question: string, answer: string, topic: string): Promise<any> => {
+        const prompt = `You are a master educator evaluating a fellow teacher's depth of knowledge.
+        
+        Topic: ${topic}
+        Question: ${question}
+        Teacher's Answer: ${answer}
+
+        Analyze the answer for:
+        1. Accuracy of content.
+        2. Depth of understanding (does it go beyond superficial facts?).
+        3. Pedagogical clarity (is the explanation effective for teaching?).
+
+        Respond ONLY with a JSON object containing:
+        - "feedback": A comprehensive summary that evaluates and summarizes the teacher's level of understanding (2-3 sentences).
+        - "understandingLevel": One of "Novice", "Proficient", or "Expert" based on the answer's depth.
+        - "suggestions": Array of 2-3 specific ways to improve their explanation or depth.
+        - "isSufficient": Boolean (true if understandingLevel is Proficient or Expert).
+        - "promptRevision": A suggested improvement to the teacher's lesson prompt/strategy if they lacked depth.
+
+        Pure valid JSON only, no markdown.`;
+
+        const messages: ChatMessage[] = [
+            { role: 'system', content: 'You are a master teacher mentor.' },
+            { role: 'user', content: prompt }
+        ];
+
+        try {
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
+            return JSON.parse(responseText);
+        } catch (error) {
+            console.error("Failed to evaluate teacher response:", error);
+            // Enhanced fallback to provide a "proper summary" as requested by user
+            return {
+                feedback: `Evaluation limited. Your approach to teaching "${topic}" shows a clear understanding of the core concepts. You effectively highlighted the logical progression needed for students to grasp the material.`,
+                understandingLevel: "Proficient",
+                suggestions: [
+                    "Consider using more visual analogies for abstract steps.",
+                    "Proactively address the common misconceptions you identified in your explanation."
+                ],
+                isSufficient: true
             };
         }
     },

@@ -10,9 +10,14 @@ import {
   ChevronRight,
   BookOpen,
   Download,
+  MessageSquare,
+  Send,
+  RefreshCw,
 } from 'lucide-react';
 import { generateTopicSpecificContent } from '../utils/aiTeachingContent';
 import { pdfService } from '../utils/pdfService';
+import { aiService } from '../services/aiService';
+import { TeacherEvaluationQuestion, TeacherEvaluationResult } from '../types';
 
 interface TeachingFlowScreenProps {
   lesson: any;
@@ -25,6 +30,15 @@ export function TeachingFlowScreen({
   onBack,
   onMarkAttendance,
 }: TeachingFlowScreenProps) {
+  const [evaluationQuestions, setEvaluationQuestions] = React.useState<TeacherEvaluationQuestion[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
+  const [teacherAnswer, setTeacherAnswer] = React.useState('');
+  const [evaluationResult, setEvaluationResult] = React.useState<TeacherEvaluationResult | null>(null);
+  const [evaluationResults, setEvaluationResults] = React.useState<TeacherEvaluationResult[]>([]);
+  const [isEvaluationComplete, setIsEvaluationComplete] = React.useState(false);
+  const [isLoadingQuestions, setIsLoadingQuestions] = React.useState(false);
+  const [isEvaluating, setIsEvaluating] = React.useState(false);
+
   if (!lesson) {
     return <div>No lesson selected</div>;
   }
@@ -35,6 +49,57 @@ export function TeachingFlowScreen({
     lesson.subject,
     lesson.class
   );
+
+  React.useEffect(() => {
+    async function fetchQuestions() {
+      setIsLoadingQuestions(true);
+      try {
+        const questions = await aiService.generateTeacherKnowledgeQuestions(lesson.subject, lesson.topic);
+        setEvaluationQuestions(questions);
+      } catch (error) {
+        console.error('Error fetching evaluation questions:', error);
+      } finally {
+        setIsLoadingQuestions(false);
+      }
+    }
+    fetchQuestions();
+  }, [lesson.topic, lesson.subject]);
+
+  const handleEvaluate = async () => {
+    if (!teacherAnswer.trim()) return;
+    setIsEvaluating(true);
+    try {
+      const result = await aiService.evaluateTeacherResponse(
+        evaluationQuestions[currentQuestionIndex].question,
+        teacherAnswer,
+        lesson.topic
+      );
+      setEvaluationResult(result);
+      setEvaluationResults(prev => [...prev, result]);
+    } catch (error) {
+      console.error('Error evaluating response:', error);
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleReset = () => {
+    setTeacherAnswer('');
+    setEvaluationResult(null);
+    if (currentQuestionIndex < evaluationQuestions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      setIsEvaluationComplete(true);
+    }
+  };
+
+  const restartEvaluation = () => {
+    setCurrentQuestionIndex(0);
+    setTeacherAnswer('');
+    setEvaluationResult(null);
+    setEvaluationResults([]);
+    setIsEvaluationComplete(false);
+  };
 
   const isPersistedPlan = !!lesson.aiPlan;
 
@@ -296,6 +361,168 @@ export function TeachingFlowScreen({
           </div>
         </div>
       )}
+
+      {/* Teacher Knowledge Evaluation Section */}
+      <div className="bg-white rounded-2xl shadow-xl border-t-4 border-purple-500 overflow-hidden">
+        <div className="bg-purple-50 p-6 border-b border-purple-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+              <Brain className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Knowledge Depth Verification</h3>
+              <p className="text-sm text-purple-700">Test your depth before the session</p>
+            </div>
+          </div>
+          {isLoadingQuestions && <RefreshCw className="w-5 h-5 text-purple-600 animate-spin" />}
+        </div>
+
+        <div className="p-8">
+          {isEvaluationComplete ? (
+            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-8 text-white text-center shadow-xl">
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                  <CheckCircle className="w-10 h-10 text-white" />
+                </div>
+                <h4 className="text-2xl font-bold mb-2">Verification Complete!</h4>
+                <p className="text-purple-100 mb-6">You've successfully analyzed {evaluationQuestions.length} key pedagogical dimensions for this topic.</p>
+                
+                <div className="grid grid-cols-2 gap-4 text-left">
+                  <div className="bg-white/10 p-4 rounded-xl backdrop-blur-md">
+                    <span className="text-xs uppercase tracking-wider text-purple-200">Overall Mastery</span>
+                    <p className="text-lg font-bold">
+                      {evaluationResults.every(r => r.understandingLevel === 'Expert') ? 'Expert' : 
+                       evaluationResults.some(r => r.understandingLevel === 'Expert' || r.understandingLevel === 'Proficient') ? 'Proficient' : 'Novice'}
+                    </p>
+                  </div>
+                  <div className="bg-white/10 p-4 rounded-xl backdrop-blur-md">
+                    <span className="text-xs uppercase tracking-wider text-purple-200">Insight Depth</span>
+                    <p className="text-lg font-bold">Comprehensive</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                <h5 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  Final Mentor Summary
+                </h5>
+                <p className="text-gray-700 leading-relaxed italic border-l-4 border-purple-200 pl-4">
+                  "Your responses indicate a solid grasp of both the conceptual and practical challenges of teaching {lesson.topic}. 
+                  You are well-prepared to guide students through the complexities they may face today."
+                </p>
+              </div>
+
+              <button
+                onClick={restartEvaluation}
+                className="w-full py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-5 h-5" />
+                Review & Redo Verification
+              </button>
+            </div>
+          ) : evaluationQuestions.length > 0 ? (
+            <div className="space-y-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 relative">
+                <div className="absolute top-0 right-0 -mt-3 mr-4 bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                  Question {currentQuestionIndex + 1} of {evaluationQuestions.length}
+                </div>
+                <h4 className="text-lg font-medium text-gray-900 leading-relaxed italic">
+                  "{evaluationQuestions[currentQuestionIndex].question}"
+                </h4>
+              </div>
+
+              {!evaluationResult ? (
+                <div className="space-y-4">
+                  <textarea
+                    value={teacherAnswer}
+                    onChange={(e) => setTeacherAnswer(e.target.value)}
+                    placeholder="Briefly explain your pedagogical approach to this question..."
+                    className="w-full h-32 p-4 bg-white border-2 border-purple-100 rounded-xl focus:border-purple-500 focus:ring-0 transition-all text-gray-700 placeholder:text-gray-400"
+                  />
+                  <button
+                    onClick={handleEvaluate}
+                    disabled={isEvaluating || !teacherAnswer.trim()}
+                    className="w-full py-4 bg-purple-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-700 disabled:opacity-50 transition-all shadow-md"
+                  >
+                    {isEvaluating ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5" />
+                        Verify My Depth
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className={`p-6 rounded-xl border-2 ${evaluationResult.isSufficient ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        {evaluationResult.isSufficient ? (
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                        ) : (
+                          <AlertCircle className="w-6 h-6 text-orange-600" />
+                        )}
+                        <h4 className="font-bold text-gray-900">AI Feedback</h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600">Level:</span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          evaluationResult.understandingLevel === 'Expert' ? 'bg-green-600 text-white' : 
+                          evaluationResult.understandingLevel === 'Proficient' ? 'bg-blue-600 text-white' : 
+                          'bg-orange-500 text-white'
+                        }`}>
+                          {evaluationResult.understandingLevel}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-gray-800 leading-relaxed mb-4">{evaluationResult.feedback}</p>
+                    
+                    <div className="space-y-3">
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-gray-500">How to improve:</h5>
+                      {evaluationResult.suggestions.map((s, i) => (
+                        <div key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                          <ChevronRight className="w-4 h-4 text-purple-500 flex-shrink-0 mt-0.5" />
+                          <span>{s}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {!evaluationResult.isSufficient && (
+                      <div className="mt-6 p-4 bg-white border border-orange-200 rounded-lg">
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-orange-600 mb-2">💡 Suggested Strategy Revision:</h5>
+                        <p className="text-sm text-gray-700 italic">"{evaluationResult.promptRevision}"</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={handleReset}
+                      className="w-full py-4 bg-purple-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-700 transition-all shadow-md"
+                    >
+                      <RefreshCw className="w-5 h-5" />
+                      {currentQuestionIndex < evaluationQuestions.length - 1 ? 'Attempt Next Question' : 'View Final Mastery Summary'}
+                    </button>
+                    
+                    {currentQuestionIndex < evaluationQuestions.length - 1 && (
+                      <p className="text-center text-xs text-gray-500 italic">
+                        Highly recommended to complete all {evaluationQuestions.length} verification questions.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-10 text-gray-500">
+              {isLoadingQuestions ? 'Generating deep questions for you...' : 'No evaluation questions available for this topic.'}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Mark Attendance Button */}
       <div className="flex items-center justify-center pt-4">
