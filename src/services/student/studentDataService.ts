@@ -70,7 +70,7 @@ async function saveData<T>(key: string, data: T): Promise<void> {
 // ─── Curriculum Filtering ─────────────────────────────────────────────────────
 let curriculumTagsCache: Record<string, CurriculumTag[]> | null = null;
 
-async function getCurriculumTags(subject: string): Promise<CurriculumTag[]> {
+export async function getCurriculumTags(subject: string): Promise<CurriculumTag[]> {
   if (!curriculumTagsCache) {
     const profile = await StudentProfile.get();
     if (!profile.grade || !profile.section) return [];
@@ -125,6 +125,17 @@ export const StudentProfile = {
           console.warn("Failed to fetch course count:", err);
         }
 
+        // Fetch psychological profile and knowledge gaps from student portal storage
+        const psychologicalProfile = await getData<any>("psychological_profile", {
+          learningStyle: 'visual',
+          motivationLevel: 'medium',
+          focusType: 'focused',
+          preferredPace: 'steady',
+          interests: []
+        });
+
+        const knowledgeGaps = await AIRecommendationService.identifyKnowledgeGaps();
+
         return {
           name: student.name,
           grade: student.class,
@@ -135,7 +146,10 @@ export const StudentProfile = {
           phone: student.phone || student.parentPhone || "Not Provided",
           address: student.address || "Not Provided",
           joinedDate: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Provided",
-          enrolledCoursesCount: courseCount || 6, // Fallback to 6 if none found to match UI expectation for now
+          enrolledCoursesCount: courseCount || 6, 
+          psychologicalProfile,
+          knowledgeGaps,
+          age: student.dateOfBirth ? Math.floor((new Date().getTime() - new Date(student.dateOfBirth).getTime()) / 31557600000) : 15,
         };
       }
     }
@@ -149,7 +163,10 @@ export const StudentProfile = {
       phone: "",
       address: "",
       joinedDate: "",
-      enrolledCoursesCount: 0
+      enrolledCoursesCount: 0,
+      psychologicalProfile: null,
+      knowledgeGaps: [],
+      age: 0
     });
   },
   update: async (data: Record<string, any>) => {
@@ -158,6 +175,94 @@ export const StudentProfile = {
     await saveData("student_profile", updated);
     return updated;
   },
+  updatePsychologicalProfile: async (profile: any) => {
+    await saveData("psychological_profile", profile);
+    return profile;
+  }
+};
+
+// ─── AI Recommendation Service ───────────────────────────────────────────────
+export const AIRecommendationService = {
+  /** Analytically identify topics where the student is struggling (< 70% accuracy) */
+  identifyKnowledgeGaps: async () => {
+    const uid = getUid();
+    if (uid === "anonymous") return [];
+
+    try {
+      const quizResults = await quizResultService.getByStudent(uid);
+      
+      // Group by subject and topic to find the latest/average performance
+      const topicStats: Record<string, { scores: number[]; lastAttempt: string; subject: string }> = {};
+      
+      quizResults.forEach(r => {
+        const key = `${r.subject}::${r.topic}`;
+        if (!topicStats[key]) {
+          topicStats[key] = { scores: [], lastAttempt: r.completed_at || r.created_at || '', subject: r.subject };
+        }
+        topicStats[key].scores.push(r.accuracy ?? 0);
+        if ((r.completed_at || r.created_at || '') > topicStats[key].lastAttempt) {
+          topicStats[key].lastAttempt = r.completed_at || r.created_at || '';
+        }
+      });
+
+      const gaps: any[] = [];
+      Object.entries(topicStats).forEach(([key, stats]) => {
+        const avg = stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length;
+        if (avg < 70) {
+          const [subject, topic] = key.split('::');
+          gaps.push({
+            subject,
+            topic,
+            score: Math.round(avg),
+            lastAttempted: stats.lastAttempt
+          });
+        }
+      });
+
+      // Sort by score (lowest first)
+      return gaps.sort((a, b) => a.score - b.score);
+    } catch (err) {
+      console.warn("Failed to identify knowledge gaps:", err);
+      return [];
+    }
+  },
+
+  /** Aggregates all data required for the AI Recommendation engine */
+  getAIContextData: async () => {
+    const [profile, recentPerformance, skillsData] = await Promise.all([
+      StudentProfile.get(),
+      PerformanceData.getAll(),
+      SkillsData.getAll(),
+    ]);
+
+    return {
+      studentName: profile.name,
+      age: profile.age,
+      grade: profile.grade,
+      psychologicalProfile: profile.psychologicalProfile,
+      recentPerformance: recentPerformance.slice(-5), // Last 5 sessions
+      knowledgeGaps: profile.knowledgeGaps,
+      skillsData: skillsData,
+    };
+  },
+
+  /** Generate and cache the recommendation */
+  getRecommendation: async () => {
+    const context = await AIRecommendationService.getAIContextData();
+    const { aiService } = await import("@/services/aiService");
+    
+    // Check if we already have a recommendation from today
+    const today = new Date().toISOString().split('T')[0];
+    const cached = await getData<any>("ai_recommendation", null);
+    
+    if (cached && cached.date === today) {
+      return cached.recommendation;
+    }
+
+    const recommendation = await aiService.getPersonalizedLearningRecommendations(context);
+    await saveData("ai_recommendation", { date: today, recommendation });
+    return recommendation;
+  }
 };
 
 export const Quotes = {
@@ -1049,6 +1154,37 @@ export const HomeworkService = {
       pending: topics.filter(t => t.status === "pending").length,
     };
   },
+  getGlobalStats: async () => {
+    const profile = await StudentProfile.get();
+    const user = auth.currentUser;
+    if (!profile.grade || !profile.section || !user) return { total: 0, completed: 0 };
+
+    try {
+      // 1. Fetch ALL assignments for the class
+      const assignments = await assignmentService.getByClass(profile.grade, profile.section);
+      
+      // 2. Fetch student's submissions to check completion
+      const submissions = await assignmentSubmissionService.getByStudent(user.uid);
+      const submittedIds = new Set(submissions.map(s => s.assignmentId));
+      
+      const completedAssignments = assignments.filter(a => submittedIds.has(a.id)).length;
+
+      // 3. Subtract closed/hidden/past-due that are irrelevant if needed? 
+      // For a "Progress" metric, total historical assignments is best.
+      
+      // 4. Also count topic completions from today's lessons
+      const currentHomework = await HomeworkService.getAll();
+      const completedCurrent = currentHomework.filter(h => h.status === "completed").length;
+
+      return {
+        total: assignments.length + (currentHomework.length - assignments.filter(a => a.status === 'active').length),
+        completed: completedAssignments + completedCurrent,
+      };
+    } catch (err) {
+      console.warn("Failed to fetch global homework stats:", err);
+      return { total: 0, completed: 0 };
+    }
+  }
 };
 
 // ─── Objective Questions ─────────────────────────────────────────────────────
@@ -1565,6 +1701,51 @@ export const SettingsService = {
     await saveData("settings", updated);
     return updated;
   },
+};
+
+// ─── Dashboard Insights Service ──────────────────────────────────────────────
+export const DashboardService = {
+  getInsights: async () => {
+    try {
+      const [performance, quizTrends, attendance, homeworkStats] = await Promise.all([
+        SubjectPerformance.getAll(),
+        QuizTrends.getAll(),
+        AttendanceService.get(),
+        HomeworkService.getGlobalStats(), // Use dynamic global stats
+      ]);
+
+      // Calculate overall academic rating (average of subject scores)
+      const overallPerformance = performance.length > 0
+        ? Math.round(performance.reduce((acc, p) => acc + p.score, 0) / performance.length)
+        : 0;
+
+      // Calculate quiz mastery (average across historical trends)
+      const overallQuizMastery = quizTrends.length > 0
+        ? Math.round(quizTrends.reduce((acc, t) => acc + t.average, 0) / quizTrends.length)
+        : 0;
+
+      return {
+        academicRating: overallPerformance,
+        quizMastery: overallQuizMastery,
+        attendance: attendance.percentage || 0,
+        homeworkCompletion: homeworkStats.total > 0 
+          ? Math.round((homeworkStats.completed / homeworkStats.total) * 100) 
+          : 0,
+        raw: {
+          attendance,
+          homeworkStats
+        }
+      };
+    } catch (err) {
+      console.error("Failed to fetch dashboard insights:", err);
+      return {
+        academicRating: 0,
+        quizMastery: 0,
+        attendance: 0,
+        homeworkCompletion: 0
+      };
+    }
+  }
 };
 
 // ─── Reset ───────────────────────────────────────────────────────────────────

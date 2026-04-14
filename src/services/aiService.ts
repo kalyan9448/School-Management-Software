@@ -5,7 +5,7 @@
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-1.5-flash-latest';
+const DEFAULT_MODEL = 'gemini-1.5-flash';
 
 interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
@@ -25,26 +25,54 @@ async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode =
     try {
         // Extract system instruction from messages
         const systemMsg = messages.find(m => m.role === 'system');
-        const nonSystemMsgs = messages.filter(m => m.role !== 'system');
+        const rawNonSystemMsgs = messages.filter(m => m.role !== 'system');
+
+        // --- SANITIZE HISTORY FOR GEMINI ---
+        // 1. Must start with 'user'
+        const firstUserIdx = rawNonSystemMsgs.findIndex(m => m.role === 'user');
+        let sanitized = firstUserIdx !== -1 ? rawNonSystemMsgs.slice(firstUserIdx) : [];
+
+        // 2. Filter out messages with empty content
+        sanitized = sanitized.filter(m => m.content.trim().length > 0);
+
+        // 3. Ensure alternating roles (user -> model -> user -> model)
+        const alternating: ChatMessage[] = [];
+        sanitized.forEach((msg) => {
+            const last = alternating[alternating.length - 1];
+            // Map 'assistant' to 'model' for comparison
+            const currentRole = msg.role === 'assistant' ? 'assistant' : 'user';
+            const lastRole = last ? (last.role === 'assistant' ? 'assistant' : 'user') : null;
+
+            if (currentRole === lastRole) {
+                // If consecutive same roles, append content to last message instead of crashing
+                last.content += "\n" + msg.content;
+            } else {
+                alternating.push({ ...msg });
+            }
+        });
+
+        if (alternating.length === 0) {
+            throw new Error("No valid user messages found in chat history.");
+        }
 
         // Build Gemini request body
         const body: any = {
-            contents: nonSystemMsgs.map(msg => ({
+            contents: alternating.map(msg => ({
                 role: msg.role === 'assistant' ? 'model' : 'user',
                 parts: [{ text: msg.content }],
             })),
             generationConfig: {
                 temperature: 0.7,
-                maxOutputTokens: 8192,
+                maxOutputTokens: 2048, // Reduced for faster response
             },
         };
 
         if (systemMsg) {
-            body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+            body.system_instruction = { parts: [{ text: systemMsg.content }] };
         }
 
         if (jsonMode) {
-            body.generationConfig.responseMimeType = 'application/json';
+            body.generationConfig.response_mime_type = 'application/json';
         }
 
         const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
@@ -57,7 +85,7 @@ async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode =
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Gemini API Error Details:', errorData);
+            console.error('Gemini API Error Details:', JSON.stringify(errorData, null, 2));
             throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
         }
 
@@ -104,9 +132,7 @@ export const aiService = {
             const responseText = await callAI(messages, DEFAULT_MODEL, true);
             const parsed = JSON.parse(responseText);
             const cards = parsed.flashcards || [];
-            console.log('[aiService] Parsed flashcards count:', cards.length);
             if (cards.length < 5) {
-                console.warn('[aiService] Too few flashcards from AI, using fallback');
                 return getFallbackFlashcards(subject, topic);
             }
             return cards;
@@ -197,12 +223,27 @@ export const aiService = {
     /**
      * Contextual Chat for a specific topic
      */
-     chatTopic: async (subject: string, topic: string, chatHistory: {role: 'user' | 'assistant', content: string}[], newMessage: string): Promise<string> => {
+     chatTopic: async (
+        subject: string, 
+        topic: string, 
+        chatHistory: {role: 'user' | 'assistant', content: string}[], 
+        newMessage: string,
+        studentLevel: string = "Standard",
+        curriculumTags: string[] = []
+    ): Promise<string> => {
         const messages: ChatMessage[] = [
             { 
                role: 'system', 
                content: `You are a friendly, encouraging AI tutor helping a student master the topic "${topic}" in the subject "${subject}". 
-               Keep your responses concise, easily readable (use formatting like bolding or bullet points where appropriate), and focused purely on educational assistance.` 
+               
+               Student Profile:
+               - Class Level: ${studentLevel}
+               - Curriculum Focus: ${curriculumTags.join(', ') || 'General Curriculum'}
+               
+               Guidelines:
+               1. Provide context-aware explanations suited for a ${studentLevel} level.
+               2. Align your teaching style with ${curriculumTags.join(' and ') || 'standard'} pedagogical methods.
+               3. Keep responses concise, easily readable (use bolding or bullets), and focused purely on educational assistance.` 
             },
             ...chatHistory.map(msg => ({ role: msg.role, content: msg.content })),
             { role: 'user', content: newMessage }
@@ -383,6 +424,77 @@ export const aiService = {
                     "Proactively address the common misconceptions you identified in your explanation."
                 ],
                 isSufficient: true
+            };
+        }
+    },
+
+    /**
+     * Generate personalized learning recommendations for a student.
+     * Uses age, profile, class context, and knowledge gaps.
+     */
+    getPersonalizedLearningRecommendations: async (context: {
+        studentName: string;
+        age: number;
+        grade: string;
+        psychologicalProfile: any;
+        recentPerformance: any[];
+        knowledgeGaps: any[];
+        skillsData: any[];
+    }): Promise<any> => {
+        const prompt = `You are a world-class pedagogical AI coach. Generate a highly personalized study recommendation for:
+        
+        Student: ${context.studentName} (Age: ${context.age}, Grade: ${context.grade})
+        
+        --- PSYCHOLOGICAL PROFILE ---
+        Learning Style: ${context.psychologicalProfile?.learningStyle || 'Unknown'}
+        Motivation: ${context.psychologicalProfile?.motivationLevel || 'Medium'}
+        Focus: ${context.psychologicalProfile?.focusType || 'Balanced'}
+        Preferred Pace: ${context.psychologicalProfile?.preferredPace || 'Steady'}
+        
+        --- PERFORMANCE CONTEXT ---
+        Recent Scores: ${JSON.stringify(context.recentPerformance)}
+        Skill Metrics: ${JSON.stringify(context.skillsData)}
+        Identified Gaps (Topics with low accuracy): ${JSON.stringify(context.knowledgeGaps)}
+
+        --- TASK ---
+        Based on this data, recommend ONE specific topic the student should focus on next and HOW they should approach it for maximum effectiveness.
+        
+        Respond ONLY with a JSON object containing:
+        - "recommendedTopic": The topic name.
+        - "subject": The subject area.
+        - "whyLabel": A short 1-sentence explanation of why (e.g., "Critical gap in foundations").
+        - "approach": A detailed, step-by-step approach (3-4 steps) tailored to their learning style (${context.psychologicalProfile?.learningStyle || 'general'}).
+        - "approachTitle": A catchy title for the approach (e.g., "The Visual Deep-Dive").
+        - "difficulty": "Low", "Medium", or "High" relative to their current level.
+        - "estimatedTime": Recommended study session duration (e.g., "45 mins").
+        - "encouragement": A brief, inspiring message.
+
+        Pure valid JSON only, no markdown.`;
+
+        const messages: ChatMessage[] = [
+            { role: 'system', content: 'You are an encouraging pedagogical mentor.' },
+            { role: 'user', content: prompt }
+        ];
+
+        try {
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
+            return JSON.parse(responseText);
+        } catch (error) {
+            console.error("Failed to generate personalized recommendations:", error);
+            // Fallback
+            return {
+                recommendedTopic: context.knowledgeGaps?.[0]?.topic || "General Review",
+                subject: context.knowledgeGaps?.[0]?.subject || "Academics",
+                whyLabel: "This topic needs a bit more focus to solidify your understanding.",
+                approach: [
+                    "Review the fundamental concepts using your textbook.",
+                    "Complete a fresh set of practice questions.",
+                    "Explain the core principle to a friend or family member."
+                ],
+                approachTitle: "Foundation Building",
+                difficulty: "Medium",
+                estimatedTime: "30 mins",
+                encouragement: "You've got this! Small steps lead to great progress."
             };
         }
     },

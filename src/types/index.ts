@@ -72,6 +72,24 @@ export interface School {
 
 // ----- Student -----
 
+/** Psychological traits and learning preferences */
+export interface PsychologicalProfile {
+    learningStyle?: 'visual' | 'auditory' | 'kinesthetic' | 'read-write';
+    motivationLevel?: 'high' | 'medium' | 'low';
+    focusType?: 'focused' | 'easily-distracted';
+    preferredPace?: 'fast' | 'steady' | 'patient';
+    interests?: string[];
+}
+
+/** Specific areas where the student needs improvement */
+export interface KnowledgeGap {
+    subject: string;
+    topic: string;
+    score: number;
+    lastAttempted: string;
+    recommendation?: string;
+}
+
 export interface Student {
     id: string;
     school_id: string;
@@ -98,6 +116,8 @@ export interface Student {
     medicalInfo?: string;
     lastSchoolName?: string;
     is_active?: boolean;
+    psychologicalProfile?: PsychologicalProfile;
+    knowledgeGaps?: KnowledgeGap[];
     created_at?: string;
     updated_at?: string;
     created_by?: string;

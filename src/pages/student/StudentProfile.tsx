@@ -19,6 +19,7 @@ import {
   Brain,
   Lightbulb,
   GraduationCap,
+  ChevronRight,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -40,6 +41,14 @@ export function ProfilePage() {
   // Load skills from Firestore
   const [skills, setSkills] = useState<string[]>(["Mathematics", "Physics"]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [psychologicalProfile, setPsychologicalProfile] = useState<any>({
+    learningStyle: 'visual',
+    motivationLevel: 'medium',
+    focusType: 'focused',
+    preferredPace: 'steady',
+    interests: []
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -63,6 +72,9 @@ export function ProfilePage() {
           { action: "Welcome to your new Profile!", date: "Just now" },
           { action: "Start your first lesson", date: "Today" }
         ]);
+      }
+      if (profile.psychologicalProfile) {
+        setPsychologicalProfile(profile.psychologicalProfile);
       }
     })();
   }, []);
@@ -524,6 +536,138 @@ export function ProfilePage() {
                   </div>
                 </motion.div>
               )}
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Learning Profile (Psychological Profile) Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+        >
+          <Card className="p-6 bg-white border-indigo-100 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full translate-x-16 -translate-y-16 blur-2xl opacity-50" />
+            <div className="relative z-10">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-lg shadow-indigo-100 ring-4 ring-indigo-50">
+                    <Target className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 tracking-tight">Learning Profile</h3>
+                    <p className="text-sm font-medium text-gray-400">Tailor your AI recommendations to your unique style</p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={async () => {
+                    setIsSavingProfile(true);
+                    try {
+                      await StudentProfile.updatePsychologicalProfile(psychologicalProfile);
+                    } catch (err) {
+                      console.error("Failed to save profile:", err);
+                    } finally {
+                      setIsSavingProfile(false);
+                    }
+                  }}
+                  disabled={isSavingProfile}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 px-6 rounded-xl shadow-lg shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  {isSavingProfile ? (
+                    <span className="flex items-center gap-2">
+                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
+                        <Brain className="w-4 h-4" />
+                      </motion.div>
+                      Saving...
+                    </span>
+                  ) : "Update Preferences"}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Learning Style</label>
+                  <div className="relative group">
+                    <select 
+                      value={psychologicalProfile.learningStyle}
+                      onChange={(e) => setPsychologicalProfile({...psychologicalProfile, learningStyle: e.target.value})}
+                      className="w-full h-12 px-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all appearance-none cursor-pointer group-hover:border-indigo-200"
+                    >
+                      <option value="visual">Visual (Images/Videos)</option>
+                      <option value="auditory">Auditory (Listening)</option>
+                      <option value="kinesthetic">Kinesthetic (Doing)</option>
+                      <option value="read-write">Read & Write</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronRight className="w-4 h-4 rotate-90" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Motivation</label>
+                  <div className="relative group">
+                    <select 
+                      value={psychologicalProfile.motivationLevel}
+                      onChange={(e) => setPsychologicalProfile({...psychologicalProfile, motivationLevel: e.target.value})}
+                      className="w-full h-12 px-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all appearance-none cursor-pointer group-hover:border-indigo-200"
+                    >
+                      <option value="high">Highly Motivated</option>
+                      <option value="medium">Steady & Consistent</option>
+                      <option value="low">Needs Encouragement</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronRight className="w-4 h-4 rotate-90" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Focus Type</label>
+                  <div className="relative group">
+                    <select 
+                      value={psychologicalProfile.focusType}
+                      onChange={(e) => setPsychologicalProfile({...psychologicalProfile, focusType: e.target.value})}
+                      className="w-full h-12 px-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all appearance-none cursor-pointer group-hover:border-indigo-200"
+                    >
+                      <option value="focused">Laser Focused</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="easily-distracted">Dynamic (Varied)</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronRight className="w-4 h-4 rotate-90" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Study Pace</label>
+                  <div className="relative group">
+                    <select 
+                      value={psychologicalProfile.preferredPace}
+                      onChange={(e) => setPsychologicalProfile({...psychologicalProfile, preferredPace: e.target.value})}
+                      className="w-full h-12 px-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all appearance-none cursor-pointer group-hover:border-indigo-200"
+                    >
+                      <option value="fast">Fast Sprint</option>
+                      <option value="steady">Steady Flow</option>
+                      <option value="patient">Deep Dive (Slow)</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronRight className="w-4 h-4 rotate-90" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex items-start gap-4">
+                <div className="p-2 bg-white rounded-lg shadow-sm">
+                  <Lightbulb className="w-4 h-4 text-indigo-600" />
+                </div>
+                <p className="text-xs font-medium text-indigo-800 leading-relaxed">
+                  <strong>Pro Tip:</strong> Updating your style here directly affects how the AI suggests 
+                  approaches to difficult topics on your dashboard.
+                </p>
+              </div>
             </div>
           </Card>
         </motion.div>

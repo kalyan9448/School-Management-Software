@@ -26,9 +26,16 @@ interface Message {
 interface AITopicChatProps {
   topicName: string;
   subjectName: string;
+  studentLevel?: string;
+  curriculumTags?: string[];
 }
 
-export function AITopicChat({ topicName, subjectName }: AITopicChatProps) {
+export function AITopicChat({ 
+  topicName, 
+  subjectName, 
+  studentLevel = "Standard", 
+  curriculumTags = [] 
+}: AITopicChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -67,41 +74,43 @@ export function AITopicChat({ topicName, subjectName }: AITopicChatProps) {
 
   const generateAIResponse = async (userMessage: string): Promise<string> => {
     // Convert current messages to format expected by API
-    // We filter out the first welcoming message from history to not confuse the model,
-    // or we can just send everything since it's already an "assistant" message
     const formattedHistory = messages.map(m => ({
       role: m.role,
       content: m.content
     }));
 
-    try {
-       // The service expects: (subject, topic, chatHistory, newMessage)
-       const response = await aiService.chatTopic(subjectName, topicName, formattedHistory, userMessage);
-       return response;
-    } catch(err) {
-       console.error("AI Chat failed:", err);
-       return "Sorry, I'm having trouble connecting to my brain right now. Please try again later!";
-    }
+    // The service expects: (subject, topic, chatHistory, newMessage, studentLevel, curriculumTags)
+    const response = await aiService.chatTopic(
+      subjectName, 
+      topicName, 
+      formattedHistory, 
+      userMessage,
+      studentLevel,
+      curriculumTags
+    );
+    return response;
   };
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+  const handleSendMessage = async (directMessage?: string) => {
+    const messageToSend = directMessage || inputMessage;
+    if (!messageToSend.trim()) return;
 
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: inputMessage,
+      content: messageToSend,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInputMessage("");
+    if (!directMessage) setInputMessage("");
     setIsTyping(true);
 
     // Fetch AI response
     try {
-      const responseContent = await generateAIResponse(inputMessage);
+      const responseContent = await generateAIResponse(messageToSend);
+      
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -109,16 +118,22 @@ export function AITopicChat({ topicName, subjectName }: AITopicChatProps) {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiResponse]);
+    } catch (err) {
+      console.error("AI Chat failed:", err);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I'm sorry, I encountered an error while processing your request. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorResponse]);
     } finally {
       setIsTyping(false);
     }
   };
 
   const handleSuggestedQuestion = (question: string) => {
-    setInputMessage(question);
-    setTimeout(() => {
-      handleSendMessage();
-    }, 100);
+    handleSendMessage(question);
   };
 
   return (
@@ -325,7 +340,7 @@ export function AITopicChat({ topicName, subjectName }: AITopicChatProps) {
                     className="flex-1 px-3 py-1.5 border border-gray-300 rounded-full text-xs focus:outline-none focus:border-purple-500"
                   />
                   <Button
-                    onClick={handleSendMessage}
+                    onClick={() => handleSendMessage()}
                     disabled={!inputMessage.trim() || isTyping}
                     className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-full px-3 h-9 w-9 flex items-center justify-center p-0 transition-colors"
                   >

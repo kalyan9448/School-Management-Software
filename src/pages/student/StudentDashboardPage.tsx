@@ -40,6 +40,8 @@ import {
 import { useNavigate } from "react-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { WelcomeBanner } from "@/components/student/modules/WelcomeBanner";
+import { AILearningRecommendations } from "@/components/student/modules/AILearningRecommendations";
+import { ConsolidatedInsights } from "@/components/student/modules/ConsolidatedInsights";
 import { NotificationCenter } from "@/components/student/NotificationCenter";
 import { UserMenu } from "@/components/student/UserMenu";
 
@@ -201,6 +203,8 @@ export function Dashboard() {
         )}
 
         <WelcomeBanner />
+
+        <AILearningRecommendations />
 
         {/* Classes and Homework row */}
         <div className="md:grid md:grid-cols-2 md:gap-3 space-y-3 md:space-y-0">
@@ -478,6 +482,7 @@ export function Dashboard() {
 
         </div>
 
+        <ConsolidatedInsights />
       </div>
     </div>
   );

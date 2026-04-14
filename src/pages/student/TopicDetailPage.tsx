@@ -18,7 +18,7 @@ import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
 import { type HomeworkTopic } from "@/data/studentMockData";
-import { HomeworkService, TodaysClasses, StudentProfile } from "@/services/student/studentDataService";
+import { HomeworkService, TodaysClasses, StudentProfile, getCurriculumTags } from "@/services/student/studentDataService";
 import { AITopicChat } from "@/components/student/modules/AITopicChat";
 import { aiService } from "@/services/aiService";
 
@@ -41,6 +41,8 @@ export function TopicDetailPage() {
   const [studentData, setStudentData] = useState<any>({ name: "", grade: "" });
   const [allHomeworkTopics, setAllHomeworkTopics] = useState<HomeworkTopic[]>([]);
   const [allClasses, setAllClasses] = useState<any[]>([]);
+  const [curriculumTags, setCurriculumTags] = useState<string[]>([]);
+
 
   useEffect(() => {
     (async () => {
@@ -60,6 +62,16 @@ export function TopicDetailPage() {
 
   // Find corresponding class data for curriculum overview
   const classData = allClasses.find((c: any) => c.subject === topic?.subject);
+
+  useEffect(() => {
+    if (topic?.subject) {
+      (async () => {
+        const tags = await getCurriculumTags(topic.subject);
+        setCurriculumTags(tags);
+      })();
+    }
+  }, [topic?.subject]);
+
 
   const [aiTopicDetails, setAiTopicDetails] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -517,7 +529,13 @@ export function TopicDetailPage() {
       </div>
 
       {/* AI Topic Chat - Floating Button */}
-      <AITopicChat topicName={topic.topic} subjectName={topic.subject} />
+      <AITopicChat 
+        topicName={topic.topic} 
+        subjectName={topic.subject} 
+        studentLevel={studentData.grade}
+        curriculumTags={curriculumTags}
+      />
+
     </div>
   );
 }
