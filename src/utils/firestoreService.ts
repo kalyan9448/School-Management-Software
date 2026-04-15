@@ -36,6 +36,7 @@ export type {
     AssignmentSubmission,
     Exam,
     ExamResult,
+    ExamScore,
     FeeStructure,
     FeeComponent,
     FeePayment,
@@ -1221,6 +1222,131 @@ export const examResultService = {
     },
 };
 
+// ==================== EXAM SCORE SERVICE (Teacher Marks Upload) ====================
+
+export const examScoreService = {
+    getAll: async (): Promise<ExamScore[]> => {
+        return fetchCollection<ExamScore>('exam_scores');
+    },
+
+    getByStudent: async (studentId: string): Promise<ExamScore[]> => {
+        const scores = await fetchCollection<ExamScore>(
+            'exam_scores',
+            where('studentId', '==', studentId),
+        );
+        return scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    },
+
+    getByClass: async (classId: string, sectionId?: string): Promise<ExamScore[]> => {
+        let scores = await fetchCollection<ExamScore>(
+            'exam_scores',
+            where('classId', '==', classId),
+        );
+        if (sectionId) {
+            scores = scores.filter(s => s.sectionId === sectionId);
+        }
+        return scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    },
+
+    getBySubject: async (subjectId: string): Promise<ExamScore[]> => {
+        return fetchCollection<ExamScore>(
+            'exam_scores',
+            where('subjectId', '==', subjectId),
+        );
+    },
+
+    getByClassAndExamType: async (classId: string, sectionId: string, subjectId: string, examType: string): Promise<ExamScore[]> => {
+        let scores = await fetchCollection<ExamScore>(
+            'exam_scores',
+            where('classId', '==', classId),
+            where('subjectId', '==', subjectId),
+            where('examType', '==', examType),
+        );
+        if (sectionId) {
+            scores = scores.filter(s => s.sectionId === sectionId);
+        }
+        return scores;
+    },
+
+    getRecentByStudent: async (studentId: string, limit: number = 10): Promise<ExamScore[]> => {
+        const scores = await examScoreService.getByStudent(studentId);
+        return scores.slice(0, limit);
+    },
+
+    create: async (score: Partial<ExamScore>): Promise<ExamScore> => {
+        const percentage = score.totalMarks ? Math.round(((score.marksObtained || 0) / score.totalMarks) * 100) : 0;
+        let grade = 'F';
+        if (percentage >= 90) grade = 'A+';
+        else if (percentage >= 80) grade = 'A';
+        else if (percentage >= 70) grade = 'B+';
+        else if (percentage >= 60) grade = 'B';
+        else if (percentage >= 50) grade = 'C';
+        else if (percentage >= 40) grade = 'D';
+
+        return createDoc<ExamScore>('exam_scores', {
+            studentId: score.studentId || '',
+            classId: score.classId || '',
+            sectionId: score.sectionId || '',
+            subjectId: score.subjectId || '',
+            examType: score.examType || 'Unit Test',
+            marksObtained: score.marksObtained || 0,
+            totalMarks: score.totalMarks || 0,
+            percentage,
+            grade,
+            createdBy: score.createdBy || '',
+            createdAt: new Date().toISOString(),
+            remarks: score.remarks,
+        });
+    },
+
+    createBulk: async (scores: Partial<ExamScore>[]): Promise<ExamScore[]> => {
+        const createdScores: ExamScore[] = [];
+        for (const score of scores) {
+            const created = await examScoreService.create(score);
+            createdScores.push(created);
+        }
+        return createdScores;
+    },
+
+    update: async (id: string, updates: Partial<ExamScore>): Promise<void> => {
+        // If marks were updated, recalculate percentage and grade
+        const updatedData: Partial<ExamScore> = {
+            ...updates,
+            updatedAt: new Date().toISOString(),
+        };
+
+        if (updates.marksObtained !== undefined || updates.totalMarks !== undefined) {
+            const score = await examScoreService.getById(id);
+            if (score) {
+                const marksObtained = updates.marksObtained ?? score.marksObtained;
+                const totalMarks = updates.totalMarks ?? score.totalMarks;
+                const percentage = totalMarks ? Math.round((marksObtained / totalMarks) * 100) : 0;
+
+                let grade = 'F';
+                if (percentage >= 90) grade = 'A+';
+                else if (percentage >= 80) grade = 'A';
+                else if (percentage >= 70) grade = 'B+';
+                else if (percentage >= 60) grade = 'B';
+                else if (percentage >= 50) grade = 'C';
+                else if (percentage >= 40) grade = 'D';
+
+                updatedData.percentage = percentage;
+                updatedData.grade = grade;
+            }
+        }
+
+        await updateDocById('exam_scores', id, updatedData);
+    },
+
+    getById: async (id: string): Promise<ExamScore | null> => {
+        return fetchDocById<ExamScore>('exam_scores', id);
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('exam_scores', id);
+    },
+};
+
 // ==================== FEE SERVICE ====================
 
 export const feeService = {
@@ -2401,6 +2527,7 @@ const firestoreDataService = {
     assignmentSubmission: assignmentSubmissionService,
     exam: examService,
     examResult: examResultService,
+    examScore: examScoreService,
     fee: feeService,
     announcement: announcementService,
     enquiry: enquiryService,

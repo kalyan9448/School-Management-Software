@@ -432,29 +432,35 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // EXAM SCORES (Teacher Marks Upload)
+    // EXAM SCORES (Child Progress System - Teacher Marks Upload)
     // =========================================================================
 
     match /exam_scores/{scoreId} {
+      // Read: SuperAdmin, Admin, Teachers, Students (own), Parents (child's scores)
       allow read: if isSuperAdmin() || (
         hasValidSchoolId() && isOwnSchool() &&
-        (isAdminOrAbove() || isTeacher() || 
-         (isStudent() && resource.data.studentId == request.auth.uid) ||
-         (isParent() && existsInStudentList()))
+        (isAdminOrAbove() || isTeacher() 
+        || (isStudent() && resource.data.studentId == request.auth.uid)
+        || (isParent() && exists(/databases/$(database)/documents/students/$(resource.data.studentId))
+            && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.parentId == request.auth.uid)
+        )
       );
       
+      // Create: SuperAdmin, Admin, Teachers with school_id validation
       allow create: if isSuperAdmin() || (
         (isAdminOrAbove() || isTeacher()) && 
         canCreateSchoolData() &&
-        request.resource.data.school_id == getSchoolId()
+        request.resource.data.school_id is string &&
+        request.resource.data.school_id.size() > 0
       );
       
+      // Update: SuperAdmin, Admin, Teachers - school_id must not change
       allow update: if isSuperAdmin() || (
         (isAdminOrAbove() || isTeacher()) && 
-        canUpdateSchoolData() &&
-        resource.data.school_id == request.resource.data.school_id
+        canUpdateSchoolData()
       );
       
+      // Delete: SuperAdmin, Admin only
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
 

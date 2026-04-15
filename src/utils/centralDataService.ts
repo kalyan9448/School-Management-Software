@@ -267,6 +267,26 @@ export interface ExamResult {
   created_at?: string;
 }
 
+// ----- Exam Scores (Teacher Marks Upload) -----
+
+export interface ExamScore {
+  id: string;
+  school_id?: string;
+  studentId: string;
+  classId: string;
+  sectionId: string;
+  subjectId: string;
+  examType: 'Unit Test' | 'Mid' | 'Final';
+  marksObtained: number;
+  totalMarks: number;
+  percentage: number;
+  grade?: string;
+  createdBy: string; // teacherId
+  createdAt: string;
+  updatedAt?: string;
+  remarks?: string;
+}
+
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
 export interface TimetableSlot {
@@ -426,6 +446,7 @@ import {
   assignmentSubmissionService,
   examService,
   examResultService,
+  examScoreService,
   feeService,
   announcementService,
   enquiryService,
@@ -461,6 +482,7 @@ export {
   assignmentSubmissionService,
   examService,
   examResultService,
+  examScoreService,
   feeService,
   announcementService,
   enquiryService,

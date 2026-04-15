@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardNav, parentNavItems } from './DashboardNav';
+import { ParentDashboardChildProgress } from './ParentDashboardChildProgress';
+import { ParentNotificationPanel } from './ParentNotificationPanel';
+import { CalendarModule } from './CalendarModule';
 import {
   Users,
   Calendar,
@@ -34,7 +37,9 @@ import {
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
+import { useAggregatedNotifications } from '../hooks/useAggregatedNotifications';
 import dataService from '../utils/firestoreService';
+import { generateAndDownloadReport } from '../utils/reportPdfGenerator';
 
 type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar';
 type ReportPeriod = 'weekly' | 'monthly';
@@ -710,6 +715,35 @@ export function ParentDashboardNew() {
       difficulty: 'moderate' as const,
     }));
 
+  // Handle downloading report as PDF
+  const handleDownloadReport = () => {
+    if (!selectedChild) {
+      alert('Please select a student first.');
+      return;
+    }
+
+    const reportData = selectedReportPeriod === 'weekly' ? weeklyReportData : monthlyReportData;
+    
+    const studentInfo = {
+      name: selectedChild.name,
+      class: selectedChild.class,
+      section: selectedChild.section,
+      rollNo: selectedChild.rollNo
+    };
+
+    try {
+      generateAndDownloadReport(
+        reportData,
+        studentInfo,
+        selectedReportPeriod,
+        'School Management System'
+      );
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF report. Please try again.');
+    }
+  };
+
   const renderReports = () => {
     const reportData = selectedReportPeriod === 'weekly' ? weeklyReportData : monthlyReportData;
     const attendancePercentage = reportData.attendanceSummary.total > 0
@@ -1057,7 +1091,10 @@ export function ParentDashboardNew() {
                 Get a comprehensive PDF report with all details and insights
               </p>
             </div>
-            <button className="flex items-center gap-2 px-6 py-3 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-colors">
+            <button
+              onClick={handleDownloadReport}
+              className="flex items-center gap-2 px-6 py-3 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+            >
               <FileText className="w-5 h-5" />
               Download PDF
             </button>
@@ -1570,184 +1607,19 @@ export function ParentDashboardNew() {
   const renderProgress = () => {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-gray-900">Progress Tracking</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Child Progress Tracking</h2>
+            <p className="text-gray-600 mt-1">Real-time insights into attendance, homework, and exam performance</p>
+          </div>
           <button
             onClick={() => setCurrentView('dashboard')}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
           >
             Back to Dashboard
           </button>
         </div>
-
-        {progressData.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-md p-12 text-center">
-            <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-gray-900 text-xl mb-2">No Performance Data Yet</h3>
-            <p className="text-gray-500 max-w-md mx-auto">
-              Once {selectedChild?.name || 'your child'} completes quizzes or exams, their performance data will appear here with detailed subject-wise analysis.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Overall Performance */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="text-gray-900 mb-4">Overall Performance</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
-                  <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                  <p className="text-gray-700 mb-1">Average Score</p>
-                  <p className="text-3xl text-green-600">
-                    {Math.round(progressData.reduce((sum, p) => sum + p.averageScore, 0) / progressData.length)}%
-                  </p>
-                </div>
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
-                  <Brain className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                  <p className="text-gray-700 mb-1">Total Assessments</p>
-                  <p className="text-3xl text-blue-600">
-                    {progressData.reduce((sum, p) => sum + p.totalQuizzes, 0)}
-                  </p>
-                </div>
-                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-center">
-                  <Star className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-                  <p className="text-gray-700 mb-1">Strong Subjects</p>
-                  <p className="text-3xl text-yellow-600">
-                    {progressData.filter((p) => p.averageScore >= 80).length}
-                  </p>
-                </div>
-                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 text-center">
-                  <BookOpen className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-                  <p className="text-gray-700 mb-1">Subjects Covered</p>
-                  <p className="text-3xl text-purple-600">
-                    {progressData.length}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Subject-wise Performance */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="text-gray-900 mb-4">Subject-wise Performance</h3>
-              <div className="space-y-4">
-                {progressData.map((subject) => (
-                  <div key={subject.subject} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-gray-900">{subject.subject}</h4>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm ${subject.trend === 'improving'
-                            ? 'bg-green-100 text-green-700'
-                            : subject.trend === 'steady'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-orange-100 text-orange-700'
-                            }`}
-                        >
-                          {subject.trend === 'improving'
-                            ? '📈 Improving'
-                            : subject.trend === 'steady'
-                              ? '➡️ Steady'
-                              : '⚠️ Needs Attention'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4 mb-3">
-                      <div>
-                        <p className="text-gray-600 text-sm">Average Score</p>
-                        <p className="text-gray-900">{subject.averageScore}%</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600 text-sm">Last Score</p>
-                        <p className="text-gray-900">{subject.lastScore}%</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600 text-sm">Assessments</p>
-                        <p className="text-gray-900">{subject.totalQuizzes}</p>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className={`h-3 rounded-full ${subject.averageScore >= 80
-                          ? 'bg-green-600'
-                          : subject.averageScore >= 60
-                            ? 'bg-blue-600'
-                            : 'bg-orange-600'
-                          }`}
-                        style={{ width: `${Math.min(subject.averageScore, 100)}%` }}
-                      ></div>
-                    </div>
-
-                    {subject.trend === 'needs-attention' && (
-                      <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                        <p className="text-gray-700 text-sm">
-                          💡 <strong>Suggestion:</strong> Encourage practice in {subject.subject}.
-                          Consider reviewing recent topics together.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Strengths and Weak Areas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <Star className="w-5 h-5 text-yellow-600" />
-                  Strengths
-                </h3>
-                <div className="space-y-2">
-                  {progressData.filter((p) => p.averageScore >= 80).length > 0 ? (
-                    progressData
-                      .filter((p) => p.averageScore >= 80)
-                      .map((subject) => (
-                        <div
-                          key={subject.subject}
-                          className="p-3 bg-green-50 rounded-lg border border-green-200"
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="text-gray-900">{subject.subject}</p>
-                            <p className="text-green-700 font-medium">{subject.averageScore}%</p>
-                          </div>
-                        </div>
-                      ))
-                  ) : (
-                    <p className="text-gray-500 text-sm">No strong subjects yet (&ge;80%)</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-orange-600" />
-                  Areas to Focus
-                </h3>
-                <div className="space-y-2">
-                  {progressData.filter((p) => p.averageScore < 80).length > 0 ? (
-                    progressData
-                      .filter((p) => p.averageScore < 80)
-                      .map((subject) => (
-                        <div
-                          key={subject.subject}
-                          className="p-3 bg-orange-50 rounded-lg border border-orange-200"
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="text-gray-900">{subject.subject}</p>
-                            <p className="text-orange-700 font-medium">{subject.averageScore}%</p>
-                          </div>
-                        </div>
-                      ))
-                  ) : (
-                    <p className="text-gray-500 text-sm">All subjects above 80% — great work!</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+        <ParentDashboardChildProgress />
       </div>
     );
   };
@@ -1856,97 +1728,19 @@ export function ParentDashboardNew() {
   };
 
   const renderNotifications = () => {
-    const formatNotifDate = (dateStr: string) => {
-      try {
-        const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
-        if (isNaN(d.getTime())) return dateStr;
-        const now = new Date();
-        const diffMs = now.getTime() - d.getTime();
-        const diffDays = Math.floor(diffMs / 86400000);
-        if (diffDays === 0) return 'Today';
-        if (diffDays === 1) return 'Yesterday';
-        if (diffDays < 7) return `${diffDays} days ago`;
-        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-      } catch { return dateStr; }
-    };
-
-    const getNotifIcon = (type: string) => {
-      switch (type) {
-        case 'attendance': return <CheckCircle className="w-5 h-5 text-green-600" />;
-        case 'fee': return <DollarSign className="w-5 h-5 text-orange-600" />;
-        case 'assignment': return <BookOpen className="w-5 h-5 text-blue-600" />;
-        case 'exam': return <Award className="w-5 h-5 text-indigo-600" />;
-        case 'announcement': return <MessageSquare className="w-5 h-5 text-teal-600" />;
-        default: return <Bell className="w-5 h-5 text-purple-600" />;
-      }
-    };
-
-    const getNotifBg = (type: string) => {
-      switch (type) {
-        case 'attendance': return 'bg-green-100';
-        case 'fee': return 'bg-orange-100';
-        case 'assignment': return 'bg-blue-100';
-        case 'exam': return 'bg-indigo-100';
-        case 'announcement': return 'bg-teal-100';
-        default: return 'bg-purple-100';
-      }
-    };
-
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-gray-900">Notifications</h2>
-          <div className="flex items-center gap-2">
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-              >
-                Mark all read
-              </button>
-            )}
-            <button
-              onClick={() => setCurrentView('dashboard')}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-            >
-              Back to Dashboard
-            </button>
-          </div>
-        </div>
-
-        {notifications.length === 0 ? (
-          <div className="text-center py-12">
-            <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No notifications yet</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {notifications.map((notification) => (
-              <div
-                key={notification.id}
-                onClick={() => !notification.read && markAsRead(notification.id)}
-                className={`p-4 rounded-lg border cursor-pointer transition-colors ${notification.read
-                  ? 'bg-white border-gray-200'
-                  : 'bg-blue-50 border-blue-300 hover:bg-blue-100'
-                  }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getNotifBg(notification.type)}`}>
-                    {getNotifIcon(notification.type)}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-gray-900 mb-1">{notification.title}</h4>
-                    <p className="text-gray-700 mb-2">{notification.message}</p>
-                    <p className="text-gray-500 text-sm">{formatNotifDate(notification.date)}</p>
-                  </div>
-                  {!notification.read && (
-                    <span className="w-2 h-2 bg-blue-600 rounded-full mt-2"></span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <button
+          onClick={() => setCurrentView('dashboard')}
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm mb-4"
+        >
+          ← Back to Dashboard
+        </button>
+        <ParentNotificationPanel 
+          onClose={() => setCurrentView('dashboard')}
+          maxHeight="max-h-[calc(100vh-250px)]"
+          showHeader={true}
+        />
       </div>
     );
   };
@@ -2171,15 +1965,8 @@ export function ParentDashboardNew() {
                         Back to Dashboard
                     </button>
                 </div>
-                <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden p-6">
-                    <p className="text-gray-500 italic">Calendar view is integrated with the school's central schedule.</p>
-                    <div className="mt-4">
-                        <div className="p-12 text-center text-gray-400">
-                            <Calendar className="w-24 h-24 mx-auto mb-4 opacity-10" />
-                            <h3 className="text-xl font-bold">Full Academic Calendar</h3>
-                            <p className="max-w-md mx-auto mt-2">The school has published the academic calendar for the current session. You can view all holidays and exam dates here.</p>
-                        </div>
-                    </div>
+                <div className="flex-1">
+                    <CalendarModule viewOnly={true} />
                 </div>
             </div>
         );

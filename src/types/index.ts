@@ -322,6 +322,26 @@ export interface ExamResult {
     updated_at?: string;
 }
 
+// ----- Exam Scores (Teacher Marks Upload) -----
+
+export interface ExamScore {
+    id: string;
+    school_id: string;
+    studentId: string;
+    classId: string;
+    sectionId: string;
+    subjectId: string;
+    examType: 'Unit Test' | 'Mid' | 'Final';
+    marksObtained: number;
+    totalMarks: number;
+    percentage: number;
+    grade?: string;
+    createdBy: string; // teacherId
+    createdAt: string;
+    updatedAt?: string;
+    remarks?: string;
+}
+
 // ----- Quiz Results (AI Homework) -----
 
 export interface QuizAnswer {

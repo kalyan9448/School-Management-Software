@@ -52,6 +52,7 @@ import {
 import { AttendanceOverview } from './AttendanceOverview';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
 import { CalendarModule } from './CalendarModule';
+import { TeacherMarksUpload } from './TeacherMarksUpload';
 import { DashboardNav, teacherNavItems } from './DashboardNav';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { 
@@ -73,6 +74,7 @@ type ViewType =
   | 'teaching-flow'
   | 'student-notes'
   | 'performance'
+  | 'marks-upload'
   | 'notifications'
   | 'calendar';
 
@@ -1178,6 +1180,13 @@ export function TeacherDashboardNew() {
                     >
                         <MessageSquare className="w-5 h-5 text-orange-600" />
                         <span className="text-gray-700">Add Student Note</span>
+                    </button>
+                    <button
+                        onClick={() => setCurrentView('marks-upload')}
+                        className="flex items-center gap-3 p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+                    >
+                        <Upload className="w-5 h-5 text-indigo-600" />
+                        <span className="text-gray-700">Upload Exam Scores</span>
                     </button>
                     <button
                         onClick={() => setCurrentView('performance')}
@@ -2380,7 +2389,23 @@ export function TeacherDashboardNew() {
     );
   };
 
-
+  const renderMarksUpload = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900">Upload Exam Scores</h2>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-bold"
+          >
+            <ChevronLeft className="w-4 h-4 inline mr-1" />
+            Back
+          </button>
+        </div>
+        <TeacherMarksUpload />
+      </div>
+    );
+  };
 
   const renderStudentNotes = () => {
     return (
@@ -2840,6 +2865,8 @@ export function TeacherDashboardNew() {
         return renderStudentNotes();
       case 'performance':
         return renderPerformance();
+      case 'marks-upload':
+        return renderMarksUpload();
       case 'notifications':
         return renderAllNotifications();
       case 'calendar':
