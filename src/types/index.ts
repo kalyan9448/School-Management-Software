@@ -68,6 +68,7 @@ export interface School {
     created_at: string;
     updated_at?: string;
     created_by?: string;
+    aiEnabled?: boolean; // Controls access to AI features (flashcards, quizzes, chat, etc.)
 }
 
 // ----- Student -----

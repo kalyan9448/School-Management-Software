@@ -12,6 +12,7 @@ import {
   Target,
   Sparkles,
   CheckCircle,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -20,11 +21,13 @@ import { Progress } from "@/components/student/ui/progress";
 import { type HomeworkTopic } from "@/data/studentMockData";
 import { HomeworkService, TodaysClasses, StudentProfile, Flashcards as FlashcardService } from "@/services/student/studentDataService";
 import { aiService } from "@/services/aiService";
+import { useAIFeatureEnabled } from "@/hooks/useAIFeatureEnabled";
 
 export function FlashcardsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { topicId } = useParams<{ topicId: string }>();
+  const { isEnabled: isAIEnabled, isLoading: isAILoading, getDisabledMessage } = useAIFeatureEnabled();
   
   const source = location.state?.source || 'homework';
   
@@ -76,6 +79,15 @@ export function FlashcardsPage() {
 
   useEffect(() => {
     async function loadFlashcards() {
+      if (isAILoading) {
+        return; // Wait for AI check to complete
+      }
+
+      if (!isAIEnabled) {
+        setIsLoading(false);
+        return;
+      }
+      
       if (decodedSubject && resolvedTopic) {
         setIsLoading(true);
         try {
@@ -98,7 +110,7 @@ export function FlashcardsPage() {
       }
     }
     loadFlashcards();
-  }, [decodedSubject, resolvedTopic]);
+  }, [decodedSubject, resolvedTopic, isAIEnabled, isAILoading]);
 
   const currentCard = flashcards[currentIndex];
   // Guard the variables since flashcards could be empty
@@ -207,6 +219,39 @@ export function FlashcardsPage() {
       }
     }
   };
+
+  // Show disabled message if AI features are not enabled
+  if (!isAIEnabled) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF] pb-24">
+        <div 
+          className="text-white p-6 md:p-8 lg:p-10 rounded-b-[2.5rem] shadow-xl relative mb-8"
+          style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="text-white hover:bg-white/10 mb-4 -ml-2 rounded-lg"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+        </div>
+        
+        <div className="max-w-2xl mx-auto px-4 md:px-8 lg:px-12">
+          <Card className="border-2 border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100 p-8">
+            <div className="flex items-center justify-center mb-4">
+              <Lock className="w-12 h-12 text-gray-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">AI Features Disabled</h2>
+            <p className="text-gray-600 text-center mb-4">{getDisabledMessage()}</p>
+            <p className="text-sm text-gray-500 text-center">Please contact your school administrator to enable AI features.</p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FAFBFF] pb-24">

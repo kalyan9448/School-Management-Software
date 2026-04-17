@@ -15,6 +15,7 @@ import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { aiService } from "@/services/aiService";
+import { useAIFeatureEnabled } from "@/hooks/useAIFeatureEnabled";
 
 interface Message {
   id: string;
@@ -36,6 +37,7 @@ export function AITopicChat({
   studentLevel = "Standard", 
   curriculumTags = [] 
 }: AITopicChatProps) {
+  const { isEnabled: isAIEnabled, getDisabledMessage } = useAIFeatureEnabled();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -135,6 +137,11 @@ export function AITopicChat({
   const handleSuggestedQuestion = (question: string) => {
     handleSendMessage(question);
   };
+
+  // If AI features are disabled, don't render anything
+  if (!isAIEnabled) {
+    return null;
+  }
 
   return (
     <>

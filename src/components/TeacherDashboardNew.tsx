@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 
 import { useAuth } from '../contexts/AuthContext';
+import { useAIFeatureEnabled } from '../hooks/useAIFeatureEnabled';
 import {
   Users,
   Calendar,
@@ -31,6 +32,7 @@ import {
   ArrowLeft,
   Filter,
   Star,
+  Upload,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import {
@@ -115,6 +117,7 @@ export function TeacherDashboardNew() {
   const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
   
   const { user, logout } = useAuth();
+  const { isEnabled: isAIEnabled, getDisabledMessage } = useAIFeatureEnabled();
   const { uniqueClasses } = useAcademicClasses();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
 
@@ -1250,6 +1253,11 @@ export function TeacherDashboardNew() {
   };
 
   // Helper functions for attendance filters
+  const getAvailableClasses = () => {
+    const classes = [...new Set(myClasses.map(c => c.class))];
+    return classes.sort();
+  };
+
   const getAvailableSections = (selectedClass: string) => {
     if (!selectedClass) return [];
     const sections = myClasses
@@ -1351,7 +1359,7 @@ export function TeacherDashboardNew() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
                   >
                     <option value="">Select Class</option>
-                    {uniqueClasses.map((cls) => (
+                    {getAvailableClasses().map((cls) => (
                       <option key={cls} value={cls}>
                         {cls}
                       </option>
@@ -1624,6 +1632,11 @@ export function TeacherDashboardNew() {
    * Aggregates class performance, student ages, and curriculum tags.
    */
   const handleGenerateAILessonPlan = async () => {
+    if (!isAIEnabled) {
+      alert(getDisabledMessage());
+      return;
+    }
+
     if (!selectedLessonClass || !selectedSubject || selectedSubject === 'All Subjects') {
       alert('Please select a timetable slot or a specific class and subject first.');
       return;

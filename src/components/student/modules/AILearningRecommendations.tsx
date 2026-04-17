@@ -7,14 +7,22 @@ import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
 import { AIRecommendationService } from "@/services/student/studentDataService";
 import { useNavigate } from "react-router";
+import { useAIFeatureEnabled } from "@/hooks/useAIFeatureEnabled";
 
 export function AILearningRecommendations() {
   const navigate = useNavigate();
+  const { isEnabled: isAIEnabled, isLoading: isAILoading } = useAIFeatureEnabled();
   const [recommendation, setRecommendation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
+    // Don't fetch if AI is disabled or still loading
+    if (!isAIEnabled || isAILoading) {
+      setLoading(false);
+      return;
+    }
+
     async function fetchRecommendation() {
       try {
         const data = await AIRecommendationService.getRecommendation();
@@ -26,7 +34,7 @@ export function AILearningRecommendations() {
       }
     }
     fetchRecommendation();
-  }, []);
+  }, [isAIEnabled, isAILoading]);
 
   if (loading) {
     return (

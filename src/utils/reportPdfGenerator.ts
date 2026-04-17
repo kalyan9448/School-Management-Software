@@ -29,6 +29,15 @@ interface ReportData {
   highlights: string[];
   teacherComments: Array<any>;
   areasOfImprovement?: Array<any>;
+  recentMarks?: Array<{
+    type: 'quiz' | 'exam';
+    subject: string;
+    title: string;
+    score: number;
+    marks: string;
+    grade: string;
+    date: string;
+  }>;
 }
 
 interface StudentInfo {
@@ -208,6 +217,43 @@ export function generateStudentReportPDF(
       });
     });
     yPos += 3;
+  }
+
+  // Recent Performance Updates (Individual Marks)
+  if (reportData.recentMarks && reportData.recentMarks.length > 0) {
+    checkPage(30);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('Recent Performance Updates', margin, yPos);
+    yPos += 6;
+
+    const marksBody = reportData.recentMarks.map((m) => [
+      m.date ? new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A',
+      m.type.toUpperCase(),
+      m.subject || '',
+      m.title || '',
+      m.marks || '',
+      m.grade || '-',
+      `${m.score || 0}%`,
+    ]);
+
+    try {
+      (doc as any).autoTable({
+        startY: yPos,
+        head: [['Date', 'Type', 'Subject', 'Topic/Exam', 'Marks', 'Grade', 'Score']],
+        body: marksBody,
+        theme: 'grid',
+        margin: { top: yPos + 5, left: margin, right: margin },
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [75, 0, 130] },
+        columnStyles: {
+          6: { fontStyle: 'bold', textColor: [75, 0, 130] },
+        },
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+    } catch (e) {
+      yPos += 20;
+    }
   }
 
   // Areas of Improvement (Monthly only)

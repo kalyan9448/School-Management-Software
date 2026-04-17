@@ -57,6 +57,7 @@ import {
   MapPin,
   ShieldCheck,
   Heart,
+  AlertTriangle,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import { jsPDF } from 'jspdf';
@@ -91,6 +92,11 @@ interface Organization {
   city?: string;
   state?: string;
   pincode?: string;
+  govLicenseId?: string;
+  gstNumber?: string;
+  registeredAddress?: string;
+  panNumber?: string;
+  registrationType?: string;
 }
 
 interface School {
@@ -126,6 +132,8 @@ interface School {
   subscriptionStart?: string;
   schoolCode?: string;
   plan?: string;
+  // AI Features Control
+  aiEnabled?: boolean;
 }
 
 interface Subscription {
@@ -253,6 +261,11 @@ export function SuperAdminDashboard() {
     state: '',
     pincode: '',
     plan: 'Basic',
+    govLicenseId: '',
+    gstNumber: '',
+    registeredAddress: '',
+    panNumber: '',
+    registrationType: 'Private School',
   });
 
   const [showCreatePlanModal, setShowCreatePlanModal] = useState(false);
@@ -283,6 +296,7 @@ export function SuperAdminDashboard() {
     maxStudents: 200,
     maxTeachers: 20,
     schoolCode: '',
+    aiEnabled: true,
   });
 
   // Subscription plan editing state
@@ -630,6 +644,11 @@ export function SuperAdminDashboard() {
       city: organizationForm.city,
       state: organizationForm.state,
       pincode: organizationForm.pincode,
+      govLicenseId: organizationForm.govLicenseId,
+      gstNumber: organizationForm.gstNumber,
+      registeredAddress: organizationForm.registeredAddress || organizationForm.address,
+      panNumber: organizationForm.panNumber,
+      registrationType: organizationForm.registrationType,
     };
     setOrganizations([...organizations, orgDetails as Organization]);
     try {
@@ -658,6 +677,11 @@ export function SuperAdminDashboard() {
       state: '',
       pincode: '',
       plan: 'Basic',
+      govLicenseId: '',
+      gstNumber: '',
+      registeredAddress: '',
+      panNumber: '',
+      registrationType: 'Private School',
     });
 
     // Navigate to organizations view
@@ -767,6 +791,7 @@ export function SuperAdminDashboard() {
       maxStudents: 200,
       maxTeachers: 20,
       schoolCode: '',
+      aiEnabled: true,
     });
 
     // Navigate to subscriptions view
@@ -1081,6 +1106,15 @@ export function SuperAdminDashboard() {
     alert(`${school.name} has been ${newStatus}`);
   };
 
+  const handleToggleAIService = (school: School) => {
+    const newVal = school.aiEnabled === false;
+    const updated: School = { ...school, aiEnabled: newVal };
+    setSchools(schools.map((s) => (s.id === school.id ? updated : s)));
+    setSelectedSchool(updated);
+    schoolService.update(school.id, { aiEnabled: newVal }).catch(err => console.error('Failed to update AI status:', err));
+    alert(`AI Features ${newVal ? 'enabled' : 'disabled'} for ${school.name}`);
+  };
+
   const handleEditSchool = () => {
     if (selectedSchool) {
       setSchoolForm({
@@ -1099,6 +1133,7 @@ export function SuperAdminDashboard() {
         maxStudents: selectedSchool.maxStudents || 200,
         maxTeachers: selectedSchool.maxTeachers || 20,
         schoolCode: selectedSchool.schoolCode || '',
+        aiEnabled: selectedSchool.aiEnabled !== false,
       });
       setIsEditingSchool(true);
     }
@@ -1150,6 +1185,7 @@ export function SuperAdminDashboard() {
       maxStudents: 200,
       maxTeachers: 20,
       schoolCode: '',
+      aiEnabled: true,
     });
   };
 
@@ -1210,10 +1246,15 @@ export function SuperAdminDashboard() {
         email: selectedOrganization.email || '',
         phone: selectedOrganization.phone || '',
         address: selectedOrganization.address || '',
-        city: '',
-        state: '',
-        pincode: '',
+        city: selectedOrganization.city || '',
+        state: selectedOrganization.state || '',
+        pincode: selectedOrganization.pincode || '',
         plan: selectedOrganization.plan || 'Basic',
+        govLicenseId: selectedOrganization.govLicenseId || '',
+        gstNumber: selectedOrganization.gstNumber || '',
+        registeredAddress: selectedOrganization.registeredAddress || '',
+        panNumber: selectedOrganization.panNumber || '',
+        registrationType: selectedOrganization.registrationType || 'Private School',
       });
       setIsEditingOrganization(true);
     }
@@ -1230,7 +1271,15 @@ export function SuperAdminDashboard() {
       email: organizationForm.email,
       phone: organizationForm.phone,
       address: organizationForm.address,
+      city: organizationForm.city,
+      state: organizationForm.state,
+      pincode: organizationForm.pincode,
       plan: organizationForm.plan,
+      govLicenseId: organizationForm.govLicenseId,
+      gstNumber: organizationForm.gstNumber,
+      registeredAddress: organizationForm.registeredAddress || organizationForm.address,
+      panNumber: organizationForm.panNumber,
+      registrationType: organizationForm.registrationType,
     };
 
     setOrganizations(organizations.map((o) => (o.id === selectedOrganization.id ? updatedOrganization : o)));
@@ -1252,6 +1301,11 @@ export function SuperAdminDashboard() {
       state: '',
       pincode: '',
       plan: 'Basic',
+      govLicenseId: '',
+      gstNumber: '',
+      registeredAddress: '',
+      panNumber: '',
+      registrationType: 'Private School',
     });
   };
 
@@ -2274,22 +2328,58 @@ export function SuperAdminDashboard() {
               </span>
             </div>
 
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-600">Students:</span>
-                <span className="text-gray-900">{school.students}</span>
+            <div className="space-y-4 mb-4">
+              <div className="py-2 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-gray-600">Students:</span>
+                  <span className="text-gray-900 font-medium">{school.students} / {school.maxStudents || '∞'}</span>
+                </div>
+                {school.maxStudents && (
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        (school.students / school.maxStudents) >= 1 ? 'bg-red-500' : (school.students / school.maxStudents) >= 0.9 ? 'bg-orange-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min((school.students / school.maxStudents) * 100, 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-600">Teachers:</span>
-                <span className="text-gray-900">{school.teachers}</span>
+              <div className="py-2 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-gray-600">Teachers:</span>
+                  <span className="text-gray-900 font-medium">{school.teachers} / {school.maxTeachers || '∞'}</span>
+                </div>
+                {school.maxTeachers && (
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        (school.teachers / school.maxTeachers) >= 1 ? 'bg-red-500' : (school.teachers / school.maxTeachers) >= 0.9 ? 'bg-orange-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min((school.teachers / school.maxTeachers) * 100, 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-600">Storage:</span>
-                <span className="text-gray-900">{school.storage}</span>
+              <div className="py-2 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-gray-600">Storage:</span>
+                  <span className="text-gray-900 font-medium">{school.storage} / {school.maxStorage || '∞'}</span>
+                </div>
+                {school.maxStorage && (
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        (parseFloat(school.storage) / parseFloat(school.maxStorage)) >= 1 ? 'bg-red-500' : (parseFloat(school.storage) / parseFloat(school.maxStorage)) >= 0.9 ? 'bg-orange-500' : 'bg-purple-500'
+                      }`}
+                      style={{ width: `${Math.min((parseFloat(school.storage) / parseFloat(school.maxStorage)) * 100, 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-gray-600">Subscription Ends:</span>
-                <span className="text-gray-900">{school.subscriptionEnd}</span>
+                <span className="text-gray-600 text-sm">Subscription Ends:</span>
+                <span className="text-gray-900 text-sm">{school.subscriptionEnd}</span>
               </div>
             </div>
 
@@ -4072,6 +4162,76 @@ export function SuperAdminDashboard() {
         </div>
       </div>
 
+      {/* Compliance & Legal Details */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <h3 className="text-gray-900 mb-6">Compliance & Legal Details</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Government License ID */}
+          <div>
+            <label className="block text-gray-700 mb-2">Government License ID</label>
+            <input
+              type="text"
+              value={organizationForm.govLicenseId}
+              onChange={(e) => setOrganizationForm({ ...organizationForm, govLicenseId: e.target.value })}
+              placeholder="Enter license ID"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* GST Number */}
+          <div>
+            <label className="block text-gray-700 mb-2">GST Number</label>
+            <input
+              type="text"
+              value={organizationForm.gstNumber}
+              onChange={(e) => setOrganizationForm({ ...organizationForm, gstNumber: e.target.value.toUpperCase() })}
+              placeholder="e.g., 22AAAAA0000A1Z5"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Registration Type */}
+          <div>
+            <label className="block text-gray-700 mb-2">Registration Type</label>
+            <select
+              value={organizationForm.registrationType}
+              onChange={(e) => setOrganizationForm({ ...organizationForm, registrationType: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="Private School">Private School</option>
+              <option value="Government School">Government School</option>
+              <option value="Trust / NGO">Trust / NGO</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          {/* PAN Number */}
+          <div>
+            <label className="block text-gray-700 mb-2">PAN Number (Optional)</label>
+            <input
+              type="text"
+              value={organizationForm.panNumber}
+              onChange={(e) => setOrganizationForm({ ...organizationForm, panNumber: e.target.value.toUpperCase() })}
+              placeholder="e.g., ABCDE1234F"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Registered Address */}
+          <div className="md:col-span-2">
+            <label className="block text-gray-700 mb-2">Registered Address</label>
+            <textarea
+              value={organizationForm.registeredAddress}
+              onChange={(e) => setOrganizationForm({ ...organizationForm, registeredAddress: e.target.value })}
+              rows={3}
+              placeholder="Enter legally registered address (defaults to primary address if empty)"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            ></textarea>
+          </div>
+        </div>
+      </div>
+
       {/* Plan Details */}
       <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
         <h3 className="text-gray-900 mb-4 flex items-center gap-2">
@@ -4157,6 +4317,16 @@ export function SuperAdminDashboard() {
       teachers: selectedSchool.maxTeachers ? Math.round((schoolStats.activeTeachers / selectedSchool.maxTeachers) * 100) : 0,
       storage: selectedSchool.maxStorage ? Math.round((parseFloat(selectedSchool.storage) / parseFloat(selectedSchool.maxStorage)) * 100) : 0,
     };
+
+    const alerts = [];
+    if (usagePercentage.students >= 100) alerts.push({ type: 'error', message: `Critical: Student limit reached (${schoolStats.activeStudents}/${selectedSchool.maxStudents})` });
+    else if (usagePercentage.students >= 90) alerts.push({ type: 'warning', message: `Warning: Nearing student limit (${schoolStats.activeStudents}/${selectedSchool.maxStudents})` });
+
+    if (usagePercentage.teachers >= 100) alerts.push({ type: 'error', message: `Critical: Teacher limit reached (${schoolStats.activeTeachers}/${selectedSchool.maxTeachers})` });
+    else if (usagePercentage.teachers >= 90) alerts.push({ type: 'warning', message: `Warning: Nearing teacher limit (${schoolStats.activeTeachers}/${selectedSchool.maxTeachers})` });
+
+    if (usagePercentage.storage >= 100) alerts.push({ type: 'error', message: 'Critical: Storage limit reached' });
+    else if (usagePercentage.storage >= 90) alerts.push({ type: 'warning', message: 'Warning: Nearing storage limit' });
 
     return (
       <div className="space-y-6">
@@ -4404,6 +4574,29 @@ export function SuperAdminDashboard() {
           </span>
         </div>
 
+        {/* Usage Alerts */}
+        {alerts.length > 0 && (
+          <div className="space-y-3">
+            {alerts.map((alert, idx) => (
+              <div 
+                key={idx} 
+                className={`p-4 rounded-lg border flex items-center gap-3 ${
+                  alert.type === 'error' 
+                    ? 'bg-red-50 border-red-200 text-red-700' 
+                    : 'bg-orange-50 border-orange-200 text-orange-700'
+                }`}
+              >
+                {alert.type === 'error' ? (
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                )}
+                <span className="font-medium">{alert.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Basic Information */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-gray-900 mb-6 flex items-center gap-2">
@@ -4564,7 +4757,7 @@ export function SuperAdminDashboard() {
             <Activity className="w-5 h-5 text-purple-600" />
             Active Summary
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
               <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Students</p>
@@ -4580,6 +4773,17 @@ export function SuperAdminDashboard() {
               <p className="text-gray-600 text-sm mb-1">Active Parents</p>
               <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeParents}</p>
             </div>
+            <div className={`text-center p-4 rounded-lg ${
+              selectedSchool.aiEnabled !== false
+                ? 'bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200'
+                : 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200'
+            }`}>
+              <Zap className={`w-8 h-8 mx-auto mb-2 ${selectedSchool.aiEnabled !== false ? 'text-purple-600' : 'text-gray-400'}`} />
+              <p className="text-gray-600 text-sm mb-1">AI Features</p>
+              <p className={`text-lg font-bold ${selectedSchool.aiEnabled !== false ? 'text-green-600' : 'text-red-600'}`}>
+                {selectedSchool.aiEnabled !== false ? 'Enabled' : 'Disabled'}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -4589,10 +4793,10 @@ export function SuperAdminDashboard() {
             <Settings className="w-5 h-5 text-purple-600" />
             Actions
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex flex-wrap gap-4">
             <button
               onClick={handleEditSchool}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Edit className="w-4 h-4" />
               Edit Details
@@ -4601,7 +4805,7 @@ export function SuperAdminDashboard() {
             {selectedSchool.status === 'active' ? (
               <button
                 onClick={() => handleToggleSchoolStatus(selectedSchool)}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                className="flex-1 min-w-[200px] flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
               >
                 <Pause className="w-4 h-4" />
                 Suspend School
@@ -4609,51 +4813,60 @@ export function SuperAdminDashboard() {
             ) : (
               <button
                 onClick={() => handleToggleSchoolStatus(selectedSchool)}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-1 min-w-[200px] flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
               >
                 <Play className="w-4 h-4" />
                 Activate School
               </button>
             )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-4">
-              <button
-                onClick={() => handleResetCredentials(selectedSchool)}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                <Key className="w-4 h-4" />
-                Reset Credentials
-              </button>
+            <button
+              onClick={() => handleToggleAIService(selectedSchool)}
+              className={`flex-1 min-w-[200px] flex items-center justify-center gap-2 px-4 py-3 text-white rounded-lg shadow-sm transition-all ${
+                selectedSchool.aiEnabled !== false
+                  ? 'bg-orange-600 hover:bg-orange-700'
+                  : 'bg-purple-600 hover:bg-purple-700'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              <span>{selectedSchool.aiEnabled !== false ? 'Disable AI' : 'Enable AI'}</span>
+            </button>
 
-              <button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete ${selectedSchool.name}? This action cannot be undone.`)) {
-                    const orgId = selectedSchool.organizationId;
-                    setSchools(schools.filter(s => s.id !== selectedSchool.id));
-                    // Delete from Firestore
-                    schoolService.delete(selectedSchool.id).catch(err =>
-                      console.error('Failed to delete school from Firestore:', err)
-                    );
-                    // Decrement schoolsCount on parent organization
-                    if (orgId) {
-                      const newCount = Math.max(0, schools.filter(s => s.organizationId === orgId).length - 1);
-                      organizationService.update(orgId, { schoolsCount: newCount }).catch(() => {});
-                      setOrganizations(prev => prev.map(o =>
-                        o.id === orgId ? { ...o, schoolsCount: newCount } : o
-                      ));
-                    }
-                    setCurrentView('schools');
-                    setSelectedSchool(null);
-                    alert(`${selectedSchool.name} has been deleted.`);
+            <button
+              onClick={() => handleResetCredentials(selectedSchool)}
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <Key className="w-4 h-4" />
+              Reset Credentials
+            </button>
+
+            <button
+              onClick={() => {
+                if (confirm(`Are you sure you want to delete ${selectedSchool.name}? This action cannot be undone.`)) {
+                  const orgId = selectedSchool.organizationId;
+                  setSchools(schools.filter(s => s.id !== selectedSchool.id));
+                  // Delete from Firestore
+                  schoolService.delete(selectedSchool.id).catch(err =>
+                    console.error('Failed to delete school from Firestore:', err)
+                  );
+                  // Decrement schoolsCount on parent organization
+                  if (orgId) {
+                    const newCount = Math.max(0, schools.filter(s => s.organizationId === orgId).length - 1);
+                    organizationService.update(orgId, { schoolsCount: newCount }).catch(() => {});
+                    setOrganizations(prev => prev.map(o =>
+                      o.id === orgId ? { ...o, schoolsCount: newCount } : o
+                    ));
                   }
-                }}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete School
-              </button>
-            </div>
+                  setCurrentView('schools');
+                  setSelectedSchool(null);
+                  alert(`${selectedSchool.name} has been deleted.`);
+                }
+              }}
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete School
+            </button>
           </div>
         </div>
       </div>
@@ -4805,6 +5018,66 @@ export function SuperAdminDashboard() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                       placeholder="e.g., 400001"
                     />
+                  </div>
+                </div>
+
+                {/* Compliance & Legal Details */}
+                <div className="pt-4 border-t border-gray-100">
+                  <h4 className="text-gray-900 font-medium mb-4">Compliance & Legal Details</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-2">Government License ID</label>
+                      <input
+                        type="text"
+                        value={organizationForm.govLicenseId}
+                        onChange={(e) => setOrganizationForm({ ...organizationForm, govLicenseId: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="Enter license ID"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-2">GST Number</label>
+                      <input
+                        type="text"
+                        value={organizationForm.gstNumber}
+                        onChange={(e) => setOrganizationForm({ ...organizationForm, gstNumber: e.target.value.toUpperCase() })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="GST Number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-2">Registration Type</label>
+                      <select
+                        value={organizationForm.registrationType}
+                        onChange={(e) => setOrganizationForm({ ...organizationForm, registrationType: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="Private School">Private School</option>
+                        <option value="Government School">Government School</option>
+                        <option value="Trust / NGO">Trust / NGO</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-2">PAN Number (Optional)</label>
+                      <input
+                        type="text"
+                        value={organizationForm.panNumber}
+                        onChange={(e) => setOrganizationForm({ ...organizationForm, panNumber: e.target.value.toUpperCase() })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="PAN Number"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-gray-600 mb-2">Registered Address</label>
+                      <textarea
+                        value={organizationForm.registeredAddress}
+                        onChange={(e) => setOrganizationForm({ ...organizationForm, registeredAddress: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        rows={2}
+                        placeholder="Enter legally registered address"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -5401,7 +5674,38 @@ export function SuperAdminDashboard() {
           )}
         </div>
 
-        {/* Schools Under Organization */}
+        {/* Compliance & Legal Details */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-gray-900 mb-6 flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-purple-600" />
+            Compliance & Legal Details
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <span className="text-gray-600">Registration Type</span>
+              <span className="text-gray-900 font-medium">{selectedOrganization.registrationType || 'N/A'}</span>
+            </div>
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <span className="text-gray-600">Government License ID</span>
+              <span className="text-gray-900 font-medium">{selectedOrganization.govLicenseId || 'N/A'}</span>
+            </div>
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <span className="text-gray-600">GST Number</span>
+              <span className="text-gray-900 font-medium">{selectedOrganization.gstNumber || 'N/A'}</span>
+            </div>
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <span className="text-gray-600">PAN Number</span>
+              <span className="text-gray-900 font-medium">{selectedOrganization.panNumber || 'N/A'}</span>
+            </div>
+            {selectedOrganization.registeredAddress && (
+              <div className="md:col-span-2 p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-600 block mb-2">Registered Address</span>
+                <span className="text-gray-900">{selectedOrganization.registeredAddress}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-gray-900 mb-6 flex items-center gap-2">
             <School className="w-5 h-5 text-purple-600" />
@@ -5415,16 +5719,43 @@ export function SuperAdminDashboard() {
                     <th className="px-4 py-3 text-left text-gray-600">School Name</th>
                     <th className="px-4 py-3 text-left text-gray-600">Students</th>
                     <th className="px-4 py-3 text-left text-gray-600">Teachers</th>
+                    <th className="px-4 py-3 text-left text-gray-600">Usage</th>
                     <th className="px-4 py-3 text-left text-gray-600">Status</th>
                     <th className="px-4 py-3 text-left text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {orgSchools.map((school) => (
-                    <tr key={school.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-900">{school.name}</td>
-                      <td className="px-4 py-3 text-gray-900">{school.students}</td>
-                      <td className="px-4 py-3 text-gray-900">{school.teachers}</td>
+                  {orgSchools.map((school) => {
+                    const studentUsage = school.maxStudents ? (school.students / school.maxStudents) * 100 : 0;
+                    const teacherUsage = school.maxTeachers ? (school.teachers / school.maxTeachers) * 100 : 0;
+                    const isCritical = studentUsage >= 100 || teacherUsage >= 100;
+                    const isWarning = studentUsage >= 90 || teacherUsage >= 90;
+
+                    return (
+                      <tr key={school.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-900">{school.name}</td>
+                        <td className="px-4 py-3 text-gray-900">{school.students}</td>
+                        <td className="px-4 py-3 text-gray-900">{school.teachers}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {isCritical ? (
+                              <span title="Limit Reached">
+                                <AlertCircle className="w-4 h-4 text-red-500" />
+                              </span>
+                            ) : isWarning ? (
+                              <span title="Nearing Limit">
+                                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                              </span>
+                            ) : (
+                              <span title="Healthy Usage">
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-600">
+                              {Math.round(Math.max(studentUsage, teacherUsage))}%
+                            </span>
+                          </div>
+                        </td>
                       <td className="px-4 py-3">
                         <span
                           className={`px-3 py-1 rounded-full text-sm ${school.status === 'active'
@@ -5445,8 +5776,9 @@ export function SuperAdminDashboard() {
                           View Details
                         </button>
                       </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -13,10 +13,12 @@ import {
   MessageSquare,
   Send,
   RefreshCw,
+  Lock,
 } from 'lucide-react';
 import { generateTopicSpecificContent } from '../utils/aiTeachingContent';
 import { pdfService } from '../utils/pdfService';
 import { aiService } from '../services/aiService';
+import { useAIFeatureEnabled } from '../hooks/useAIFeatureEnabled';
 import { TeacherEvaluationQuestion, TeacherEvaluationResult } from '../types';
 
 interface TeachingFlowScreenProps {
@@ -30,6 +32,7 @@ export function TeachingFlowScreen({
   onBack,
   onMarkAttendance,
 }: TeachingFlowScreenProps) {
+  const { isEnabled: isAIEnabled, isLoading: isAILoading, getDisabledMessage } = useAIFeatureEnabled();
   const [evaluationQuestions, setEvaluationQuestions] = React.useState<TeacherEvaluationQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
   const [teacherAnswer, setTeacherAnswer] = React.useState('');
@@ -52,6 +55,14 @@ export function TeachingFlowScreen({
 
   React.useEffect(() => {
     async function fetchQuestions() {
+      if (isAILoading) {
+        return; // Wait for AI check to complete
+      }
+
+      if (!isAIEnabled) {
+        return;
+      }
+      
       setIsLoadingQuestions(true);
       try {
         const questions = await aiService.generateTeacherKnowledgeQuestions(lesson.subject, lesson.topic);
@@ -63,9 +74,14 @@ export function TeachingFlowScreen({
       }
     }
     fetchQuestions();
-  }, [lesson.topic, lesson.subject]);
+  }, [lesson.topic, lesson.subject, isAIEnabled, isAILoading]);
 
   const handleEvaluate = async () => {
+    if (!isAIEnabled) {
+      alert(getDisabledMessage());
+      return;
+    }
+
     if (!teacherAnswer.trim()) return;
     setIsEvaluating(true);
     try {

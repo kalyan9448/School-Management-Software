@@ -43,7 +43,8 @@ export function TeacherMarksUpload() {
   const [examType, setExamType] = useState<'Unit Test' | 'Mid' | 'Final'>('Unit Test');
 
   // Data state
-  const [classes, setClasses] = useState<Array<{ id: string; class: string }>>([]);
+  const [classes, setClasses] = useState<string[]>([]); // Store only unique names
+  const [allClassesData, setAllClassesData] = useState<any[]>([]); // Store raw results
   const [sections, setSections] = useState<string[]>([]);
   const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -61,7 +62,11 @@ export function TeacherMarksUpload() {
     const loadClasses = async () => {
       try {
         const allClasses = await classService.getAll();
-        setClasses(allClasses.map(c => ({ id: c.id, class: c.class || `Class ${c.id}` })));
+        setAllClassesData(allClasses);
+        
+        // Extract unique class names
+        const uniqueClassNames = Array.from(new Set(allClasses.map(c => c.className))).sort();
+        setClasses(uniqueClassNames);
       } catch (error) {
         console.error('Error loading classes:', error);
         setErrorMessage('Failed to load classes');
@@ -73,12 +78,19 @@ export function TeacherMarksUpload() {
   // Load sections when class is selected
   useEffect(() => {
     if (selectedClass) {
-      // Extract unique sections for the selected class
-      const uniqueSections = ['A', 'B', 'C', 'D', 'E']; // Common sections
-      setSections(uniqueSections);
+      // Find all sections available for this class name
+      const availableSections = allClassesData
+        .filter(c => c.className === selectedClass)
+        .map(c => c.section)
+        .sort();
+      
+      setSections(availableSections);
+      setSelectedSection('');
+    } else {
+      setSections([]);
       setSelectedSection('');
     }
-  }, [selectedClass]);
+  }, [selectedClass, allClassesData]);
 
   // Load subjects
   useEffect(() => {
@@ -104,10 +116,7 @@ export function TeacherMarksUpload() {
 
       try {
         setLoading(true);
-        const classData = classes.find(c => c.id === selectedClass);
-        if (!classData) return;
-
-        const classStudents = await studentService.getByClass(classData.class, selectedSection);
+        const classStudents = await studentService.getByClass(selectedClass, selectedSection);
         setStudents(classStudents);
 
         // Initialize marks data with empty marks
@@ -130,7 +139,7 @@ export function TeacherMarksUpload() {
     };
 
     loadStudents();
-  }, [selectedClass, selectedSection, classes]);
+  }, [selectedClass, selectedSection]);
 
   // Update marks for a student
   const updateMarks = (index: number, field: 'marksObtained' | 'totalMarks', value: string) => {
@@ -161,14 +170,16 @@ export function TeacherMarksUpload() {
       setErrorMessage('');
       setSuccessMessage('');
 
-      const classData = classes.find(c => c.id === selectedClass);
+      const classData = allClassesData.find(
+        c => c.className === selectedClass && c.section === selectedSection
+      );
       if (!classData) throw new Error('Selected class not found');
 
       // Create exam scores for each student
       const scores: Partial<ExamScore>[] = marksData.map(row => ({
-        school_id: schoolId,
+        school_id: schoolId || undefined,
         studentId: row.studentId,
-        classId: selectedClass,
+        classId: classData.id,
         sectionId: selectedSection,
         subjectId: selectedSubject,
         examType: examType,
@@ -288,8 +299,8 @@ export function TeacherMarksUpload() {
           >
             <option value="">Select Class</option>
             {classes.map(cls => (
-              <option key={cls.id} value={cls.id}>
-                {cls.class}
+              <option key={cls} value={cls}>
+                {cls}
               </option>
             ))}
           </select>
