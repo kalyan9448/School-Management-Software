@@ -61,7 +61,7 @@ import {
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 type ViewType =
   | 'dashboard'
@@ -1730,7 +1730,7 @@ export function SuperAdminDashboard() {
           tableRows.push(rowData);
         });
         
-        (doc as any).autoTable({
+        autoTable(doc, {
           head: [tableColumn],
           body: tableRows,
           startY: 20,
@@ -1788,7 +1788,7 @@ export function SuperAdminDashboard() {
         ]
       ];
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
         startY: 80,
@@ -1797,7 +1797,7 @@ export function SuperAdminDashboard() {
       });
 
       // Footer
-      const finalY = (doc as any).lastAutoTable.cursor.y + 20;
+      const finalY = (doc as any).lastAutoTable.finalY + 20;
       doc.setFontSize(14);
       doc.text(`Total Amount: Rs.${(invoice.amount || 0).toLocaleString()}`, 14, finalY);
 

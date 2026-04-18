@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { LessonLog } from './centralDataService';
 
 /**
@@ -109,7 +109,7 @@ export const pdfService = {
       doc.text('EXECUTION STEPS', 20, currentY);
       currentY += 4;
       
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: currentY,
         head: [['#', 'Step', 'Description']],
         body: aiPlan.stepByStepPlan.map((step, index) => [

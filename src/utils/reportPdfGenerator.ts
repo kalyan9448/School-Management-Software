@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface ReportData {
   period: string;
@@ -112,7 +112,7 @@ export function generateStudentReportPDF(
   yPos += 6;
 
   try {
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Total Days', 'Present', 'Absent', 'Late', 'Percentage']],
       body: [[
@@ -142,7 +142,7 @@ export function generateStudentReportPDF(
   yPos += 6;
 
   try {
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Assigned', 'Completed', 'On Time', 'Late', 'Pending', 'Rate']],
       body: [[
@@ -181,7 +181,7 @@ export function generateStudentReportPDF(
     ]);
 
     try {
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: yPos,
         head: [['Subject', 'Score', 'Quizzes', 'Trend']],
         body: perfBody,
@@ -238,7 +238,7 @@ export function generateStudentReportPDF(
     ]);
 
     try {
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: yPos,
         head: [['Date', 'Type', 'Subject', 'Topic/Exam', 'Marks', 'Grade', 'Score']],
         body: marksBody,
@@ -271,7 +271,7 @@ export function generateStudentReportPDF(
     ]);
 
     try {
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: yPos,
         head: [['Subject', 'Score', 'Actions']],
         body: improvBody,
