@@ -699,6 +699,37 @@ service cloud.firestore {
       allow update: if isSuperAdmin() || (isAdminOrAbove() && canUpdateSchoolData());
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
+    
+    // =========================================================================
+    // PLANS  (platform-level -- read: any auth | write: superadmin only)
+    // =========================================================================
+
+    match /plans/{planId} {
+      allow read:                   if isSignedIn();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // SUPPORT TICKETS  (School Admins manage their own; SuperAdmin sees all)
+    // =========================================================================
+
+    match /support_tickets/{ticketId} {
+      allow read: if isSuperAdmin() || (isSignedIn() && resource.data.school_id == userSchoolId());
+      
+      // School Admins can create tickets for their own school
+      allow create: if isSignedIn() 
+          && request.resource.data.school_id == userSchoolId()
+          && request.resource.data.role == "admin";
+
+      // SuperAdmin can update anything; School Admins can ONLY add responses to their own tickets
+      allow update: if isSuperAdmin() 
+          || (isSignedIn() 
+              && resource.data.school_id == userSchoolId()
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responses', 'updatedAt'])
+             );
+             
+      allow delete: if isSuperAdmin();
+    }
 
     // =========================================================================
     // CATCH-ALL DENY

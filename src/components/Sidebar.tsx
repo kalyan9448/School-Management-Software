@@ -59,6 +59,7 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
     { id: 'monitoring', icon: BarChart3, label: 'Monitoring', roles: ['admin'] },
     { id: 'communication', icon: MessageSquare, label: 'Announcement', roles: ['admin'] },
     { id: 'reports-approval', icon: FileCheck, label: 'Reports & Analytics', roles: ['admin'] },
+    { id: 'support', icon: HelpCircle, label: 'Support', roles: ['admin'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item =>

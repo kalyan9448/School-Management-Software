@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { INDIAN_STATES, STATE_CITY_MAPPING } from '../data/locationData';
-import { schoolService, organizationService, announcementService, statisticsService } from '../utils/centralDataService';
+import { schoolService, organizationService, announcementService, statisticsService, planService, ticketService, type SubscriptionPlan, type SupportTicket, type TicketResponse } from '../utils/centralDataService';
 import {
   Building2,
   Building,
@@ -72,6 +72,7 @@ type ViewType =
   | 'user-recovery'
   | 'monitoring'
   | 'announcements'
+  | 'tickets'
   | 'create-organization'
   | 'create-school'
   | 'school-details'
@@ -279,6 +280,10 @@ export function SuperAdminDashboard() {
     features: [] as string[],
   });
   const [newFeature, setNewFeature] = useState('');
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketReply, setTicketReply] = useState('');
+  const [isUpdatingTicket, setIsUpdatingTicket] = useState(false);
 
   const [schoolForm, setSchoolForm] = useState({
     name: '',
@@ -301,37 +306,7 @@ export function SuperAdminDashboard() {
 
   // Subscription plan editing state
   const [isEditingPlans, setIsEditingPlans] = useState(false);
-  const [planDetails, setPlanDetails] = useState<Record<string, any>>(() => {
-    return {
-      Basic: {
-        name: 'Basic',
-        description: 'For small schools',
-        price: 3000,
-        maxStudents: 200,
-        maxTeachers: 20,
-        storage: '20 GB',
-        features: ['Up to 200 students', '20 teachers', '20 GB storage', 'Email support'],
-      },
-      Professional: {
-        name: 'Professional',
-        description: 'For growing schools',
-        price: 8000,
-        maxStudents: 500,
-        maxTeachers: 50,
-        storage: '50 GB',
-        features: ['Up to 500 students', '50 teachers', '50 GB storage', 'WhatsApp integration', 'Priority support'],
-      },
-      Enterprise: {
-        name: 'Enterprise',
-        description: 'For large institutions',
-        price: 15000,
-        maxStudents: 1000,
-        maxTeachers: 100,
-        storage: '100 GB',
-        features: ['Up to 1000 students', '100 teachers', '100 GB storage', 'All integrations', 'Dedicated support'],
-      },
-    };
-  });
+  const [planDetails, setPlanDetails] = useState<Record<string, SubscriptionPlan>>({});
   const [editingFeatureInput, setEditingFeatureInput] = useState<Record<string, string>>({});
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -375,36 +350,46 @@ export function SuperAdminDashboard() {
   const [schools, setSchools] = useState<School[]>([]);
 
   // Subscriptions — derived from Firestore schools
-  const subscriptions = useMemo<Subscription[]>(() => schools.map(s => ({
-    id: s.id,
-    schoolName: s.name,
-    plan: s.plan || 'Basic',
-    status: s.status === 'active' ? 'active' : s.status === 'archived' ? 'expired' : ('trial' as 'active' | 'expired' | 'trial'),
-    students: s.activeStudents || s.students || 0,
-    maxStudents: s.maxStudents || 200,
-    teachers: s.activeTeachers || s.teachers || 0,
-    maxTeachers: s.maxTeachers || 20,
-    storage: s.storage || '0 GB',
-    maxStorage: s.plan === 'Enterprise' ? '100 GB' : s.plan === 'Professional' ? '50 GB' : '20 GB',
-    monthlyFee: s.plan === 'Enterprise' ? 15000 : s.plan === 'Professional' ? 8000 : 3000,
-    startDate: s.subscriptionStart || '',
-    endDate: s.subscriptionEnd || '',
-  })), [schools]);
+  const subscriptions = useMemo<Subscription[]>(() => schools.map(s => {
+    const planName = s.plan || 'Basic';
+    const planInfo = planDetails[planName] || { price: 3000, maxStudents: 200, maxTeachers: 20, storage: '20 GB' };
+    
+    return {
+      id: s.id,
+      schoolName: s.name,
+      plan: planName,
+      status: s.status === 'active' ? 'active' : s.status === 'archived' ? 'expired' : ('trial' as 'active' | 'expired' | 'trial'),
+      students: s.activeStudents || s.students || 0,
+      maxStudents: s.maxStudents || planInfo.maxStudents,
+      teachers: s.activeTeachers || s.teachers || 0,
+      maxTeachers: s.maxTeachers || planInfo.maxTeachers,
+      storage: s.storage || '0 GB',
+      maxStorage: planInfo.storage,
+      monthlyFee: planInfo.price,
+      startDate: s.subscriptionStart || '',
+      endDate: s.subscriptionEnd || '',
+    };
+  }), [schools, planDetails]);
 
   // Billing records — derived from Firestore schools
-  const billingRecords = useMemo<BillingRecord[]>(() => schools.map((s, index) => ({
-    id: `INV-${s.id}`,
-    schoolName: s.name,
-    plan: (s.plan || 'Basic') as 'Basic' | 'Professional' | 'Enterprise',
-    billingCycle: 'Monthly' as const,
-    activeUsers: (s.activeStudents || s.students || 0) + (s.activeTeachers || s.teachers || 0),
-    userLimit: s.maxStudents || 200,
-    nextBillingDate: s.subscriptionEnd || '',
-    amount: s.plan === 'Enterprise' ? 15000 : s.plan === 'Professional' ? 8000 : 3000,
-    paymentStatus: (s.status === 'active' ? 'Paid' : 'Overdue') as 'Paid' | 'Pending' | 'Overdue',
-    invoiceNumber: `INV-${new Date().getFullYear()}-${String(index + 1).padStart(3, '0')}`,
-    lastPaymentDate: s.subscriptionStart || '',
-  })), [schools]);
+  const billingRecords = useMemo<BillingRecord[]>(() => schools.map((s, index) => {
+    const planName = (s.plan || 'Basic') as 'Basic' | 'Professional' | 'Enterprise';
+    const planInfo = planDetails[planName] || { price: 3000, maxStudents: 200 };
+
+    return {
+      id: `INV-${s.id}`,
+      schoolName: s.name,
+      plan: planName,
+      billingCycle: 'Monthly' as const,
+      activeUsers: (s.activeStudents || s.students || 0) + (s.activeTeachers || s.teachers || 0),
+      userLimit: s.maxStudents || planInfo.maxStudents,
+      nextBillingDate: s.subscriptionEnd || '',
+      amount: planInfo.price,
+      paymentStatus: (s.status === 'active' ? 'Paid' : 'Overdue') as 'Paid' | 'Pending' | 'Overdue',
+      invoiceNumber: `INV-${new Date().getFullYear()}-${String(index + 1).padStart(3, '0')}`,
+      lastPaymentDate: s.subscriptionStart || '',
+    };
+  }), [schools, planDetails]);
 
   // Load data from Firestore once user auth is ready
   useEffect(() => {
@@ -469,6 +454,31 @@ export function SuperAdminDashboard() {
       let firestoreSchools: any[] = [];
       let firestoreOrganizations: any[] = [];
       let firestoreAnnouncements: any[] = [];
+      let firestorePlans: SubscriptionPlan[] = [];
+
+      try {
+        firestorePlans = await fetchWithRetry(() => planService.getAll());
+        // Auto-seed if empty
+        if (firestorePlans.length === 0) {
+          const defaultPlans = [
+            { id: 'Basic', name: 'Basic', description: 'For small schools', price: 3000, maxStudents: 200, maxTeachers: 20, storage: '20 GB', features: ['Up to 200 students', '20 teachers', '20 GB storage', 'Email support'], isActive: true },
+            { id: 'Professional', name: 'Professional', description: 'For growing schools', price: 8000, maxStudents: 500, maxTeachers: 50, storage: '50 GB', features: ['Up to 500 students', '50 teachers', '50 GB storage', 'WhatsApp integration', 'Priority support'], isActive: true },
+            { id: 'Enterprise', name: 'Enterprise', description: 'For large institutions', price: 15000, maxStudents: 1000, maxTeachers: 100, storage: '100 GB', features: ['Up to 1000 students', '100 teachers', '100 GB storage', 'All integrations', 'Dedicated support'], isActive: true }
+          ];
+          for (const p of defaultPlans) {
+            await planService.create(p);
+          }
+          firestorePlans = await planService.getAll();
+        }
+        
+        // Convert to record for easy lookup
+        const planRecord: Record<string, SubscriptionPlan> = {};
+        firestorePlans.forEach(p => { planRecord[p.name || p.id] = p; });
+        setPlanDetails(planRecord);
+      } catch (err: any) {
+        console.error('Failed to load plans:', err);
+        errors.push('Plans: ' + (err?.message || 'Failed to load'));
+      }
 
       try {
         firestoreSchools = await fetchWithRetry(() => schoolService.getAll());
@@ -489,6 +499,14 @@ export function SuperAdminDashboard() {
       } catch (err: any) {
         console.error('Failed to load announcements:', err);
         errors.push('Announcements: ' + (err?.message || 'Failed to load'));
+      }
+
+      try {
+        const firestoreTickets = await fetchWithRetry(() => ticketService.getAll());
+        setTickets(firestoreTickets);
+      } catch (err: any) {
+        console.error('Failed to load tickets:', err);
+        errors.push('Tickets: ' + (err?.message || 'Failed to load'));
       }
 
       try {
@@ -803,9 +821,19 @@ export function SuperAdminDashboard() {
     setIsEditingPlans(!isEditingPlans);
   };
 
-  const handleSavePlans = () => {
-    setIsEditingPlans(false);
-    alert('Plan updates saved successfully!');
+  const handleSavePlans = async () => {
+    try {
+      // Save all currently edited plans to Firestore
+      const updatePromises = Object.entries(planDetails).map(([name, plan]) => 
+        planService.update(plan.id || name, plan)
+      );
+      await Promise.all(updatePromises);
+      setIsEditingPlans(false);
+      alert('Plan updates saved successfully!');
+    } catch (err: any) {
+      console.error('Failed to save plans:', err);
+      alert(`Failed to save plans: ${err?.message || 'Unknown error'}`);
+    }
   };
 
   const handleCancelEditPlans = () => {
@@ -860,7 +888,7 @@ export function SuperAdminDashboard() {
     }));
   };
 
-  const handleCreatePlan = () => {
+  const handleCreatePlan = async () => {
     if (!newPlanForm.name || !newPlanForm.description || newPlanForm.price <= 0) {
       alert('Please fill in all required fields');
       return;
@@ -872,20 +900,42 @@ export function SuperAdminDashboard() {
       `${newPlanForm.storage} storage`,
     ];
 
-    const updatedPlans = {
-      ...planDetails,
-      [newPlanForm.name]: {
-        ...newPlanForm,
-        features: [...limitFeatures, ...newPlanForm.features],
-        price: Number(newPlanForm.price),
-        maxStudents: Number(newPlanForm.maxStudents),
-        maxTeachers: Number(newPlanForm.maxTeachers),
-      },
+    const planData: Omit<SubscriptionPlan, 'id'> & { id: string } = {
+      id: newPlanForm.name,
+      name: newPlanForm.name,
+      description: newPlanForm.description,
+      features: [...limitFeatures, ...newPlanForm.features],
+      price: Number(newPlanForm.price),
+      maxStudents: Number(newPlanForm.maxStudents),
+      maxTeachers: Number(newPlanForm.maxTeachers),
+      storage: newPlanForm.storage,
+      isActive: true
     };
 
-    setPlanDetails(updatedPlans);
-    setShowCreatePlanModal(false);
-    alert(`✅ Plan "${newPlanForm.name}" created successfully!`);
+    try {
+      await planService.create(planData);
+      const updatedPlans = {
+        ...planDetails,
+        [newPlanForm.name]: { ...planData, id: newPlanForm.name } as SubscriptionPlan,
+      };
+      setPlanDetails(updatedPlans);
+      setShowCreatePlanModal(false);
+      alert(`✅ Plan "${newPlanForm.name}" created successfully!`);
+      
+      // Reset form
+      setNewPlanForm({
+        name: '',
+        description: '',
+        price: 0,
+        maxStudents: 200,
+        maxTeachers: 20,
+        storage: '20 GB',
+        features: [],
+      });
+    } catch (err: any) {
+      console.error('Failed to create plan:', err);
+      alert(`Failed to create plan: ${err?.message || 'Unknown error'}`);
+    }
   };
 
   const handleAddFeature = () => {
@@ -6163,6 +6213,177 @@ export function SuperAdminDashboard() {
     </div>
   );
 
+  const renderTickets = () => (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Support Tickets</h2>
+          <p className="text-gray-500">Manage and respond to support requests from all schools.</p>
+        </div>
+      </div>
+
+      <div className="flex gap-6 h-[calc(100vh-200px)]">
+        {/* Ticket List */}
+        <div className="w-1/3 bg-white rounded-xl shadow-md overflow-hidden flex flex-col">
+          <div className="p-4 border-b">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search tickets..."
+                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {tickets.length === 0 ? (
+              <div className="p-8 text-center text-gray-500 italic">No tickets found</div>
+            ) : (
+              tickets.map(ticket => (
+                <button
+                  key={ticket.id}
+                  onClick={() => setSelectedTicket(ticket)}
+                  className={`w-full p-4 text-left border-b hover:bg-gray-50 transition-colors ${selectedTicket?.id === ticket.id ? 'bg-purple-50' : ''}`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-bold text-gray-900 truncate max-w-[120px]">{ticket.schoolName}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                      ticket.status === 'Open' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                      ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                      ticket.status === 'Resolved' ? 'bg-green-100 text-green-700 border-green-200' :
+                      'bg-gray-100 text-gray-700 border-gray-200'
+                    }`}>
+                      {ticket.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 truncate mb-1">{ticket.subject}</p>
+                  <div className="flex justify-between items-center text-[10px] text-gray-400">
+                    <span>{ticket.category} • {ticket.priority}</span>
+                    <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Conversation View */}
+        <div className="flex-1 bg-white rounded-xl shadow-md flex flex-col overflow-hidden">
+          {selectedTicket ? (
+            <>
+              <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                <div>
+                  <h3 className="font-bold text-gray-900">{selectedTicket.subject}</h3>
+                  <p className="text-xs text-gray-500">{selectedTicket.schoolName} • {selectedTicket.userName} ({selectedTicket.userEmail})</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-gray-500">Status:</span>
+                  <select
+                    value={selectedTicket.status}
+                    onChange={async (e) => {
+                      const newStatus = e.target.value as any;
+                      await ticketService.update(selectedTicket.id, { status: newStatus });
+                      setSelectedTicket({ ...selectedTicket, status: newStatus });
+                      setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: newStatus } : t));
+                    }}
+                    className="text-xs border rounded-lg px-2 py-1 bg-white outline-none focus:ring-2 focus:ring-purple-500/20"
+                  >
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50/50">
+                {/* Initial Message */}
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white shrink-0 font-bold text-xs">
+                    {selectedTicket.userName.charAt(0)}
+                  </div>
+                  <div className="bg-white p-3 rounded-xl rounded-tl-none shadow-sm border border-gray-100 max-w-[85%]">
+                    <p className="text-sm text-gray-800 leading-relaxed">{selectedTicket.message}</p>
+                    <p className="text-[10px] text-gray-400 mt-2 font-medium">{new Date(selectedTicket.createdAt).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Responses */}
+                {selectedTicket.responses.map((resp, idx) => (
+                  <div key={idx} className={`flex gap-3 ${resp.isAdminResponse ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 font-bold text-xs ${resp.isAdminResponse ? 'bg-amber-600 shadow-md' : 'bg-purple-600'}`}>
+                      {resp.userName.charAt(0)}
+                    </div>
+                    <div className={`p-3 rounded-xl shadow-sm border max-w-[85%] ${
+                      resp.isAdminResponse 
+                        ? 'bg-amber-50 border-amber-100 rounded-tr-none' 
+                        : 'bg-white border-gray-100 rounded-tl-none'
+                    }`}>
+                      {resp.isAdminResponse && <p className="text-[9px] font-black text-amber-600 mb-1 tracking-tighter uppercase">Platform Support</p>}
+                      <p className="text-sm text-gray-800 leading-relaxed">{resp.message}</p>
+                      <p className="text-[10px] text-gray-400 mt-2 font-medium">{new Date(resp.timestamp).toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.02)]">
+                <div className="flex gap-3">
+                  <textarea
+                    value={ticketReply}
+                    onChange={(e) => setTicketReply(e.target.value)}
+                    placeholder="Type your official response..."
+                    className="flex-1 border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none transition-all bg-gray-50 focus:bg-white"
+                    rows={2}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!ticketReply.trim()) return;
+                      setIsUpdatingTicket(true);
+                      try {
+                        const response: TicketResponse = {
+                          userId: user?.id || 'superadmin',
+                          userName: user?.name || 'Super Admin',
+                          message: ticketReply,
+                          timestamp: new Date().toISOString(),
+                          isAdminResponse: true
+                        };
+                        await ticketService.addResponse(selectedTicket.id, response);
+                        setTicketReply('');
+                        const updated = await ticketService.getById(selectedTicket.id);
+                        if (updated) {
+                          setSelectedTicket(updated);
+                          setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
+                        }
+                      } catch (err) {
+                        console.error('Failed to send response:', err);
+                      } finally {
+                        setIsUpdatingTicket(false);
+                      }
+                    }}
+                    disabled={isUpdatingTicket || !ticketReply.trim()}
+                    className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-200 text-white rounded-xl transition-all flex items-center gap-2 font-bold shadow-md active:scale-95 shrink-0"
+                  >
+                    {isUpdatingTicket ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Send
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center bg-gray-50/50">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-4">
+                <MessageSquare className="w-10 h-10 text-gray-200" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-400">System Support Inbox</h3>
+              <p className="max-w-xs mx-auto mt-2 text-sm">Select a ticket from the left panel to begin communicating with school administrators.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
@@ -6189,6 +6410,8 @@ export function SuperAdminDashboard() {
         return renderMonitoring();
       case 'announcements':
         return renderAnnouncements();
+      case 'tickets':
+        return renderTickets();
       default:
         return renderDashboard();
     }
@@ -6203,6 +6426,7 @@ export function SuperAdminDashboard() {
     { id: 'user-recovery', label: 'User Recovery', icon: Shield },
     { id: 'monitoring', label: 'Monitoring', icon: Activity },
     { id: 'announcements', label: 'Announcements', icon: Bell },
+    { id: 'tickets', label: 'Support Tickets', icon: MessageSquare },
   ];
 
   return (

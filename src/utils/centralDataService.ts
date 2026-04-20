@@ -146,6 +146,18 @@ export interface SubjectMappingRecord {
   updated_at?: string;
 }
 
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  maxStudents: number;
+  maxTeachers: number;
+  storage: string;
+  features: string[];
+  isActive: boolean;
+}
+
 export interface Class {
   id: string;
   school_id?: string;
@@ -429,6 +441,31 @@ export interface Notification {
   link?: string;
 }
 
+export interface TicketResponse {
+  userId: string;
+  userName: string;
+  message: string;
+  timestamp: string;
+  isAdminResponse: boolean;
+}
+
+export interface SupportTicket {
+  id: string;
+  school_id: string;
+  schoolName: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  message: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent';
+  category: 'Technical' | 'Billing' | 'Feature Request' | 'Other';
+  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+  createdAt: string;
+  updatedAt: string;
+  responses: TicketResponse[];
+}
+
 // ==================== FIRESTORE-BACKED SERVICES ====================
 // All data operations now go through Firestore. No localStorage, no mock data.
 
@@ -465,7 +502,10 @@ import {
   studentNoteService,
   reportsService,
   quizResultService,
+  planService,
+  ticketService,
   StudentNote,
+  type SubscriptionPlan as SubscriptionPlanType,
 } from './firestoreService';
 
 export {
@@ -501,6 +541,8 @@ export {
   studentNoteService,
   reportsService,
   quizResultService,
+  planService,
+  ticketService,
 };
 
 export type { StudentNote };
@@ -534,4 +576,6 @@ export default {
   auditLog: auditLogService,
   studentNote: studentNoteService,
   quizResult: quizResultService,
+  plan: planService,
+  ticket: ticketService,
 };

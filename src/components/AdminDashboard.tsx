@@ -12,6 +12,7 @@ import { TeachersModule } from './TeachersModule';
 import { CommunicationModule } from './CommunicationModule';
 import { ReportsModule } from './ReportsModule';
 import { AcademicStructureView } from './AcademicStructureView';
+import { SupportModule } from './SupportModule';
 import SubjectMappingView from './SubjectMappingView';
 import { MonitoringView } from './MonitoringView';
 import { ReportsApprovalView } from './ReportsApprovalView';
@@ -28,6 +29,7 @@ export type ViewType =
   | 'communication'
   | 'academic-structure'
   | 'monitoring'
+  | 'support'
   | 'reports-approval';
 
 export function AdminDashboard() {
@@ -307,6 +309,7 @@ export function AdminDashboard() {
         {activeView === 'monitoring' && (
           <MonitoringView onNavigate={handleNavigate} />
         )}
+        {activeView === 'support' && <SupportModule />}
         {activeView === 'reports-approval' && <ReportsApprovalView />}
       </main>
     </div>

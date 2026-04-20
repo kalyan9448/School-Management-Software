@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { db } from '../services/firebase';
+import type { SupportTicket, TicketResponse } from './centralDataService';
 import {
     collection,
     doc,
@@ -65,6 +66,18 @@ export interface StudentNote {
   date: string;
 }
 
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  maxStudents: number;
+  maxTeachers: number;
+  storage: string;
+  features: string[];
+  isActive: boolean;
+}
+
 // Re-export new production interfaces from types
 export type {
     SchoolSettings,
@@ -112,7 +125,7 @@ import type {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Collections that are global (not scoped to a single school). */
-const GLOBAL_COLLECTIONS = new Set(['users', 'schools', 'organizations']);
+const GLOBAL_COLLECTIONS = new Set(['users', 'schools', 'organizations', 'plans', 'support_tickets']);
 
 function getSchoolId(): string {
     return sessionStorage.getItem('active_school_id') || '';
@@ -2512,6 +2525,81 @@ export const quizResultService = {
     },
 };
 
+// ==================== SUBSCRIPTION PLANS SERVICE ====================
+
+export const planService = {
+    getAll: async (): Promise<SubscriptionPlan[]> => {
+        return fetchCollection<SubscriptionPlan>('plans');
+    },
+
+    getById: async (id: string): Promise<SubscriptionPlan | null> => {
+        return getDocById<SubscriptionPlan>('plans', id);
+    },
+
+    create: async (plan: Omit<SubscriptionPlan, 'id'>): Promise<SubscriptionPlan> => {
+        return createDoc<SubscriptionPlan>('plans', {
+            ...plan,
+            isActive: plan.isActive ?? true,
+        });
+    },
+
+    update: async (id: string, plan: Partial<SubscriptionPlan>): Promise<void> => {
+        await updateDocById('plans', id, plan);
+    },
+
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('plans', id);
+    },
+};
+
+// ==================== SUPPORT TICKETS SERVICE ====================
+
+export const ticketService = {
+    getAll: async (): Promise<SupportTicket[]> => {
+        return fetchCollection<SupportTicket>('support_tickets', orderBy('createdAt', 'desc'));
+    },
+
+    getSchoolTickets: async (schoolId: string): Promise<SupportTicket[]> => {
+        return fetchCollection<SupportTicket>(
+            'support_tickets',
+            where('school_id', '==', schoolId),
+            orderBy('createdAt', 'desc')
+        );
+    },
+
+    getById: async (id: string): Promise<SupportTicket | null> => {
+        return getDocById<SupportTicket>('support_tickets', id);
+    },
+
+    create: async (ticket: Omit<SupportTicket, 'id'>): Promise<SupportTicket> => {
+        return createDoc<SupportTicket>('support_tickets', {
+            ...ticket,
+            responses: ticket.responses || [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        });
+    },
+
+    update: async (id: string, data: Partial<SupportTicket>): Promise<void> => {
+        await updateDocById('support_tickets', id, {
+            ...data,
+            updatedAt: new Date().toISOString(),
+        });
+    },
+
+    addResponse: async (id: string, response: TicketResponse): Promise<void> => {
+        const ticket = await getDocById<SupportTicket>('support_tickets', id);
+        if (!ticket) throw new Error('Ticket not found');
+
+        const updatedResponses = [...(ticket.responses || []), response];
+        await updateDocById('support_tickets', id, {
+            responses: updatedResponses,
+            updatedAt: new Date().toISOString(),
+            status: response.isAdminResponse ? 'In Progress' : ticket.status,
+        });
+    },
+};
+
 // ==================== DEFAULT EXPORT (same shape as old service) ====================
 
 const firestoreDataService = {
@@ -2546,6 +2634,7 @@ const firestoreDataService = {
     studentNote: studentNoteService,
     reports: reportsService,
     quizResult: quizResultService,
+    plan: planService,
 };
 
 export default firestoreDataService;
