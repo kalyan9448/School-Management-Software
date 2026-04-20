@@ -306,6 +306,8 @@ export function SuperAdminDashboard() {
 
   // Subscription plan editing state
   const [isEditingPlans, setIsEditingPlans] = useState(false);
+  const [plansToDelete, setPlansToDelete] = useState<string[]>([]);
+  const [backupPlanDetails, setBackupPlanDetails] = useState<Record<string, SubscriptionPlan>>({});
   const [planDetails, setPlanDetails] = useState<Record<string, SubscriptionPlan>>({});
   const [editingFeatureInput, setEditingFeatureInput] = useState<Record<string, string>>({});
 
@@ -818,16 +820,30 @@ export function SuperAdminDashboard() {
 
   // Handler for editing subscription plans
   const handleToggleEditPlans = () => {
+    if (!isEditingPlans) {
+      // Entering edit mode: backup current plans
+      setBackupPlanDetails({ ...planDetails });
+      setPlansToDelete([]);
+    }
     setIsEditingPlans(!isEditingPlans);
   };
 
   const handleSavePlans = async () => {
     try {
-      // Save all currently edited plans to Firestore
+      // 1. Process deletions
+      if (plansToDelete.length > 0) {
+        const deletePromises = plansToDelete.map(id => planService.delete(id));
+        await Promise.all(deletePromises);
+      }
+
+      // 2. Save all currently edited plans to Firestore
       const updatePromises = Object.entries(planDetails).map(([name, plan]) => 
         planService.update(plan.id || name, plan)
       );
       await Promise.all(updatePromises);
+      
+      setPlansToDelete([]);
+      setBackupPlanDetails({});
       setIsEditingPlans(false);
       alert('Plan updates saved successfully!');
     } catch (err: any) {
@@ -837,6 +853,10 @@ export function SuperAdminDashboard() {
   };
 
   const handleCancelEditPlans = () => {
+    // Revert to backup and clear deletion queue
+    setPlanDetails(backupPlanDetails);
+    setPlansToDelete([]);
+    setBackupPlanDetails({});
     setIsEditingPlans(false);
   };
 
@@ -2694,6 +2714,10 @@ export function SuperAdminDashboard() {
                       <button
                         onClick={() => {
                           if (confirm(`Are you sure you want to delete the "${key}" plan?`)) {
+                            // Track for deletion on save
+                            if (plan.id) {
+                              setPlansToDelete(prev => [...prev, plan.id]);
+                            }
                             const updatedPlans = { ...planDetails };
                             delete updatedPlans[key];
                             setPlanDetails(updatedPlans);
