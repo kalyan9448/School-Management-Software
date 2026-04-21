@@ -66,6 +66,7 @@ import {
 import { TeacherPerformanceAnalytics } from './TeacherPerformanceAnalytics';
 import { aiService } from '../services/aiService';
 import { AILessonPlan } from '../types';
+import { TeacherChatView } from './TeacherChatView';
 
 type ViewType =
   | 'dashboard'
@@ -78,7 +79,8 @@ type ViewType =
   | 'performance'
   | 'marks-upload'
   | 'notifications'
-  | 'calendar';
+  | 'calendar'
+  | 'chat';
 
 interface ClassInfo {
   id: string;
@@ -2884,6 +2886,13 @@ export function TeacherDashboardNew() {
         return renderAllNotifications();
       case 'calendar':
         return renderFullCalendar();
+      case 'chat':
+        return (
+          <TeacherChatView
+            teacherId={user?.id || ''}
+            teacherName={user?.name || 'Teacher'}
+          />
+        );
       default:
         return renderDashboard();
     }

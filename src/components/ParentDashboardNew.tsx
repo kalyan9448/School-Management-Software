@@ -4,6 +4,7 @@ import { DashboardNav, parentNavItems } from './DashboardNav';
 import { ParentDashboardChildProgress } from './ParentDashboardChildProgress';
 import { ParentNotificationPanel } from './ParentNotificationPanel';
 import { CalendarModule } from './CalendarModule';
+import { ParentTeacherChat } from './ParentTeacherChat';
 import {
   Users,
   Calendar,
@@ -41,7 +42,7 @@ import { useAggregatedNotifications } from '../hooks/useAggregatedNotifications'
 import dataService from '../utils/firestoreService';
 import { generateAndDownloadReport } from '../utils/reportPdfGenerator';
 
-type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar';
+type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar' | 'chat';
 type ReportPeriod = 'weekly' | 'monthly';
 
 interface Child {
@@ -512,7 +513,7 @@ export function ParentDashboardNew() {
           id: r.id,
           type: 'exam' as const,
           subject: exam?.subject || 'General',
-          title: r.examType || 'Exam',
+          title: exam?.name || 'Exam',
           score: typeof r.percentage === 'number' && !isNaN(r.percentage) 
             ? r.percentage 
             : (r.totalMarks > 0 ? Math.round((r.marksObtained / r.totalMarks) * 100) : 0),
@@ -2077,6 +2078,13 @@ export function ParentDashboardNew() {
                     <CalendarModule viewOnly={true} />
                 </div>
             </div>
+        );
+      case 'chat':
+        return (
+          <ParentTeacherChat
+            selectedChild={selectedChild as import('../types').Student}
+            parentId={user?.id || ''}
+          />
         );
       default:
         return renderDashboard();

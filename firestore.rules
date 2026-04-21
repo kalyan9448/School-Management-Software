@@ -311,7 +311,7 @@ service cloud.firestore {
     match /teachers/{teacherId} {
       allow read: if isSuperAdmin() || (
         hasValidSchoolId() && isOwnSchool() &&
-        (isAdminOrAbove() || isTeacher())
+        (isAdminOrAbove() || isTeacher() || isParent())
       );
       // Allow a teacher to read their own record by email when school_id
       // claim is not yet available (e.g. first render after login).
@@ -729,6 +729,47 @@ service cloud.firestore {
              );
              
       allow delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // PARENT-TEACHER CHAT
+    // =========================================================================
+
+    match /conversations/{conversationId} {
+      // Access allowed if the user is the parent or teacher in this conversation
+      allow read: if isSignedIn() && (
+        resource.data.parentId == request.auth.uid || 
+        resource.data.teacherId == request.auth.uid ||
+        (resource.data.teacherEmail != null && resource.data.teacherEmail == request.auth.token.email) ||
+        isSuperAdmin() ||
+        (isAdminOrAbove() && isOwnSchool())
+      );
+      
+      // Allow creation if the current user is either the parentId or teacherId
+      allow create: if isSignedIn() && (
+        request.resource.data.parentId == request.auth.uid || 
+        request.resource.data.teacherId == request.auth.uid ||
+        isSuperAdmin()
+      );
+
+      // Allow updates to lastMessage, updatedAt, and unread counts
+      allow update: if isSignedIn() && (
+        resource.data.parentId == request.auth.uid || 
+        resource.data.teacherId == request.auth.uid ||
+        (resource.data.teacherEmail != null && resource.data.teacherEmail == request.auth.token.email) ||
+        isSuperAdmin()
+      );
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Read/write allowed if you have access to the parent conversation
+        allow read, write: if isSignedIn() && (
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid ||
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherEmail == request.auth.token.email ||
+          isSuperAdmin()
+        );
+      }
     }
 
     // =========================================================================

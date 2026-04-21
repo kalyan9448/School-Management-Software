@@ -681,3 +681,36 @@ export interface TeacherEvaluationResult {
     isSufficient: boolean;
     promptRevision?: string;
 }
+
+// ----- Parent–Teacher Chat -----
+
+export interface Conversation {
+    id: string;
+    school_id: string;
+    parentId: string;
+    teacherId: string;
+    studentId: string;
+    classId: string;
+    parentName: string;
+    teacherName: string;
+    teacherEmail?: string;
+    teacherSubject?: string;
+    studentName: string;
+    lastMessage: string;
+    lastMessageSenderRole?: 'parent' | 'teacher';
+    updatedAt: string;
+    unreadParent?: number;   // unread count for the parent
+    unreadTeacher?: number;  // unread count for the teacher
+    created_at?: string;
+}
+
+export interface ChatMessage {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    senderRole: 'parent' | 'teacher';
+    senderName: string;
+    message: string;
+    createdAt: string;
+    isRead: boolean;
+}
