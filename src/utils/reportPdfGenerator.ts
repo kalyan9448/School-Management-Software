@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { createTemplatedDoc, addTemplatePage, TEMPLATE_MARGINS } from './pdfTemplateService';
 
 interface ReportData {
   period: string;
@@ -56,32 +57,30 @@ export function generateStudentReportPDF(
   reportType: 'weekly' | 'monthly',
   schoolName: string = 'School Management System'
 ): jsPDF {
-  const doc = new jsPDF('p', 'mm', 'a4');
-  let yPos = 20;
-  const margin = 15;
-  const maxY = 260;
+  const doc = createTemplatedDoc();
+  // Start below template header
+  let yPos = TEMPLATE_MARGINS.top;
+  const margin = TEMPLATE_MARGINS.left;
+  const maxY = 297 - TEMPLATE_MARGINS.bottom;
 
   // Helper to add page if needed
   const checkPage = (spaceNeeded: number = 30) => {
     if (yPos + spaceNeeded > maxY) {
-      doc.addPage();
-      yPos = 20;
+      addTemplatePage(doc);
+      yPos = TEMPLATE_MARGINS.top;
     }
   };
 
-  // Header
+  // Report title — branding/logo comes from the template background
   checkPage(15);
-  doc.setFontSize(20);
+  doc.setFontSize(14);
   doc.setFont(undefined, 'bold');
-  doc.text(schoolName, margin, yPos);
-  yPos += 10;
-
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'normal');
+  doc.setTextColor(76, 29, 149);
   doc.text('Student Progress Report', margin, yPos);
-  yPos += 6;
+  yPos += 7;
 
   doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
   doc.setTextColor(100, 100, 100);
   const generatedDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
@@ -90,7 +89,7 @@ export function generateStudentReportPDF(
   });
   doc.text(`Generated on: ${generatedDate} | Period: ${reportData.period}`, margin, yPos);
   doc.setTextColor(0, 0, 0);
-  yPos += 12;
+  yPos += 10;
 
   // Student Information
   checkPage(10);
@@ -325,7 +324,7 @@ export function generateStudentReportPDF(
     doc.text(
       `Page ${i} of ${pageCount}`,
       doc.internal.pageSize.getWidth() / 2,
-      doc.internal.pageSize.getHeight() - 10,
+      doc.internal.pageSize.getHeight() - TEMPLATE_MARGINS.bottom - 5,
       { align: 'center' }
     );
   }

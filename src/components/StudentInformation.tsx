@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { createTemplatedDoc, addTemplatePage, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import { studentService, academicYearService, attendanceService, feeInvoiceService, type Student, type AttendanceRecord, type FeeInvoice } from '../utils/firestoreService';
 import { AcademicYear } from '../utils/classUtils';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
@@ -445,50 +446,43 @@ export function StudentInformation({
       return;
     }
 
-    const doc = new jsPDF();
+    const doc = createTemplatedDoc();
     const pageWidth = doc.internal.pageSize.width;
+    const topY = TEMPLATE_MARGINS.top;
 
-    // Header Color Strip
-    doc.setFillColor(79, 70, 229); // Indigo-600
-    doc.rect(0, 0, pageWidth, 20, 'F');
-
-    // School Name & Title
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(schoolName || 'School Management System', 14, 13);
-    
+    // Title
     doc.setTextColor(55, 65, 81);
     doc.setFontSize(18);
-    doc.text('Daily Attendance Report', 14, 32);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Daily Attendance Report', 14, topY);
 
     // Metadata
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Class: ${selectedClass} | Section: ${selectedSection}`, 14, 40);
-    doc.text(`Date: ${selectedDate}`, 14, 46);
+    doc.text(`Class: ${selectedClass} | Section: ${selectedSection}`, 14, topY + 8);
+    doc.text(`Date: ${selectedDate}`, 14, topY + 14);
 
     // Stats Section
     doc.setFillColor(243, 244, 246);
-    doc.roundedRect(14, 52, pageWidth - 28, 25, 3, 3, 'F');
+    doc.roundedRect(14, topY + 20, pageWidth - 28, 25, 3, 3, 'F');
     
     doc.setFontSize(10);
     doc.setTextColor(107, 114, 128);
-    doc.text('Total Students', 20, 60);
-    doc.text('Present', 70, 60);
-    doc.text('Absent', 120, 60);
-    doc.text('Attendance %', 170, 60);
+    doc.text('Total Students', 20, topY + 28);
+    doc.text('Present', 70, topY + 28);
+    doc.text('Absent', 120, topY + 28);
+    doc.text('Attendance %', 170, topY + 28);
 
     doc.setFontSize(12);
     doc.setTextColor(17, 24, 39);
     doc.setFont('helvetica', 'bold');
-    doc.text(String(stats.total), 20, 70);
-    doc.text(String(stats.present), 70, 70);
-    doc.text(String(stats.absent), 120, 70);
-    doc.text(`${attendancePercentage}%`, 170, 70);
+    doc.text(String(stats.total), 20, topY + 38);
+    doc.text(String(stats.present), 70, topY + 38);
+    doc.text(String(stats.absent), 120, topY + 38);
+    doc.text(`${attendancePercentage}%`, 170, topY + 38);
 
     // Table
-    let yPos = 88;
+    let yPos = topY + 56;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(55, 65, 81);
@@ -503,10 +497,11 @@ export function StudentInformation({
     yPos += 8;
 
     doc.setFont('helvetica', 'normal');
+    const maxY = 297 - TEMPLATE_MARGINS.bottom;
     attendance.forEach((record, index) => {
-      if (yPos > 280) {
-        doc.addPage();
-        yPos = 20;
+      if (yPos > maxY) {
+        addTemplatePage(doc);
+        yPos = TEMPLATE_MARGINS.top;
       }
 
       // Alternating row background
@@ -533,7 +528,7 @@ export function StudentInformation({
     // Footer
     doc.setFontSize(8);
     doc.setTextColor(156, 163, 175);
-    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 285);
+    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 297 - TEMPLATE_MARGINS.bottom - 5);
 
     doc.save(`daily_attendance_${selectedClass}_${selectedSection}_${selectedDate}.pdf`);
   };
@@ -560,25 +555,23 @@ export function StudentInformation({
       return;
     }
 
-    const doc = new jsPDF();
+    const doc = createTemplatedDoc();
+    const topY = TEMPLATE_MARGINS.top;
 
     // Title
     doc.setFontSize(18);
-    doc.text('Monthly Attendance Report', 14, 22);
+    doc.text('Monthly Attendance Report', 14, topY);
 
     // Subtitle / Filters
     doc.setFontSize(12);
-    doc.text(`Class: ${selectedClass} | Section: ${selectedSection} | Month: ${selectedMonth}`, 14, 30);
+    doc.text(`Class: ${selectedClass} | Section: ${selectedSection} | Month: ${selectedMonth}`, 14, topY + 8);
 
     // Summary
     doc.setFontSize(10);
-    doc.text(`Average Attendance: ${(monthlyAttendance.reduce((sum, s) => sum + s.percentage, 0) / monthlyAttendance.length).toFixed(1)}%`, 14, 38);
-    doc.text(`Below 75%: ${monthlyAttendance.filter(s => s.percentage < 75).length} students`, 14, 44);
+    doc.text(`Average Attendance: ${(monthlyAttendance.reduce((sum, s) => sum + s.percentage, 0) / monthlyAttendance.length).toFixed(1)}%`, 14, topY + 16);
+    doc.text(`Below 75%: ${monthlyAttendance.filter(s => s.percentage < 75).length} students`, 14, topY + 22);
 
-    // Table Data setup. We can use autoTable if available, but doing it manually for simplicity if not.
-    // Assuming simple text layout or simple primitive table since we don't have jspdf-autotable in package.json
-
-    let yPos = 55;
+    let yPos = topY + 33;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
 
@@ -590,21 +583,20 @@ export function StudentInformation({
     doc.text('Total', 140, yPos);
     doc.text('Percentage', 165, yPos);
 
-    doc.line(14, yPos + 2, 195, yPos + 2); // Header underline
+    doc.line(14, yPos + 2, 195, yPos + 2);
     yPos += 8;
 
     doc.setFont('helvetica', 'normal');
+    const maxY = 297 - TEMPLATE_MARGINS.bottom;
 
     monthlyAttendance.forEach(record => {
-      // Pagination check
-      if (yPos > 280) {
-        doc.addPage();
-        yPos = 20;
+      if (yPos > maxY) {
+        addTemplatePage(doc);
+        yPos = TEMPLATE_MARGINS.top;
       }
 
       doc.text(String(record.rollNo), 14, yPos);
 
-      // Truncate name if too long
       const name = record.studentName.length > 25 ? record.studentName.substring(0, 22) + '...' : record.studentName;
       doc.text(name, 30, yPos);
 

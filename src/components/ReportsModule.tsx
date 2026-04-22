@@ -3,6 +3,7 @@ import { Download, FileText, TrendingUp, Users, DollarSign, Calendar, BarChart3,
 import { studentService, attendanceService, feeService, enquiryService, reportsService } from '../utils/centralDataService';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 
 export function ReportsModule() {
   const reports = [
@@ -150,24 +151,23 @@ export function ReportsModule() {
         return;
       }
 
-      const doc = new jsPDF() as any;
+      const doc = createTemplatedDoc() as any;
       const today = new Date().toISOString().split('T')[0];
+      const topY = TEMPLATE_MARGINS.top;
       
-      // Header
-      doc.setFontSize(22);
-      doc.setTextColor(126, 34, 206); // purple-700
-      doc.text("School Management System", 105, 20, { align: 'center' });
-      
+      // Report title (branding comes from the template background)
       doc.setFontSize(16);
-      doc.setTextColor(31, 41, 55); // gray-900
-      doc.text(report.title, 105, 30, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(31, 41, 55);
+      doc.text(report.title, 105, topY, { align: 'center' });
       
       doc.setFontSize(10);
-      doc.setTextColor(107, 114, 128); // gray-500
-      doc.text(`Generated on: ${today} | Category: ${report.category}`, 105, 38, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(107, 114, 128);
+      doc.text(`Generated on: ${today} | Category: ${report.category}`, 105, topY + 8, { align: 'center' });
       
       doc.setDrawColor(229, 231, 235);
-      doc.line(20, 45, 190, 45);
+      doc.line(20, topY + 14, 190, topY + 14);
 
       if (report.title.includes('Attendance')) {
         const attendanceData = await attendanceService.getAll();
@@ -180,7 +180,7 @@ export function ReportsModule() {
         ]);
 
         autoTable(doc, {
-          startY: 55,
+          startY: topY + 22,
           head: [['Date', 'Student Name', 'Class', 'Section', 'Status']],
           body: tableRows.length > 0 ? tableRows : [['-', 'No Records Found', '-', '-', '-']],
           headStyles: { fillColor: [126, 34, 206] },
@@ -197,7 +197,7 @@ export function ReportsModule() {
         ]);
 
         autoTable(doc, {
-          startY: 55,
+          startY: topY + 22,
           head: [['Date', 'Student Name', 'Receipt #', 'Amount', 'Status']],
           body: tableRows.length > 0 ? tableRows : [['-', 'No Payments Found', '-', '-', '-']],
           headStyles: { fillColor: [126, 34, 206] },
@@ -213,7 +213,7 @@ export function ReportsModule() {
         ]);
 
         autoTable(doc, {
-          startY: 55,
+          startY: topY + 22,
           head: [['ID', 'Student Name', 'Class', 'Section', 'Status']],
           body: tableRows.length > 0 ? tableRows : [['-', 'No Students Found', '-', '-', '-']],
           headStyles: { fillColor: [126, 34, 206] },
@@ -221,12 +221,12 @@ export function ReportsModule() {
         });
       } else {
         doc.setFontSize(12);
-        doc.text("Report generation for this module is being consolidated.", 20, 60);
+        doc.text("Report generation for this module is being consolidated.", 20, topY + 25);
       }
 
       doc.setFontSize(8);
       doc.setTextColor(150);
-      doc.text("System Generated Report - Super Admin Dashboard", 105, 285, { align: 'center' });
+      doc.text("System Generated Report", 105, 297 - TEMPLATE_MARGINS.bottom - 5, { align: 'center' });
 
       doc.save(`${report.title.replace(/\s+/g, '_')}_${today}.pdf`);
       alert(`Report "${report.title}" generated and downloaded successfully!`);

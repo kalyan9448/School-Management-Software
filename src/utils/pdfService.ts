@@ -1,5 +1,6 @@
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { createTemplatedDoc, addTemplatePage, TEMPLATE_MARGINS } from './pdfTemplateService';
 import { LessonLog } from './centralDataService';
 
 /**
@@ -11,28 +12,19 @@ export const pdfService = {
    * @param lesson The lesson log object containing metadata and AI-generated content.
    */
   generateLessonPlanPDF: async (lesson: LessonLog) => {
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
+    const doc = createTemplatedDoc();
 
     const pageWidth = doc.internal.pageSize.getWidth();
-    let currentY = 20;
+    // Start below the template header
+    let currentY = TEMPLATE_MARGINS.top;
 
-    // --- 1. Header & Branding ---
-    doc.setFontSize(22);
+    // --- 1. Title (branding comes from the template background) ---
+    doc.setFontSize(16);
     doc.setTextColor(76, 29, 149); // Purple-900
     doc.setFont('helvetica', 'bold');
-    doc.text('BristleTech School System', pageWidth / 2, currentY, { align: 'center' });
-    
-    currentY += 10;
-    doc.setFontSize(14);
-    doc.setTextColor(107, 114, 128); // Gray-500
-    doc.setFont('helvetica', 'normal');
     doc.text('AI-Powered Lesson Preparation Record', pageWidth / 2, currentY, { align: 'center' });
     
-    currentY += 10;
+    currentY += 8;
     doc.setDrawColor(229, 231, 235); // Gray-200
     doc.line(20, currentY, pageWidth - 20, currentY);
 
@@ -133,9 +125,9 @@ export const pdfService = {
     // --- 6. Methodology & Support ---
     if (aiPlan?.teachingMethodology) {
       // Check for page overflow
-      if (currentY > pageWidth + 20) {
-        doc.addPage();
-        currentY = 20;
+      if (currentY > doc.internal.pageSize.getHeight() - TEMPLATE_MARGINS.bottom - 20) {
+        addTemplatePage(doc);
+        currentY = TEMPLATE_MARGINS.top;
       }
       
       doc.setFont('helvetica', 'bold');
@@ -158,7 +150,7 @@ export const pdfService = {
       currentY += (activityLines.length * 5) + 10;
     }
 
-    // Final Footer
+    // Page numbers (placed above the footer bar)
     const totalPages = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -167,7 +159,7 @@ export const pdfService = {
         doc.text(
             `Generated on ${new Date().toLocaleString()} | Page ${i} of ${totalPages}`,
             pageWidth / 2,
-            doc.internal.pageSize.getHeight() - 10,
+            doc.internal.pageSize.getHeight() - TEMPLATE_MARGINS.bottom - 5,
             { align: 'center' }
         );
     }

@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import { jsPDF } from 'jspdf';
+import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import autoTable from 'jspdf-autotable';
 
 type ViewType =
@@ -1781,8 +1782,16 @@ export function SuperAdminDashboard() {
         link.click();
         document.body.removeChild(link);
       } else if (exportType === 'PDF') {
-        const doc = new jsPDF();
-        doc.text(`Billing & Subscriptions Report - ${timestamp}`, 14, 15);
+        const doc = createTemplatedDoc();
+        const topY = TEMPLATE_MARGINS.top;
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(31, 41, 55);
+        doc.text(`Billing & Subscriptions Report`, 105, topY, { align: 'center' });
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(107, 114, 128);
+        doc.text(`Generated: ${timestamp}`, 105, topY + 7, { align: 'center' });
         
         const tableColumn = ['Invoice Number', 'School Name', 'Plan', 'Cycle', 'Users', 'Amount', 'Status'];
         const tableRows: any[] = [];
@@ -1803,7 +1812,7 @@ export function SuperAdminDashboard() {
         autoTable(doc, {
           head: [tableColumn],
           body: tableRows,
-          startY: 20,
+          startY: topY + 14,
           styles: { fontSize: 8 },
           headStyles: { fillColor: [107, 33, 168] }
         });
@@ -1828,24 +1837,27 @@ export function SuperAdminDashboard() {
       const invoice = billingRecords.find(b => b.invoiceNumber === invoiceNumber);
       if (!invoice) return;
 
-      const doc = new jsPDF();
+      const doc = createTemplatedDoc();
       const timestamp = new Date().toISOString().split('T')[0];
+      const topY = TEMPLATE_MARGINS.top;
 
-      // Add Invoice Header
+      // Invoice title
       doc.setFontSize(22);
-      doc.text('INVOICE', 14, 25);
+      doc.setFont('helvetica', 'bold');
+      doc.text('INVOICE', 14, topY);
       
       doc.setFontSize(10);
-      doc.text(`Invoice Number: ${invoice.invoiceNumber}`, 14, 35);
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 40);
-      doc.text(`Status: ${invoice.paymentStatus}`, 14, 45);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Invoice Number: ${invoice.invoiceNumber}`, 14, topY + 10);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, topY + 17);
+      doc.text(`Status: ${invoice.paymentStatus}`, 14, topY + 24);
 
-      // School Info
+      // Bill To
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('Bill To:', 14, 60);
+      doc.text('Bill To:', 14, topY + 35);
       doc.setFont('helvetica', 'normal');
-      doc.text(String(invoice.schoolName || ''), 14, 68);
+      doc.text(String(invoice.schoolName || ''), 14, topY + 42);
 
       // Tabular Item
       const tableColumn = ['Description', 'Billing Cycle', 'Users', 'Total'];
@@ -1861,7 +1873,7 @@ export function SuperAdminDashboard() {
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        startY: 80,
+        startY: topY + 55,
         theme: 'striped',
         headStyles: { fillColor: [107, 33, 168] }
       });

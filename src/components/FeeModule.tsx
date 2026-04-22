@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import { notificationService, feeService, studentService } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
@@ -297,10 +298,11 @@ export function FeeModule() {
     }));
   };
 
-  // Generate Professional PDF Receipt
   const downloadReceiptPDF = (payment: Payment) => {
-    const doc = new jsPDF();
+    const doc = createTemplatedDoc();
     const pageWidth = doc.internal.pageSize.getWidth();
+    // Start below the template header
+    const startY = TEMPLATE_MARGINS.top;
 
     // Helper for centering text
     const centerText = (text: string, y: number) => {
@@ -308,82 +310,81 @@ export function FeeModule() {
       doc.text(text, (pageWidth - textWidth) / 2, y);
     };
 
-    // Header
+    // Title
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    centerText('FEE PAYMENT RECEIPT', 20);
+    centerText('FEE PAYMENT RECEIPT', startY);
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', 28);
+    centerText('---------------------------------------------------------', startY + 8);
 
     // Basic Info
     doc.setFontSize(11);
-    doc.text(`Receipt No : ${payment.receiptNo}`, 20, 35);
-    doc.text(`Date       : ${new Date(payment.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 20, 42);
-    doc.text(`Payment Mode: ${payment.paymentMode.toUpperCase()}`, 20, 49);
+    doc.text(`Receipt No : ${payment.receiptNo}`, 20, startY + 16);
+    doc.text(`Date       : ${new Date(payment.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 20, startY + 23);
+    doc.text(`Payment Mode: ${payment.paymentMode.toUpperCase()}`, 20, startY + 30);
 
-    centerText('---------------------------------------------------------', 56);
+    centerText('---------------------------------------------------------', startY + 37);
 
     // Student Details Section
     doc.setFont('helvetica', 'bold');
-    doc.text('Student Details', 20, 63);
+    doc.text('Student Details', 20, startY + 44);
     doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', 68);
+    centerText('---------------------------------------------------------', startY + 49);
 
-    doc.text(`Student Name   : ${payment.studentName}`, 20, 75);
-    doc.text(`Admission No   : ${payment.admissionNo}`, 20, 82);
-    doc.text(`Class          : ${payment.class}`, 20, 89);
+    doc.text(`Student Name   : ${payment.studentName}`, 20, startY + 56);
+    doc.text(`Admission No   : ${payment.admissionNo}`, 20, startY + 63);
+    doc.text(`Class          : ${payment.class}`, 20, startY + 70);
 
-    centerText('---------------------------------------------------------', 96);
+    centerText('---------------------------------------------------------', startY + 77);
 
     // Fee Details Section
     doc.setFont('helvetica', 'bold');
-    doc.text('Fee Details', 20, 103);
+    doc.text('Fee Details', 20, startY + 84);
     doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', 108);
+    centerText('---------------------------------------------------------', startY + 89);
 
     const netPayable = (payment.amount || 0) - (payment.discount || 0) + (payment.lateFee || 0);
     const balance = Math.max(0, netPayable - payment.totalAmount);
 
     // Table Header
     doc.setFont('helvetica', 'bold');
-    doc.text('Description', 20, 115);
-    doc.text('Amount', 140, 115);
+    doc.text('Description', 20, startY + 96);
+    doc.text('Amount', 140, startY + 96);
 
     doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', 120);
+    centerText('---------------------------------------------------------', startY + 101);
 
-    // Table Row
-    doc.text(`Total Fee (${payment.feeType})`, 20, 128);
-    doc.text(`Rs. ${netPayable.toLocaleString()}`, 140, 128);
+    // Table Rows
+    doc.text(`Total Fee (${payment.feeType})`, 20, startY + 109);
+    doc.text(`Rs. ${netPayable.toLocaleString()}`, 140, startY + 109);
 
-    doc.text(`Amount Paid NOW`, 20, 135);
-    doc.text(`Rs. ${payment.totalAmount.toLocaleString()}`, 140, 135);
+    doc.text(`Amount Paid NOW`, 20, startY + 116);
+    doc.text(`Rs. ${payment.totalAmount.toLocaleString()}`, 140, startY + 116);
 
-    doc.text(`Remaining Balance`, 20, 142);
-    doc.text(`Rs. ${balance.toLocaleString()}`, 140, 142);
+    doc.text(`Remaining Balance`, 20, startY + 123);
+    doc.text(`Rs. ${balance.toLocaleString()}`, 140, startY + 123);
 
-    centerText('---------------------------------------------------------', 150);
+    centerText('---------------------------------------------------------', startY + 131);
 
     // Total
     doc.setFont('helvetica', 'bold');
-    doc.text(`Payment Received : Rs. ${payment.totalAmount.toLocaleString()}`, 20, 158);
-    centerText('---------------------------------------------------------', 165);
+    doc.text(`Payment Received : Rs. ${payment.totalAmount.toLocaleString()}`, 20, startY + 139);
+    centerText('---------------------------------------------------------', startY + 146);
 
     // Footer
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text('Thank you for your payment.', 20, 175);
+    doc.text('Thank you for your payment.', 20, startY + 156);
+    doc.text('Authorized Signature', 140, startY + 171);
+    doc.text('School Admin', 140, startY + 178);
 
-    doc.text('Authorized Signature', 140, 190);
-    doc.text('School Admin', 140, 197);
+    centerText('---------------------------------------------------------', startY + 191);
+    centerText('Generated from School Management System', startY + 198);
+    centerText('---------------------------------------------------------', startY + 205);
 
-    centerText('---------------------------------------------------------', 210);
-    centerText('Generated from School Management System', 217);
-    centerText('---------------------------------------------------------', 224);
-
-    // Download file
+    // Download
     doc.save(`Receipt_${payment.receiptNo}.pdf`);
   };
 
