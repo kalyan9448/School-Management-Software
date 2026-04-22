@@ -74,13 +74,13 @@ export function generateStudentReportPDF(
   // Report title — branding/logo comes from the template background
   checkPage(15);
   doc.setFontSize(14);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.setTextColor(76, 29, 149);
   doc.text('Student Progress Report', margin, yPos);
   yPos += 7;
 
   doc.setFontSize(9);
-  doc.setFont(undefined, 'normal');
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
   const generatedDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
@@ -94,19 +94,19 @@ export function generateStudentReportPDF(
   // Student Information
   checkPage(10);
   doc.setFontSize(11);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.text('Student Information', margin, yPos);
   yPos += 6;
 
   doc.setFontSize(9);
-  doc.setFont(undefined, 'normal');
+  doc.setFont('helvetica', 'normal');
   doc.text(`Name: ${studentInfo.name} | Class: ${studentInfo.class}-${studentInfo.section} | Roll: ${studentInfo.rollNo}`, margin, yPos);
   yPos += 10;
 
   // Attendance Summary
   checkPage(25);
   doc.setFontSize(11);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.text('Attendance Summary', margin, yPos);
   yPos += 6;
 
@@ -136,7 +136,7 @@ export function generateStudentReportPDF(
   // Homework Summary
   checkPage(25);
   doc.setFontSize(11);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.text('Homework & Assignment Summary', margin, yPos);
   yPos += 6;
 
@@ -168,7 +168,7 @@ export function generateStudentReportPDF(
   if (reportData.performanceBySubject && reportData.performanceBySubject.length > 0) {
     checkPage(30);
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Performance by Subject', margin, yPos);
     yPos += 6;
 
@@ -201,12 +201,12 @@ export function generateStudentReportPDF(
   if (reportData.highlights && reportData.highlights.length > 0) {
     checkPage(15);
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Key Highlights', margin, yPos);
     yPos += 6;
 
     doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     reportData.highlights.forEach((highlight) => {
       checkPage(6);
       const wrapped = doc.splitTextToSize(`• ${highlight}`, 160);
@@ -222,7 +222,7 @@ export function generateStudentReportPDF(
   if (reportData.recentMarks && reportData.recentMarks.length > 0) {
     checkPage(30);
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Recent Performance Updates', margin, yPos);
     yPos += 6;
 
@@ -259,7 +259,7 @@ export function generateStudentReportPDF(
   if (reportType === 'monthly' && reportData.areasOfImprovement && reportData.areasOfImprovement.length > 0) {
     checkPage(30);
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Areas of Improvement', margin, yPos);
     yPos += 6;
 
@@ -291,20 +291,20 @@ export function generateStudentReportPDF(
   if (reportData.teacherComments && reportData.teacherComments.length > 0) {
     checkPage(15);
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Teacher Comments', margin, yPos);
     yPos += 6;
 
     doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     reportData.teacherComments.forEach((comment) => {
       checkPage(8);
       const subject = comment.subject || 'General';
       const text = comment.comment || '';
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text(`${subject}:`, margin + 5, yPos);
       yPos += 4;
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       const wrapped = doc.splitTextToSize(text, 150);
       wrapped.forEach((line: string) => {
         checkPage(5);

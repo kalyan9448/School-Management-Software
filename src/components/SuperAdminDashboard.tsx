@@ -58,6 +58,7 @@ import {
   ShieldCheck,
   Heart,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import { jsPDF } from 'jspdf';
