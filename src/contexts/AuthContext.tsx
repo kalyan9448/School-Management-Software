@@ -359,8 +359,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // ── checkEmail ────────────────────────────────────────────────────────────
     const checkEmail = async (email: string): Promise<CheckEmailResponse> => {
-        // Ask the backend (Admin SDK) whether a Firestore profile exists for
-        // this email and whether the user still needs to create a password.
+        const emailLower = email.trim().toLowerCase();
+
+        // ── 1. Try the backend (Admin SDK) first — most accurate ──────────────
         try {
             const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
             const ctrl = new AbortController();
@@ -380,11 +381,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return { exists: true, isFirstLogin: !!data.isFirstLogin };
             }
         } catch {
-            // Backend unavailable — fall through to default
+            // Backend unavailable — fall through to Firestore direct check
         }
-        // Fallback: let the user attempt login; the login handler will redirect
-        // to create-password if Firebase Auth returns user-not-found.
-        return { exists: true, isFirstLogin: false };
+
+        // ── 2. Backend unavailable — query Firestore directly ─────────────────
+        // This handles the case where the backend is down or times out.
+        try {
+            // Check /users collection first (primary source of truth)
+            const usersQ = query(collection(db, 'users'), where('email', '==', emailLower));
+            const usersSnap = await getDocs(usersQ);
+
+            if (!usersSnap.empty) {
+                const userData = usersSnap.docs[0].data();
+                // If isFirstLogin is explicitly false, the user has already set a password
+                const isFirstLogin = userData.isFirstLogin !== false;
+                return { exists: true, isFirstLogin };
+            }
+
+            // Not in /users — check if provisioned in auxiliary collections
+            // (teachers, students, parentEmail on student docs)
+            const [teacherSnap, studentSnap, parentSnap] = await Promise.all([
+                getDocs(query(collection(db, 'teachers'), where('email', '==', emailLower))),
+                getDocs(query(collection(db, 'students'), where('email', '==', emailLower))),
+                getDocs(query(collection(db, 'students'), where('parentEmail', '==', emailLower))),
+            ]);
+
+            if (!teacherSnap.empty || !studentSnap.empty || !parentSnap.empty) {
+                // Found in the system — definitely a first-time user with no password yet
+                return { exists: true, isFirstLogin: true };
+            }
+
+            // Not found anywhere — reject
+            return { exists: false, isFirstLogin: false, error: 'No account found for this email address.' };
+        } catch {
+            // Firestore also unavailable — safe default: show create-password.
+            // createPassword handles auth/email-already-in-use by signing in normally,
+            // so returning isFirstLogin: true is always safe for returning users too.
+            return { exists: true, isFirstLogin: true };
+        }
     };
 
     // ── login ─────────────────────────────────────────────────────────────────

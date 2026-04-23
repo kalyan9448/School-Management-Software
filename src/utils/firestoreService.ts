@@ -510,7 +510,34 @@ export const studentService = {
             bloodGroup: student.bloodGroup || '',
             medicalInfo: student.medicalInfo as any,
         };
-        return createDoc<Student>('students', newStudent);
+        const createdStudent = await createDoc<Student>('students', newStudent);
+
+        // Auto-provision /users records so the student and parent can log in
+        // on first visit and be routed to the correct dashboard. Errors are
+        // non-fatal — the backend fallback will handle any missed provisioning.
+        if (newStudent.email) {
+            userService.create({
+                email: newStudent.email,
+                name: newStudent.name,
+                role: 'student',
+                school_id: newStudent.academicYear ? undefined : getSchoolId() || undefined,
+                isFirstLogin: true,
+            }).catch(err => console.warn('[studentService] Auto-provisioning student user failed:', err));
+        }
+
+        if (newStudent.parentEmail) {
+            const parentEmail = newStudent.parentEmail.trim().toLowerCase();
+            const parentName = newStudent.fatherName || newStudent.motherName || 'Parent';
+            userService.create({
+                email: parentEmail,
+                name: parentName,
+                role: 'parent',
+                school_id: getSchoolId() || undefined,
+                isFirstLogin: true,
+            }).catch(err => console.warn('[studentService] Auto-provisioning parent user failed:', err));
+        }
+
+        return createdStudent;
     },
 
     update: async (id: string, updates: Partial<Student>): Promise<Student | null> => {

@@ -273,14 +273,7 @@ export function Login() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => { setPassword(''); setConfirmPassword(''); setError(''); setStep('create-password'); }}
-                    className="text-sm text-amber-600 hover:text-amber-800 font-medium"
-                  >
-                    First time? Set up password
-                  </button>
+                <div className="flex items-center justify-center">
                   <button 
                     type="button"
                     onClick={() => setStep('forgot-password')}
@@ -380,6 +373,14 @@ export function Login() {
                   {loading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
                     : 'Create Password & Sign In'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="w-full flex items-center justify-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back
                 </button>
               </form>
             )}

@@ -46,7 +46,27 @@ router.post('/check-email', async (req, res) => {
         }
 
         if (snapshot.empty) {
-            return res.json({ exists: false, isFirstLogin: false });
+            // /users doc not found — check auxiliary collections for users
+            // provisioned by admins who haven't logged in yet.
+            const [teacherInfo, studentInfo, parentSnap, schoolId] = await Promise.all([
+                resolveTeacherByEmail(trimmed),
+                resolveStudentByEmail(trimmed),
+                db().collection('students')
+                    .where('parentEmail', 'in', [trimmed, lowered])
+                    .limit(1)
+                    .get(),
+                findSchoolIdByEmail(trimmed),
+            ]);
+
+            const foundInSystem = teacherInfo.isTeacher || studentInfo.isStudent
+                || !parentSnap.empty || schoolId !== null;
+
+            if (!foundInSystem) {
+                return res.json({ exists: false, isFirstLogin: false });
+            }
+
+            // They exist in the system but have no /users doc yet → definitely first login
+            return res.json({ exists: true, isFirstLogin: true });
         }
 
         const userData = snapshot.docs[0].data();
@@ -113,6 +133,30 @@ async function resolveStudentByEmail(email) {
         return { isStudent: true, school_id: sd.school_id || null, name: sd.name || null };
     }
     return { isStudent: false, school_id: null, name: null };
+}
+
+/**
+ * Check the students collection's parentEmail field for the given email and
+ * return the parent's school_id + the child's name if found.
+ * Parents are identified by their child's record, not by their own collection.
+ */
+async function resolveParentByEmail(email) {
+    const trimmed = email.trim();
+    const lowered = trimmed.toLowerCase();
+    // Try both casings since parentEmail may have been stored mixed-case
+    const candidates = [lowered];
+    if (trimmed !== lowered) candidates.push(trimmed);
+    let snap = await db().collection('students').where('parentEmail', 'in', candidates).limit(1).get();
+    if (!snap.empty) {
+        const sd = snap.docs[0].data();
+        return {
+            isParent: true,
+            school_id: sd.school_id || null,
+            // Use father/mother name as a display fallback; parent name stored separately
+            name: sd.fatherName || sd.motherName || null,
+        };
+    }
+    return { isParent: false, school_id: null, name: null };
 }
 
 /** Robustly find a school ID by searching multiple possible principal email fields. */
@@ -225,7 +269,7 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 const existingDoc = existingQuery.docs[0];
                 user = { id: uid, ...existingDoc.data() };
 
-                // Correct mis-filed teachers/students in orphaned docs
+                // Correct mis-filed teachers/students/parents in orphaned docs
                 if (user.role === 'admin' && correctRole !== 'superadmin') {
                     const teacherInfo = await resolveTeacherByEmail(email);
                     if (teacherInfo.isTeacher) {
@@ -238,6 +282,14 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                             user.role = 'student';
                             if (!user.school_id && studentInfo.school_id) user.school_id = studentInfo.school_id;
                             if (!user.name && studentInfo.name) user.name = studentInfo.name;
+                        } else {
+                            // Check if this is a parent (parentEmail on a student doc)
+                            const parentInfo = await resolveParentByEmail(email);
+                            if (parentInfo.isParent) {
+                                user.role = 'parent';
+                                if (!user.school_id && parentInfo.school_id) user.school_id = parentInfo.school_id;
+                                if (!user.name && parentInfo.name) user.name = parentInfo.name;
+                            }
                         }
                     }
                 }
@@ -270,7 +322,15 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                             resolvedSchoolId = studentInfo.school_id;
                             if (studentInfo.name) resolvedName = studentInfo.name;
                         } else {
-                            resolvedSchoolId = await findSchoolIdByEmail(email);
+                            // Check if this email is a parent (parentEmail on a student doc)
+                            const parentInfo = await resolveParentByEmail(email);
+                            if (parentInfo.isParent) {
+                                finalRole = 'parent';
+                                resolvedSchoolId = parentInfo.school_id;
+                                if (parentInfo.name) resolvedName = parentInfo.name;
+                            } else {
+                                resolvedSchoolId = await findSchoolIdByEmail(email);
+                            }
                         }
                     }
                 }
