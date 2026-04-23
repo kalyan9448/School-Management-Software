@@ -265,6 +265,80 @@ export const AIRecommendationService = {
   }
 };
 
+/**
+ * Aggregates all student learning context needed for AI concept overview generation.
+ * Used by SubjectDetailPage and TopicDetailPage.
+ * - subject: The subject to pull quiz results for
+ * - topic: (optional) Narrow quiz accuracy to a specific topic
+ * - flashcardProgress: (optional) Pass the already-known flashcard progress from state
+ * - quizAccuracy: (optional) Pass the already-known quiz accuracy from state
+ */
+export const StudentLearningContextService = {
+  get: async (
+    subject: string,
+    topic?: string,
+    flashcardProgress?: number,
+    quizAccuracy?: number | null
+  ) => {
+    try {
+      const [profile, curriculumTags, knowledgeGaps] = await Promise.all([
+        StudentProfile.get(),
+        getCurriculumTags(subject),
+        AIRecommendationService.identifyKnowledgeGaps(),
+      ]);
+
+      // If quiz accuracy is not passed in, try to compute from stored quiz results
+      let resolvedAccuracy: number | null = quizAccuracy !== undefined ? quizAccuracy : null;
+      if (resolvedAccuracy === undefined || resolvedAccuracy === null) {
+        try {
+          const uid = getUid();
+          if (uid !== 'anonymous') {
+            const quizResults = await quizResultService.getByStudent(uid);
+            const relevant = quizResults.filter(r =>
+              r.subject?.toLowerCase() === subject.toLowerCase() &&
+              (!topic || r.topic?.toLowerCase() === topic.toLowerCase())
+            );
+            if (relevant.length > 0) {
+              const avg = relevant.reduce((sum, r) => sum + (r.accuracy ?? 0), 0) / relevant.length;
+              resolvedAccuracy = Math.round(avg);
+            }
+          }
+        } catch (e) {
+          console.warn('[StudentLearningContext] Could not fetch quiz accuracy:', e);
+        }
+      }
+
+      // Flashcard progress from state or default to 0
+      const resolvedFlashcard = flashcardProgress ?? 0;
+
+      return {
+        age: profile.age || 15,
+        grade: profile.grade || 'Grade 10',
+        section: profile.section,
+        curriculumTags: curriculumTags as string[],
+        quizAccuracy: resolvedAccuracy,
+        flashcardProgress: resolvedFlashcard,
+        knowledgeGaps,
+        learningStyle: profile.psychologicalProfile?.learningStyle || 'general',
+        psychologicalProfile: profile.psychologicalProfile,
+      };
+    } catch (err) {
+      console.error('[StudentLearningContext] Failed to build context:', err);
+      return {
+        age: 15,
+        grade: 'Grade 10',
+        section: '',
+        curriculumTags: [],
+        quizAccuracy: null,
+        flashcardProgress: 0,
+        knowledgeGaps: [],
+        learningStyle: 'general',
+        psychologicalProfile: null,
+      };
+    }
+  }
+};
+
 export const Quotes = {
   getAll: async () => {
     return getData<string[]>("quotes", []);

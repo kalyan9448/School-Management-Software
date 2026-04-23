@@ -498,6 +498,161 @@ export const aiService = {
             };
         }
     },
+
+    /**
+     * Generate a deep, student-specific, pedagogical concept overview.
+     * This is the primary AI engine for the Student Dashboard.
+     * It produces a rich, multi-section explanation adapted to the
+     * individual student's performance data, age, and curriculum.
+     */
+    generateStudentConceptOverview: async (
+        subject: string,
+        topic: string,
+        studentContext: {
+            age: number;
+            grade: string;
+            section?: string;
+            curriculumTags: string[];
+            quizAccuracy: number | null;          // 0-100 or null if not attempted
+            flashcardProgress: number;             // 0-100
+            knowledgeGaps: { topic: string; subject: string; score: number }[];
+            learningStyle: string;                 // e.g. 'visual', 'kinesthetic'
+            psychologicalProfile?: any;
+        }
+    ): Promise<any> => {
+        const { age, grade, curriculumTags, quizAccuracy, flashcardProgress, knowledgeGaps, learningStyle } = studentContext;
+
+        const performanceLevel =
+            quizAccuracy === null ? 'not-yet-attempted' :
+            quizAccuracy < 50 ? 'struggling' :
+            quizAccuracy < 75 ? 'developing' :
+            quizAccuracy < 90 ? 'proficient' : 'advanced';
+
+        const topicGap = knowledgeGaps.find(g => g.topic?.toLowerCase() === topic?.toLowerCase());
+        const relatedGaps = knowledgeGaps
+            .filter(g => g.subject?.toLowerCase() === subject?.toLowerCase() && g.topic?.toLowerCase() !== topic?.toLowerCase())
+            .slice(0, 3)
+            .map(g => `${g.topic} (${g.score}% accuracy)`);
+
+        const curriculumContext = curriculumTags.length > 0
+            ? `This student follows the ${curriculumTags.join(' & ')} curriculum.`
+            : 'Standard curriculum.';
+
+        const adaptationNote =
+            performanceLevel === 'struggling'
+                ? 'Use very simple language, concrete everyday analogies, and build from the most basic first principles. Avoid jargon. Reassure and encourage.'
+            : performanceLevel === 'developing'
+                ? 'Use clear language with relatable examples. Reinforce foundational concepts before introducing nuance.'
+            : performanceLevel === 'proficient'
+                ? 'Assume solid foundational knowledge. Introduce nuance, real-world applications, and connections to other topics.'
+            : performanceLevel === 'advanced'
+                ? 'Use rigorous, precise language. Provide deeper conceptual insight, edge cases, and curriculum exam-level depth.'
+            : 'This student hasn\'t attempted the quiz yet. Provide a welcoming, motivating, and comprehensive introduction.';
+
+        const prompt = `You are a world-class pedagogical AI tutor with expertise in ${subject}. 
+Your task is to generate a DEEP, COMPREHENSIVE, and PERSONALIZED learning guide for a student.
+
+--- STUDENT PROFILE ---
+Name: Student | Age: ${age} years | Grade: ${grade}
+Learning Style: ${learningStyle || 'general'}
+${curriculumContext}
+Flashcard Mastery: ${flashcardProgress}%
+Quiz Accuracy on this topic: ${quizAccuracy !== null ? quizAccuracy + '%' : 'Not yet attempted'}
+Performance Level: ${performanceLevel}
+Known Knowledge Gaps in this subject: ${relatedGaps.length > 0 ? relatedGaps.join(', ') : 'None identified'}
+${topicGap ? `⚠️ This specific topic "${topic}" is a KNOWN GAP (${topicGap.score}% accuracy). Extra care needed.` : ''}
+
+--- SUBJECT & TOPIC ---
+Subject: ${subject}
+Topic: ${topic}
+
+--- PEDAGOGICAL ADAPTATION INSTRUCTIONS ---
+${adaptationNote}
+Tailor your vocabulary and conceptual depth to a ${age}-year-old student.
+${curriculumTags.includes('CBSE') ? 'Align explanations with NCERT chapter structure and CBSE board exam expectations.' : ''}
+${curriculumTags.includes('SSC') ? 'Frame key points in SSC examination language and pattern.' : ''}
+${curriculumTags.includes('IIT Foundation') ? 'Include deeper analytical insight appropriate for IIT Foundation level.' : ''}
+
+--- REQUIRED OUTPUT ---
+Generate a RICH, multi-section concept guide. Every section must be genuinely educational and tailored — not generic.
+
+Respond ONLY with a valid JSON object containing these exact keys:
+
+- "mainTopic": string — Clean topic name.
+- "description": string — 2-3 sentences that hook the student. Explain WHY this topic matters in real life. Make it exciting and relatable to age ${age}.
+- "overview": string — A 4-6 sentence pedagogical narrative that builds intuition step by step. This should read like an expert teacher explaining the core idea clearly.
+- "deepExplanation": string — A thorough, detailed explanation (8-12 sentences). Cover the 'what', 'why', and 'how'. Include the underlying mechanism or logic, not just surface facts. Adapt depth to performance level: ${performanceLevel}.
+- "learningObjectives": string[] — 5 specific objectives starting with action verbs (Understand, Apply, Analyze, etc.).
+- "keyPoints": string[] — 6 essential facts/concepts a student must master.
+- "ageAppropriateAnalogy": string — One vivid, concrete analogy that maps this concept to something a ${age}-year-old experiences daily. Must be genuinely creative and appropriate.
+- "stepByStepBreakdown": { "step": string, "explanation": string }[] — 4-5 logical steps to understand this topic progressively.
+- "commonMisconceptions": { "misconception": string, "correction": string }[] — 3 common mistakes students make about this topic and the correct understanding.
+- "curriculumFocus": string — How this topic fits into the ${curriculumTags.join('/') || 'standard'} curriculum. Mention exam relevance, chapter connections, or marks weightage if known.
+- "realWorldConnections": string[] — 3-4 real-world applications that resonate with a ${age}-year-old.
+- "encouragement": string — A short (1-2 sentence), personalized, genuinely motivating message based on their current performance level (${performanceLevel}).
+- "difficultyLevel": "simplified" | "standard" | "advanced" — Choose based on performance level.
+
+Pure valid JSON only. No markdown, no code blocks, no extra text.`;
+
+        const messages: ChatMessage[] = [
+            {
+                role: 'system',
+                content: 'You are a master pedagogical AI that creates deeply personalized, curriculum-aligned learning content. You output only valid JSON.'
+            },
+            { role: 'user', content: prompt }
+        ];
+
+        try {
+            const responseText = await callAI(messages, DEFAULT_MODEL, true);
+            return JSON.parse(responseText);
+        } catch (error) {
+            console.error('Failed to generate student concept overview:', error);
+            // Rich fallback so UI never breaks
+            return {
+                mainTopic: topic,
+                description: `${topic} is a key concept in ${subject} that forms the foundation for deeper understanding in this area.`,
+                overview: `In this learning guide, we will explore "${topic}" step by step. Understanding this concept will help you grasp more advanced ideas in ${subject}.`,
+                deepExplanation: `"${topic}" is one of the important topics in ${subject}. Mastering it requires understanding both the theory and its practical applications. As you progress through the flashcards and quiz, your understanding will deepen.`,
+                learningObjectives: [
+                    `Understand the fundamental definition of ${topic}`,
+                    `Identify key components related to ${topic}`,
+                    `Apply ${topic} concepts to solve problems`,
+                    `Connect ${topic} to real-world examples`,
+                    `Analyze common patterns in ${topic}`
+                ],
+                keyPoints: [
+                    `${topic} is a core concept in ${subject}`,
+                    'Understanding the basics is the first step',
+                    'Practice questions help solidify your understanding',
+                    'Connect theory to real-world examples',
+                    'Review your mistakes to learn faster',
+                    'Consistent practice is the key to mastery'
+                ],
+                ageAppropriateAnalogy: `Think of ${topic} like learning to ride a bike — once you understand the balance, everything else follows naturally.`,
+                stepByStepBreakdown: [
+                    { step: 'Start with definitions', explanation: `Learn the precise meaning of key terms in ${topic}` },
+                    { step: 'Understand the core concept', explanation: 'Build intuition through examples before memorizing formulas' },
+                    { step: 'Practice with problems', explanation: 'Apply your understanding to different question types' },
+                    { step: 'Review and connect', explanation: `See how ${topic} links to other topics you have learned` }
+                ],
+                commonMisconceptions: [
+                    { misconception: 'This topic can be memorized without understanding', correction: 'Deep understanding beats rote memorization every time' },
+                    { misconception: 'One practice round is enough', correction: 'Spaced repetition across multiple sessions leads to long-term retention' },
+                    { misconception: 'Mistakes are failures', correction: 'Every mistake is a learning signal — review them carefully' }
+                ],
+                curriculumFocus: `This topic is part of the ${curriculumTags.join('/') || 'standard'} curriculum for ${grade}.`,
+                realWorldConnections: [
+                    `${topic} appears in everyday problem-solving`,
+                    `Understanding ${topic} helps in related subjects`,
+                    `Professionals use this concept in real careers`
+                ],
+                encouragement: performanceLevel === 'struggling'
+                    ? "Every expert was once a beginner. You're on the right track!"
+                    : "Great work so far! Keep pushing and you'll master this topic.",
+                difficultyLevel: performanceLevel === 'advanced' ? 'advanced' : performanceLevel === 'struggling' ? 'simplified' : 'standard'
+            };
+        }
+    },
 };
 
 /**

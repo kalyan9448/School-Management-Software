@@ -11,6 +11,11 @@ import {
   Brain,
   Sparkles,
   Lightbulb,
+  AlertTriangle,
+  Globe,
+  ChevronRight,
+  Zap,
+  MapPin,
 } from "lucide-react";
 
 import { Card } from "@/components/student/ui/card";
@@ -18,14 +23,16 @@ import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
 import { type HomeworkTopic } from "@/data/studentMockData";
-import { HomeworkService, TodaysClasses, StudentProfile, getCurriculumTags } from "@/services/student/studentDataService";
+import { HomeworkService, TodaysClasses, StudentProfile, getCurriculumTags, StudentLearningContextService } from "@/services/student/studentDataService";
 import { AITopicChat } from "@/components/student/modules/AITopicChat";
 import { aiService } from "@/services/aiService";
+import { useAIFeatureEnabled } from "@/hooks/useAIFeatureEnabled";
 
 export function TopicDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { topicId } = useParams<{ topicId: string }>();
+  const { isEnabled: isAIEnabled } = useAIFeatureEnabled();
 
   // State to track flashcard completion dynamically
   const [flashcardCompleted, setFlashcardCompleted] = useState(false);
@@ -78,26 +85,51 @@ export function TopicDetailPage() {
 
   useEffect(() => {
     async function fetchAIOverview() {
-      if (topic) {
-        setIsGenerating(true);
-        try {
-          const overview = await aiService.generateSubjectOverview(
-            topic.subject, 
-            topic.topic, 
-            studentData.grade
+      if (!topic) return;
+      setIsGenerating(true);
+      try {
+        if (isAIEnabled) {
+          // Build full student context, passing already-known accuracy + flashcard progress
+          const ctx = await StudentLearningContextService.get(
+            topic.subject,
+            topic.topic,
+            flashcardProgress,
+            questionsAccuracy
           );
-          if (overview) {
-            setAiTopicDetails(overview);
-          }
-        } catch (error) {
-          console.error("AI Overview generation failed for topic:", error);
-        } finally {
-          setIsGenerating(false);
+          const overview = await aiService.generateStudentConceptOverview(
+            topic.subject,
+            topic.topic,
+            ctx
+          );
+          if (overview) setAiTopicDetails(overview);
+        } else {
+          // Fallback without AI
+          const tags = await getCurriculumTags(topic.subject);
+          setCurriculumTags(tags);
+          setAiTopicDetails({
+            mainTopic: topic.topic,
+            description: `Learn about ${topic.topic} in ${topic.subject}.`,
+            overview: `Explore the topic of ${topic.topic} as part of your ${topic.subject} curriculum.`,
+            deepExplanation: "",
+            learningObjectives: [],
+            keyPoints: [],
+            ageAppropriateAnalogy: null,
+            stepByStepBreakdown: [],
+            commonMisconceptions: [],
+            curriculumFocus: "",
+            realWorldConnections: [],
+            encouragement: "Keep going!",
+            difficultyLevel: "standard",
+          });
         }
+      } catch (error) {
+        console.error("AI Overview generation failed for topic:", error);
+      } finally {
+        setIsGenerating(false);
       }
     }
     fetchAIOverview();
-  }, [topic?.id]);
+  }, [topic?.id, isAIEnabled]);
 
   // Merge AI details with base topic details
   const topicDetails = aiTopicDetails || classData?.topicDetails;
@@ -193,102 +225,204 @@ export function TopicDetailPage() {
 
       <div className="max-w-4xl mx-auto px-4 space-y-8">
         {/* Curriculum Overview / AI Guide */}
-        {topicDetails && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="p-6 md:p-10 border-none bg-gradient-to-br from-white via-white to-purple-50/30 shadow-[0_20px_50px_rgba(0,0,0,0.06)] rounded-3xl md:rounded-[2.5rem] relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-purple-500 opacity-20" />
-              <div className="absolute -right-20 -top-20 w-64 h-64 bg-purple-100/30 rounded-full blur-3xl invisible md:visible" />
-              
-              <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-6 relative z-10 text-center md:text-left">
-                <div className="w-14 h-14 md:w-16 md:h-16 bg-purple-50 rounded-2xl md:rounded-3xl flex items-center justify-center group-hover:rotate-6 transition-transform shadow-sm flex-shrink-0">
-                  <BookOpen className="w-6 h-6 md:w-8 md:h-8 text-purple-600" />
-                </div>
-                <div className="flex-1 w-full">
-                  <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-3">
-                    <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] tracking-tight">
-                      {aiTopicDetails ? "AI-Enhanced Learning Guide" : "Curriculum-Based Topic Overview"}
-                    </h2>
-                    {aiTopicDetails && (
-                      <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-none px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors">
-                        <Sparkles className="w-3 md:w-3.5 h-3 md:h-3.5" />
-                        <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-wider">Powered by AI</span>
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  {isGenerating ? (
-                    <div className="space-y-6">
-                      <div className="space-y-3">
-                        <div className="h-4 bg-gray-100 rounded-full w-full animate-pulse" />
-                        <div className="h-4 bg-gray-100 rounded-full w-[90%] animate-pulse" />
-                        <div className="h-4 bg-gray-100 rounded-full w-[80%] animate-pulse" />
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-4 md:gap-6 pt-4">
-                        <div className="h-40 bg-gray-50 rounded-3xl animate-pulse" />
-                        <div className="h-40 bg-gray-50 rounded-3xl animate-pulse" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <p className="text-[#4A5568] leading-relaxed text-base md:text-lg font-medium">
-                        {topicDetails.description}
-                      </p>
-                      
-                      <div className="p-4 md:p-6 bg-gray-50/50 rounded-2xl md:rounded-3xl border border-gray-100 relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-gray-200" />
-                        <p className="text-[#7A869A] leading-relaxed text-xs md:text-sm italic font-medium">
-                          {topicDetails.overview || topicDetails.pedagogicalSummary}
-                        </p>
-                      </div>
-                      
-                      {/* Objectives & Key Points Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-4 text-left">
-                        {/* Objectives Sub-Card */}
-                        <div className="p-5 md:p-6 rounded-2xl md:rounded-[2rem] bg-emerald-50/50 border border-emerald-100/50 hover:bg-emerald-50 transition-colors group/card">
-                          <h4 className="font-bold text-[10px] md:text-[11px] uppercase tracking-[0.2em] text-emerald-700 flex items-center gap-2 mb-4">
-                            <div className="p-1.5 bg-emerald-100 rounded-lg group-hover/card:scale-110 transition-transform">
-                              <Target className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                            </div>
-                            Learning Objectives
-                          </h4>
-                          <ul className="space-y-3">
-                            {topicDetails.learningObjectives?.map((obj: string, i: number) => (
-                              <li key={i} className="text-xs md:text-sm font-semibold text-[#4A5568] flex items-start gap-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
-                                <span className="flex-1">{obj}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Key Points Sub-Card */}
-                        <div className="p-5 md:p-6 rounded-2xl md:rounded-[2rem] bg-amber-50/50 border border-amber-100/50 hover:bg-amber-50 transition-colors group/card">
-                          <h4 className="font-bold text-[10px] md:text-[11px] uppercase tracking-[0.2em] text-amber-700 flex items-center gap-2 mb-4">
-                            <div className="p-1.5 bg-amber-100 rounded-lg group-hover/card:scale-110 transition-transform">
-                              <Lightbulb className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                            </div>
-                            Key Concept Mastery
-                          </h4>
-                          <ul className="space-y-3">
-                            {topicDetails.keyPoints?.map((pt: string, i: number) => (
-                              <li key={i} className="text-xs md:text-sm font-semibold text-[#4A5568] flex items-start gap-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
-                                <span className="flex-1">{pt}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+        {/* AI Overview Section */}
+        {isGenerating ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <Card className="p-8 flex flex-col items-center justify-center gap-3">
+              <div className="relative">
+                <Brain className="w-10 h-10 text-purple-300 animate-pulse" />
+                <Sparkles className="w-4 h-4 text-purple-500 absolute -top-1 -right-1 animate-bounce" />
+              </div>
+              <p className="text-gray-700 font-semibold">Generating your personalized guide...</p>
+              <p className="text-gray-400 text-sm">Analyzing your quiz history, flashcard progress & curriculum</p>
+              <div className="w-full max-w-sm space-y-2 mt-2">
+                <div className="h-3 bg-gray-100 rounded-full animate-pulse" />
+                <div className="h-3 bg-gray-100 rounded-full w-4/5 animate-pulse" />
+                <div className="h-3 bg-gray-100 rounded-full w-3/5 animate-pulse" />
               </div>
             </Card>
           </motion.div>
+        ) : aiTopicDetails && (
+          <div className="space-y-4">
+            {/* Description + encouragement */}
+            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
+              <Card className="p-6 md:p-8 border-none bg-gradient-to-br from-white to-purple-50/30 shadow-[0_20px_50px_rgba(0,0,0,0.06)] rounded-3xl relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500 opacity-20 rounded-l-3xl" />
+                <div className="flex flex-col md:flex-row items-start gap-4">
+                  <div className="w-14 h-14 bg-purple-50 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <BookOpen className="w-7 h-7 text-purple-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <h2 className="text-xl font-black text-[#1A1A1A] tracking-tight">AI-Enhanced Learning Guide</h2>
+                      <Badge className="bg-purple-100 text-purple-700 border-none px-3 py-1 rounded-full flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Powered by AI</span>
+                      </Badge>
+                      {aiTopicDetails.difficultyLevel && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          aiTopicDetails.difficultyLevel === 'simplified' ? 'bg-green-100 text-green-700 border-green-200' :
+                          aiTopicDetails.difficultyLevel === 'advanced' ? 'bg-rose-100 text-rose-700 border-rose-200' :
+                          'bg-blue-100 text-blue-700 border-blue-200'
+                        }`}>
+                          {aiTopicDetails.difficultyLevel === 'simplified' ? 'Simplified for you' :
+                           aiTopicDetails.difficultyLevel === 'advanced' ? 'Advanced level' : 'Standard level'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[#4A5568] leading-relaxed font-medium">{aiTopicDetails.description}</p>
+                    {aiTopicDetails.encouragement && (
+                      <p className="mt-3 text-purple-600 text-sm font-semibold italic">✨ {aiTopicDetails.encouragement}</p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Deep Explanation */}
+            {(aiTopicDetails.overview || aiTopicDetails.deepExplanation) && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                <Card className="p-6 md:p-8 border-none bg-white shadow-md rounded-3xl">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-50 rounded-xl"><Brain className="w-5 h-5 text-blue-600" /></div>
+                    <h3 className="font-black text-gray-900">Deep Concept Explanation</h3>
+                  </div>
+                  <p className="text-gray-600 leading-relaxed">{aiTopicDetails.overview || aiTopicDetails.pedagogicalSummary}</p>
+                  {aiTopicDetails.deepExplanation && (
+                    <div className="mt-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                      <p className="text-gray-700 text-sm leading-relaxed">{aiTopicDetails.deepExplanation}</p>
+                    </div>
+                  )}
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Analogy */}
+            {aiTopicDetails.ageAppropriateAnalogy && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                <Card className="p-5 bg-amber-50 border border-amber-100 rounded-2xl shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Lightbulb className="w-4 h-4 text-amber-600" />
+                    <h4 className="font-black text-amber-900 text-sm uppercase tracking-wider">Think of It This Way</h4>
+                  </div>
+                  <p className="text-amber-800 text-sm font-medium italic leading-relaxed">"{aiTopicDetails.ageAppropriateAnalogy}"</p>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Step-by-Step Breakdown */}
+            {aiTopicDetails.stepByStepBreakdown?.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+                <Card className="p-6 border-none bg-white shadow-md rounded-3xl">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-emerald-50 rounded-xl"><Zap className="w-5 h-5 text-emerald-600" /></div>
+                    <h3 className="font-black text-gray-900">Step-by-Step Breakdown</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {aiTopicDetails.stepByStepBreakdown.map((item: any, i: number) => (
+                      <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-black flex-shrink-0">{i + 1}</div>
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{item.step}</p>
+                          <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{item.explanation}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Objectives & Key Points */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 text-left">
+              {aiTopicDetails.learningObjectives?.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                  <Card className="p-5 bg-emerald-50/50 border border-emerald-100/50 rounded-2xl h-full">
+                    <h4 className="font-bold text-[10px] uppercase tracking-[0.2em] text-emerald-700 flex items-center gap-2 mb-3">
+                      <Target className="w-3.5 h-3.5" /> Learning Objectives
+                    </h4>
+                    <ul className="space-y-2">
+                      {aiTopicDetails.learningObjectives.map((obj: string, i: number) => (
+                        <li key={i} className="text-xs font-semibold text-[#4A5568] flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
+                          {obj}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                </motion.div>
+              )}
+              {aiTopicDetails.keyPoints?.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
+                  <Card className="p-5 bg-amber-50/50 border border-amber-100/50 rounded-2xl h-full">
+                    <h4 className="font-bold text-[10px] uppercase tracking-[0.2em] text-amber-700 flex items-center gap-2 mb-3">
+                      <Lightbulb className="w-3.5 h-3.5" /> Key Concept Mastery
+                    </h4>
+                    <ul className="space-y-2">
+                      {aiTopicDetails.keyPoints.map((pt: string, i: number) => (
+                        <li key={i} className="text-xs font-semibold text-[#4A5568] flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
+                          {pt}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Misconceptions — only shown after quiz attempt */}
+            {questionsAccuracy !== null && aiTopicDetails.commonMisconceptions?.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                <Card className="p-5 bg-rose-50/60 border border-rose-100 rounded-2xl shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    <h4 className="font-black text-rose-900 text-sm">Watch Out For These Mistakes</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {aiTopicDetails.commonMisconceptions.map((item: any, i: number) => (
+                      <div key={i} className="p-3 bg-white rounded-xl border border-rose-100">
+                        <p className="text-rose-700 text-xs font-semibold mb-1">❌ {item.misconception}</p>
+                        <p className="text-emerald-700 text-xs font-medium">✅ {item.correction}</p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Curriculum Focus */}
+            {aiTopicDetails.curriculumFocus && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}>
+                <Card className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                  <div className="flex items-center gap-2 mb-1">
+                    <MapPin className="w-4 h-4 text-indigo-600" />
+                    <h4 className="font-black text-indigo-900 text-sm">Curriculum Focus</h4>
+                  </div>
+                  <p className="text-indigo-700 text-xs leading-relaxed">{aiTopicDetails.curriculumFocus}</p>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Real World Connections */}
+            {aiTopicDetails.realWorldConnections?.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}>
+                <Card className="p-4 bg-teal-50/50 border border-teal-100 rounded-2xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Globe className="w-4 h-4 text-teal-600" />
+                    <h4 className="font-black text-teal-900 text-sm">Real-World Connections</h4>
+                  </div>
+                  <ul className="space-y-1">
+                    {aiTopicDetails.realWorldConnections.map((conn: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-teal-800 font-medium">
+                        <ChevronRight className="w-3.5 h-3.5 text-teal-500 flex-shrink-0 mt-0.5" />{conn}
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              </motion.div>
+            )}
+          </div>
         )}
 
         {/* Flashcards Section */}
