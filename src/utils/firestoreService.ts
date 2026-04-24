@@ -131,6 +131,18 @@ function getSchoolId(): string {
     return sessionStorage.getItem('active_school_id') || '';
 }
 
+/** Returns true if the cached user profile has the 'superadmin' role. */
+function isSuperAdmin(): boolean {
+    try {
+        const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
+        if (cached) {
+            const user = JSON.parse(cached);
+            return user?.role === 'superadmin';
+        }
+    } catch { /* ignore */ }
+    return false;
+}
+
 /** Returns school_id or throws if not set. Ensures multi-tenant queries are always scoped. */
 function requireSchoolId(): string {
     let sid = getSchoolId();
@@ -143,12 +155,18 @@ function requireSchoolId(): string {
                 if (user?.school_id) {
                     sid = user.school_id;
                     sessionStorage.setItem('active_school_id', sid!);
+                } else if (user?.role === 'superadmin') {
+                    // Superadmins don't have a default school_id, return empty string
+                    // instead of throwing, as they are allowed to query globally.
+                    return '';
                 }
             }
         } catch { /* ignore */ }
     }
-    if (!sid) throw new Error('No active school selected. Please select a school first.');
-    return sid;
+    if (!sid && !isSuperAdmin()) {
+        throw new Error('No active school selected. Please select a school first.');
+    }
+    return sid || '';
 }
 
 /** Remove keys whose value is undefined — Firestore rejects undefined field values. */
@@ -159,14 +177,20 @@ function stripUndefined(obj: Record<string, any>): Record<string, any> {
 /**
  * Fetch all docs from a collection, optionally filtered. Returns typed array.
  * Automatically injects school_id filter for school-scoped collections.
+ * Superadmins bypass the school_id filter to allow global data access.
  */
 async function fetchCollection<T>(
     collectionName: string,
     ...constraints: QueryConstraint[]
 ): Promise<T[]> {
-    const allConstraints = GLOBAL_COLLECTIONS.has(collectionName)
+    const isGlobal = GLOBAL_COLLECTIONS.has(collectionName);
+    const superAdmin = isSuperAdmin();
+    
+    // If it's a global collection OR the user is a superadmin, don't force a school_id filter.
+    const allConstraints = (isGlobal || superAdmin)
         ? constraints
         : [where('school_id', '==', requireSchoolId()), ...constraints];
+        
     const q = allConstraints.length > 0
         ? query(collection(db, collectionName), ...allConstraints)
         : collection(db, collectionName);
@@ -219,7 +243,7 @@ async function updateDocById(
         if (!snap.exists()) throw new Error(`Document ${collectionName}/${id} not found`);
         const docSchoolId = (snap.data() as any).school_id;
         const currentSchoolId = requireSchoolId();
-        if (docSchoolId && docSchoolId !== currentSchoolId) {
+        if (!isSuperAdmin() && docSchoolId && docSchoolId !== currentSchoolId) {
             throw new Error('Access denied: document belongs to a different school');
         }
         // Prevent school_id from being changed via update
@@ -235,7 +259,7 @@ async function deleteDocById(collectionName: string, id: string): Promise<void> 
         if (!snap.exists()) return;
         const docSchoolId = (snap.data() as any).school_id;
         const currentSchoolId = requireSchoolId();
-        if (docSchoolId && docSchoolId !== currentSchoolId) {
+        if (!isSuperAdmin() && docSchoolId && docSchoolId !== currentSchoolId) {
             throw new Error('Access denied: document belongs to a different school');
         }
     }
@@ -249,7 +273,7 @@ async function getDocById<T>(collectionName: string, id: string): Promise<T | nu
     if (!GLOBAL_COLLECTIONS.has(collectionName)) {
         const docSchoolId = (snap.data() as any).school_id;
         const currentSchoolId = requireSchoolId();
-        if (docSchoolId && docSchoolId !== currentSchoolId) {
+        if (!isSuperAdmin() && docSchoolId && docSchoolId !== currentSchoolId) {
             return null; // Silently deny cross-school reads
         }
     }
