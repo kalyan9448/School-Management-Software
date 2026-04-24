@@ -510,11 +510,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── requestPasswordReset ──────────────────────────────────────────────────
     const requestPasswordReset = async (email: string): Promise<boolean> => {
         try {
-            await sendPasswordResetEmail(auth, email);
+            const actionCodeSettings = {
+                // After password reset, redirect back to the login page
+                url: `${window.location.origin}/login`,
+                handleCodeInApp: false,
+            };
+            await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
             return true;
-        } catch (err) {
+        } catch (err: any) {
+            const code = err?.code as string | undefined;
+            if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+                // Firebase email enumeration protection — treat as success to avoid
+                // revealing whether the email exists. The email field is already
+                // validated client-side, so this is a safe fallback.
+                return true;
+            }
+            if (code === 'auth/too-many-requests') {
+                throw new Error('Too many requests. Please wait a few minutes before trying again.');
+            }
             console.error('Password reset email error:', err);
-            return false;
+            throw new Error(err?.message || 'Failed to send reset email. Please try again.');
         }
     };
 
