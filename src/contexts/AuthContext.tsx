@@ -278,11 +278,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         if (data.claimsUpdated) {
                             await firebaseUser.getIdToken(true);
                         }
+                    } else if (resp.status === 403) {
+                         // Backend rejected the login (e.g. no school_id found for non-superadmin)
+                         const data = await resp.json().catch(() => ({}));
+                         await signOut(auth);
+                         appUser = null;
+                         throw new Error(data.error || 'Access denied.');
                     }
-                } catch {
-                    // Backend unavailable — continue with Firestore profile.
+                } catch (err: any) {
+                    // If we manually threw a 403 error above, we want to abort the login
+                    if (err.message && err.message.includes('not linked to any school') || err.message === 'Access denied.') {
+                         setUser(null);
+                         sessionStorage.removeItem(STORAGE_KEY);
+                         localStorage.removeItem(STORAGE_KEY);
+                         setLoading(false);
+                         return; // Stop processing
+                    }
+                    // Otherwise backend unavailable — continue with Firestore profile.
                     // Firestore rules fall back to the previous token claims.
                 }
+
+                // If appUser was nullified by the 403 rejection, don't proceed
+                if (!appUser) return;
 
                 // 4. Fallback: If school_id is STILL missing (backend down, race
                 //    condition, etc.), try to resolve it from the schools or students collection.
@@ -376,7 +393,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (resp.ok) {
                 const data = await resp.json();
                 if (!data.exists) {
-                    return { exists: false, isFirstLogin: false, error: 'No account found for this email address.' };
+                    return { exists: false, isFirstLogin: false, error: data.error || 'No account found for this email address.' };
                 }
                 return { exists: true, isFirstLogin: !!data.isFirstLogin };
             }

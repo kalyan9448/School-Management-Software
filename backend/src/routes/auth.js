@@ -29,6 +29,7 @@ router.post('/check-email', async (req, res) => {
     try {
         const trimmed = email.trim();
         const lowered = trimmed.toLowerCase();
+        const role = resolveRole(trimmed);
 
         // 1. Check Firestore for a user profile with this email.
         //    Firestore queries are case-sensitive, so try exact match first,
@@ -61,15 +62,39 @@ router.post('/check-email', async (req, res) => {
             const foundInSystem = teacherInfo.isTeacher || studentInfo.isStudent
                 || !parentSnap.empty || schoolId !== null;
 
-            if (!foundInSystem) {
-                return res.json({ exists: false, isFirstLogin: false });
+            if (role !== 'superadmin') {
+                if (!foundInSystem) {
+                    return res.json({ exists: false, isFirstLogin: false, error: 'No account found for this email address.' });
+                }
+
+                const hasSchoolId = teacherInfo.school_id || studentInfo.school_id || (!parentSnap.empty && parentSnap.docs[0].data().school_id) || schoolId;
+                if (!hasSchoolId) {
+                    return res.json({ exists: false, isFirstLogin: false, error: 'Your account is not linked to any school. Please contact your administrator.' });
+                }
             }
 
-            // They exist in the system but have no /users doc yet → definitely first login
+            // They exist in the system but have no /users doc yet (or they are superadmin) → definitely first login
             return res.json({ exists: true, isFirstLogin: true });
         }
 
         const userData = snapshot.docs[0].data();
+
+        // If not a superadmin, ensure the user profile has a school_id, or can resolve one.
+        if (role !== 'superadmin' && !userData.school_id) {
+            const [teacherInfo, studentInfo, parentSnap, schoolId] = await Promise.all([
+                resolveTeacherByEmail(trimmed),
+                resolveStudentByEmail(trimmed),
+                db().collection('students')
+                    .where('parentEmail', 'in', [trimmed, lowered])
+                    .limit(1)
+                    .get(),
+                findSchoolIdByEmail(trimmed),
+            ]);
+            const hasSchoolId = teacherInfo.school_id || studentInfo.school_id || (!parentSnap.empty && parentSnap.docs[0].data().school_id) || schoolId;
+            if (!hasSchoolId) {
+                return res.json({ exists: false, isFirstLogin: false, error: 'Your account is not linked to any school. Please contact your administrator.' });
+            }
+        }
 
         // 2. Check if the user has a Firebase Auth account already.
         //    getUserByEmail is case-insensitive on Firebase's side.
@@ -345,6 +370,12 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 };
+
+                // Double check to prevent rogue account creation
+                if (user.role !== 'superadmin' && !user.school_id) {
+                    return res.status(403).json({ error: 'Your account is not linked to any school. Please contact your administrator.' });
+                }
+
                 await userRef.set(user);
             }
         }

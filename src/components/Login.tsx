@@ -96,8 +96,8 @@ export function Login() {
         setError('Failed to create password. Please try again.');
       }
       // On success, onAuthStateChanged fires → sets user in context → LoginPage redirects
-    } catch {
-      setError('An unexpected error occurred.');
+    } catch (err: any) {
+      setError(err?.message || 'An unexpected error occurred.');
     }
 
     setLoading(false);
@@ -140,8 +140,8 @@ export function Login() {
         setError('Failed to reset password. Please try again.');
       }
       // On success, onAuthStateChanged keeps user in context → LoginPage redirects
-    } catch {
-      setError('An unexpected error occurred.');
+    } catch (err: any) {
+      setError(err?.message || 'An unexpected error occurred.');
     }
 
     setLoading(false);
