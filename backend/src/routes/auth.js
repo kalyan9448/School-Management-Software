@@ -20,6 +20,9 @@ function resolveRole(email) {
 // POST /api/auth/check-email — public (no auth required).
 // Called BEFORE the user has signed in to determine whether to show
 // the "Create Password" or "Enter Password" screen.
+//
+// Access rule: allow any registered user (in users collection OR any
+// auxiliary collection). school_id is NOT required — superadmins have none.
 router.post('/check-email', async (req, res) => {
     const { email } = req.body;
     if (!email || typeof email !== 'string') {
@@ -29,11 +32,10 @@ router.post('/check-email', async (req, res) => {
     try {
         const trimmed = email.trim();
         const lowered = trimmed.toLowerCase();
-        const role = resolveRole(trimmed);
 
-        // 1. Check Firestore for a user profile with this email.
-        //    Firestore queries are case-sensitive, so try exact match first,
-        //    then lowercase (admins may have stored mixed-case emails).
+        // ── 1. Check /users collection (primary source of truth) ─────────────────
+        // Any user with a doc here is a valid registered user — superadmin, admin,
+        // teacher, student, parent. Allow them regardless of school_id.
         let snapshot = await db().collection('users')
             .where('email', '==', trimmed)
             .limit(1)
@@ -46,71 +48,54 @@ router.post('/check-email', async (req, res) => {
                 .get();
         }
 
-        if (snapshot.empty) {
-            // /users doc not found — check auxiliary collections for users
-            // provisioned by admins who haven't logged in yet.
-            const [teacherInfo, studentInfo, parentSnap, schoolId] = await Promise.all([
-                resolveTeacherByEmail(trimmed),
-                resolveStudentByEmail(trimmed),
-                db().collection('students')
-                    .where('parentEmail', 'in', [trimmed, lowered])
-                    .limit(1)
-                    .get(),
-                findSchoolIdByEmail(trimmed),
-            ]);
+        if (!snapshot.empty) {
+            const userData = snapshot.docs[0].data();
 
-            const foundInSystem = teacherInfo.isTeacher || studentInfo.isStudent
-                || !parentSnap.empty || schoolId !== null;
-
-            if (role !== 'superadmin') {
-                if (!foundInSystem) {
-                    return res.json({ exists: false, isFirstLogin: false, error: 'No account found for this email address.' });
-                }
-
-                const hasSchoolId = teacherInfo.school_id || studentInfo.school_id || (!parentSnap.empty && parentSnap.docs[0].data().school_id) || schoolId;
-                if (!hasSchoolId) {
-                    return res.json({ exists: false, isFirstLogin: false, error: 'Your account is not linked to any school. Please contact your administrator.' });
-                }
+            // Check if the user has a Firebase Auth account already.
+            let hasAuthAccount = false;
+            try {
+                await admin.auth().getUserByEmail(trimmed);
+                hasAuthAccount = true;
+            } catch (err) {
+                if (err.code !== 'auth/user-not-found') throw err;
             }
 
-            // They exist in the system but have no /users doc yet (or they are superadmin) → definitely first login
-            return res.json({ exists: true, isFirstLogin: true });
+            // First login: no Firebase Auth account yet, or profile still flagged.
+            const isFirstLogin = !hasAuthAccount || userData.isFirstLogin === true;
+            return res.json({ exists: true, isFirstLogin });
         }
 
-        const userData = snapshot.docs[0].data();
+        // ── 2. Not in /users — check auxiliary collections ────────────────────────
+        // Users provisioned by admins (teachers created via staff form, students via
+        // admission, parents via student's parentEmail, school admins via school form)
+        // may not have a /users doc yet. They are allowed in for first-login setup.
+        const [teacherInfo, studentInfo, parentSnap, schoolId] = await Promise.all([
+            resolveTeacherByEmail(trimmed),
+            resolveStudentByEmail(trimmed),
+            db().collection('students')
+                .where('parentEmail', 'in', [trimmed, lowered])
+                .limit(1)
+                .get(),
+            findSchoolIdByEmail(trimmed),
+        ]);
 
-        // If not a superadmin, ensure the user profile has a school_id, or can resolve one.
-        if (role !== 'superadmin' && !userData.school_id) {
-            const [teacherInfo, studentInfo, parentSnap, schoolId] = await Promise.all([
-                resolveTeacherByEmail(trimmed),
-                resolveStudentByEmail(trimmed),
-                db().collection('students')
-                    .where('parentEmail', 'in', [trimmed, lowered])
-                    .limit(1)
-                    .get(),
-                findSchoolIdByEmail(trimmed),
-            ]);
-            const hasSchoolId = teacherInfo.school_id || studentInfo.school_id || (!parentSnap.empty && parentSnap.docs[0].data().school_id) || schoolId;
-            if (!hasSchoolId) {
-                return res.json({ exists: false, isFirstLogin: false, error: 'Your account is not linked to any school. Please contact your administrator.' });
-            }
+        const foundInSystem = teacherInfo.isTeacher
+            || studentInfo.isStudent
+            || !parentSnap.empty
+            || schoolId !== null;
+
+        if (!foundInSystem) {
+            // Not registered anywhere — reject.
+            return res.json({
+                exists: false,
+                isFirstLogin: false,
+                error: 'No account found for this email address. Please contact your administrator.',
+            });
         }
 
-        // 2. Check if the user has a Firebase Auth account already.
-        //    getUserByEmail is case-insensitive on Firebase's side.
-        let hasAuthAccount = false;
-        try {
-            await admin.auth().getUserByEmail(trimmed);
-            hasAuthAccount = true;
-        } catch (err) {
-            if (err.code !== 'auth/user-not-found') throw err;
-            // No Firebase Auth account yet → definitely first login
-        }
+        // Provisioned in auxiliary collections but no /users doc yet → first login.
+        return res.json({ exists: true, isFirstLogin: true });
 
-        // First login if: no Firebase Auth account OR profile still flagged
-        const isFirstLogin = !hasAuthAccount || userData.isFirstLogin === true;
-
-        return res.json({ exists: true, isFirstLogin });
     } catch (err) {
         console.error('Check-email error:', err);
         res.status(500).json({ error: 'Internal server error' });
@@ -370,11 +355,6 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 };
-
-                // Double check to prevent rogue account creation
-                if (user.role !== 'superadmin' && !user.school_id) {
-                    return res.status(403).json({ error: 'Your account is not linked to any school. Please contact your administrator.' });
-                }
 
                 await userRef.set(user);
             }
