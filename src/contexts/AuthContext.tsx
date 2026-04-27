@@ -393,8 +393,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (!usersSnap.empty) {
                 const userData = usersSnap.docs[0].data();
-                // If isFirstLogin is explicitly false, the user has already set a password
-                const isFirstLogin = userData.isFirstLogin !== false;
+                // If isFirstLogin is explicitly true, the user needs to create a password
+                // Existing users will have it as false or undefined (not set)
+                const isFirstLogin = userData.isFirstLogin === true;
                 return { exists: true, isFirstLogin };
             }
 

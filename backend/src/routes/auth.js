@@ -60,8 +60,9 @@ router.post('/check-email', async (req, res) => {
                 if (err.code !== 'auth/user-not-found') throw err;
             }
 
-            // First login: no Firebase Auth account yet, or profile still flagged.
-            const isFirstLogin = !hasAuthAccount || userData.isFirstLogin === true;
+            // First login: only if they don't have a Firebase Auth account yet.
+            // Once they have an account, they're not a first-time user anymore.
+            const isFirstLogin = !hasAuthAccount;
             return res.json({ exists: true, isFirstLogin });
         }
 
@@ -173,16 +174,16 @@ async function resolveParentByEmail(email) {
 async function findSchoolIdByEmail(email) {
     const trimmed = email.trim();
     const lowered = trimmed.toLowerCase();
-    
+
     // Check possible field names in the schools collection
     const fields = ['email', 'principalEmail', 'principalGmail', 'principal_email'];
-    
+
     for (const field of fields) {
         let q = await db().collection('schools')
             .where(field, '==', trimmed)
             .limit(1)
             .get();
-        
+
         if (q.empty && trimmed !== lowered) {
             q = await db().collection('schools')
                 .where(field, '==', lowered)
@@ -310,7 +311,7 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
                 }
 
                 await userRef.set(user);
-                try { await db().collection('users').doc(existingDoc.id).delete(); } catch(e) {}
+                try { await db().collection('users').doc(existingDoc.id).delete(); } catch (e) { }
             } else {
                 // Completely new user — determine role before defaulting to 'admin'.
                 // Check teachers collection first so a provisioned teacher who
