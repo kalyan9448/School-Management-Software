@@ -1030,7 +1030,7 @@ export function TeacherDashboardNew() {
                 return (
                 <div
                   key={index}
-                  className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${
+                  className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-lg border-2 transition-all ${
                     isOngoing
                       ? 'bg-green-50 border-green-400 ring-2 ring-green-200'
                       : isPast
@@ -1038,7 +1038,7 @@ export function TeacherDashboardNew() {
                         : 'bg-gray-50 border-gray-200'
                   }`}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 mb-4 sm:mb-0">
                     <div className="w-28 text-center">
                       <Clock className={`w-5 h-5 mx-auto mb-1 ${isOngoing ? 'text-green-600 animate-pulse' : 'text-purple-600'}`} />
                       <p className={`text-sm font-medium ${isOngoing ? 'text-green-700' : 'text-gray-600'}`}>
@@ -1055,7 +1055,7 @@ export function TeacherDashboardNew() {
                       <p className="text-gray-600 text-sm">{item.class}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col min-[440px]:flex-row gap-2 w-full sm:w-auto">
                     <button
                       onClick={() => {
                         const slotId = (item as any).id;
@@ -1077,7 +1077,7 @@ export function TeacherDashboardNew() {
                         setShowLessonForm(false);
                         setCurrentView('lesson-log');
                       }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium whitespace-nowrap"
                     >
                       Log Lesson
                     </button>
@@ -1091,7 +1091,7 @@ export function TeacherDashboardNew() {
                         }
                         setCurrentView('attendance');
                       }}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                      className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium whitespace-nowrap"
                     >
                       Mark Attendance
                     </button>
@@ -1112,7 +1112,7 @@ export function TeacherDashboardNew() {
 
         {/* Today's Logged Lessons */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
             <h3 className="text-gray-900">Today's Logged Lessons</h3>
             <button
               onClick={() => {
