@@ -2890,6 +2890,47 @@ export const ticketService = {
     },
 };
 
+// ==================== TEACHER CLASS CHECK-IN SERVICE ====================
+
+export interface TeacherClassCheckin {
+    id: string;
+    school_id?: string;
+    teacherId: string;       // teacher email
+    teacherName: string;
+    date: string;            // YYYY-MM-DD
+    slotId: string;          // timetable slot ID
+    class: string;
+    section: string;
+    subject: string;
+    startTime: string;
+    endTime: string;
+    markedAt: string;        // ISO timestamp
+}
+
+export const teacherCheckinService = {
+    /** Create a new check-in record for a teacher entering a class. */
+    create: async (checkin: Omit<TeacherClassCheckin, 'id'>): Promise<TeacherClassCheckin> => {
+        return createDoc<TeacherClassCheckin>('teacher_class_checkins', checkin);
+    },
+
+    /** Load all check-ins for a specific teacher on a given date. */
+    getByTeacherAndDate: async (teacherId: string, date: string): Promise<TeacherClassCheckin[]> => {
+        return fetchCollection<TeacherClassCheckin>(
+            'teacher_class_checkins',
+            where('teacherId', '==', teacherId),
+            where('date', '==', date),
+        );
+    },
+
+    /** Load ALL check-ins for a given date (used by Admin dashboard). */
+    getByDate: async (date: string): Promise<TeacherClassCheckin[]> => {
+        return fetchCollection<TeacherClassCheckin>(
+            'teacher_class_checkins',
+            where('date', '==', date),
+        );
+    },
+};
+
 // ==================== DEFAULT EXPORT (same shape as old service) ====================
 
 const firestoreDataService = {
@@ -2925,6 +2966,7 @@ const firestoreDataService = {
     reports: reportsService,
     quizResult: quizResultService,
     plan: planService,
+    teacherCheckin: teacherCheckinService,
 };
 
 export default firestoreDataService;

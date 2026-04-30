@@ -773,6 +773,28 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // TEACHER CLASS CHECK-INS
+    // =========================================================================
+    
+    match /teacher_class_checkins/{checkinId} {
+      // Teachers can read their own; Admins see all for their school
+      allow read: if isSuperAdmin() || (
+        hasValidSchoolId() && isOwnSchool() &&
+        (isAdminOrAbove() || (isTeacher() && resource.data.teacherId.lower() == request.auth.token.email.lower()))
+      );
+      
+      // Teachers can only create their own records
+      allow create: if isSuperAdmin() || (
+        isTeacher() && 
+        canCreateSchoolData() &&
+        request.resource.data.teacherId.lower() == request.auth.token.email.lower()
+      );
+      
+      // Check-ins are immutable once recorded
+      allow update, delete: if isSuperAdmin();
+    }
+    
+    // =========================================================================
     // CATCH-ALL DENY
     // =========================================================================
 

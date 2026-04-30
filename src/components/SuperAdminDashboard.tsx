@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -481,28 +481,28 @@ export function SuperAdminDashboard() {
         setPlanDetails(planRecord);
       } catch (err: any) {
         console.error('Failed to load plans:', err);
-        erro₹push('Plans: ' + (err?.message || 'Failed to load'));
+        errors.push('Plans: ' + (err?.message || 'Failed to load'));
       }
 
       try {
         firestoreSchools = await fetchWithRetry(() => schoolService.getAll());
       } catch (err: any) {
         console.error('Failed to load schools:', err);
-        erro₹push('Schools: ' + (err?.message || 'Failed to load'));
+        errors.push('Schools: ' + (err?.message || 'Failed to load'));
       }
 
       try {
         firestoreOrganizations = await fetchWithRetry(() => organizationService.getAll());
       } catch (err: any) {
         console.error('Failed to load organizations:', err);
-        erro₹push('Organizations: ' + (err?.message || 'Failed to load'));
+        errors.push('Organizations: ' + (err?.message || 'Failed to load'));
       }
 
       try {
         firestoreAnnouncements = await fetchWithRetry(() => announcementService.getAll());
       } catch (err: any) {
         console.error('Failed to load announcements:', err);
-        erro₹push('Announcements: ' + (err?.message || 'Failed to load'));
+        errors.push('Announcements: ' + (err?.message || 'Failed to load'));
       }
 
       try {
@@ -510,7 +510,7 @@ export function SuperAdminDashboard() {
         setTickets(firestoreTickets);
       } catch (err: any) {
         console.error('Failed to load tickets:', err);
-        erro₹push('Tickets: ' + (err?.message || 'Failed to load'));
+        errors.push('Tickets: ' + (err?.message || 'Failed to load'));
       }
 
       try {
@@ -1772,7 +1772,7 @@ export function SuperAdminDashboard() {
           String(b.paymentStatus || '')
         ].join(','));
         
-        const csvString = [heade₹join(','), ...csvData].join('\n');
+        const csvString = [headers.join(','), ...csvData].join('\n');
         const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1939,14 +1939,14 @@ export function SuperAdminDashboard() {
         )}
 
         {/* Error banner */}
-        {dataErro₹length > 0 && (
+        {dataErrors.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <AlertCircle className="w-5 h-5 text-red-600" />
               <p className="text-red-700 font-medium">Some data failed to load from Firebase:</p>
             </div>
             <ul className="list-disc list-inside text-red-600 text-sm">
-              {dataErro₹map((e, i) => <li key={i}>{e}</li>)}
+              {dataErrors.map((e, i) => <li key={i}>{e}</li>)}
             </ul>
             <p className="text-red-500 text-sm mt-2">Check that your user profile has the correct role (superadmin) and try refreshing.</p>
           </div>
@@ -2228,14 +2228,14 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Error banner for data load failures */}
-      {dataErro₹length > 0 && (
+      {dataErrors.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <p className="text-red-700 font-medium">Failed to load some data:</p>
           </div>
           <ul className="list-disc list-inside text-red-600 text-sm">
-            {dataErro₹map((e, i) => <li key={i}>{e}</li>)}
+            {dataErrors.map((e, i) => <li key={i}>{e}</li>)}
           </ul>
         </div>
       )}
@@ -6413,7 +6413,7 @@ export function SuperAdminDashboard() {
                 <MessageSquare className="w-10 h-10 text-gray-200" />
               </div>
               <h3 className="text-xl font-bold text-gray-400">System Support Inbox</h3>
-              <p className="max-w-xs mx-auto mt-2 text-sm">Select a ticket from the left panel to begin communicating with school administrato₹</p>
+              <p className="max-w-xs mx-auto mt-2 text-sm">Select a ticket from the left panel to begin communicating with school administrators.</p>
             </div>
           )}
         </div>

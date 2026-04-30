@@ -504,8 +504,10 @@ import {
   quizResultService,
   planService,
   ticketService,
+  teacherCheckinService,
   StudentNote,
   type SubscriptionPlan as SubscriptionPlanType,
+  type TeacherClassCheckin,
 } from './firestoreService';
 
 export {
@@ -543,7 +545,10 @@ export {
   quizResultService,
   planService,
   ticketService,
+  teacherCheckinService,
 };
+
+export type { TeacherClassCheckin };
 
 export type { StudentNote };
 

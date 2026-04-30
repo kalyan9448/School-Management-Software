@@ -34,6 +34,7 @@ import {
   Star,
   Upload,
   Lock,
+  MapPin,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import {
@@ -46,11 +47,13 @@ import {
   notificationService,
   studentNoteService,
   subjectMappingService,
+  teacherCheckinService,
   Notification,
   CalendarEvent,
   TimetableSlot,
   StudentNote,
   CurriculumTag,
+  type TeacherClassCheckin,
 } from '../utils/centralDataService';
 import { AttendanceOverview } from './AttendanceOverview';
 import { TeachingFlowScreen } from './TeachingFlowScreen';
@@ -225,6 +228,10 @@ export function TeacherDashboardNew() {
   const [isHolidayToday, setIsHolidayToday] = useState(false);
   const [holidayInfo, setHolidayInfo] = useState<CalendarEvent | null>(null);
 
+  // Teacher class check-in state
+  const [checkedInSlots, setCheckedInSlots] = useState<Set<string>>(new Set());
+  const [isCheckingIn, setIsCheckingIn] = useState<string>(''); // slotId being checked in
+
   // Update currentTime every minute for period highlighting
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -247,6 +254,53 @@ export function TeacherDashboardNew() {
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  // Load today's check-ins so buttons persist state across page reloads
+  useEffect(() => {
+    if (!user?.email) return;
+    const today = new Date().toISOString().split('T')[0];
+    teacherCheckinService.getByTeacherAndDate(user.email, today)
+      .then((checkins) => {
+        setCheckedInSlots(new Set(checkins.map((c) => c.slotId)));
+      })
+      .catch((err) => console.error('[TeacherCheckin] Failed to load today\'s check-ins:', err));
+  }, [user?.email]);
+
+  const handleTeacherCheckin = async (slot: any) => {
+    if (!user?.email || !slot?.id) return;
+    if (checkedInSlots.has(slot.id)) return; // already checked in
+
+    setIsCheckingIn(slot.id);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const schoolId = sessionStorage.getItem('active_school_id') || user.school_id;
+      console.log('[TeacherCheckin] Attempting check-in:', { slotId: slot.id, schoolId, teacherId: user.email });
+      
+      const [cls, sec] = (slot.class || '').split('-');
+      await teacherCheckinService.create({
+        teacherId: user.email,
+        teacherName: user.name || '',
+        date: today,
+        slotId: slot.id,
+        class: cls || slot.class || '',
+        section: sec || '',
+        subject: slot.subject || '',
+        startTime: slot.startTime || '',
+        endTime: slot.endTime || '',
+        markedAt: new Date().toISOString(),
+      });
+      setCheckedInSlots((prev) => new Set([...prev, slot.id]));
+    } catch (err) {
+      console.error('[TeacherCheckin] Failed to save check-in:', err);
+      // Provide more helpful error if it's a permission issue
+      const msg = err instanceof Error && err.message.includes('permission-denied') 
+        ? 'Access Denied: Please ensure your profile is fully set up as a teacher.' 
+        : 'Failed to mark presence. Please try again.';
+      alert('❌ ' + msg);
+    } finally {
+      setIsCheckingIn('');
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -1057,6 +1111,31 @@ export function TeacherDashboardNew() {
                     </div>
                   </div>
                   <div className="flex flex-col min-[440px]:flex-row gap-2 w-full sm:w-auto">
+                    {/* Teacher Self-Attendance Check-In Button */}
+                    {checkedInSlots.has((item as any).id) ? (
+                      <div className="flex items-center gap-2 px-4 py-2 bg-green-100 border-2 border-green-400 text-green-800 rounded-lg text-sm font-semibold whitespace-nowrap">
+                        <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                        <span>Checked In ✓</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleTeacherCheckin(item as any)}
+                        disabled={isCheckingIn === (item as any).id}
+                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-wait transition-all text-sm font-semibold whitespace-nowrap flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md"
+                      >
+                        {isCheckingIn === (item as any).id ? (
+                          <>
+                            <Clock className="w-4 h-4 animate-spin" />
+                            Marking…
+                          </>
+                        ) : (
+                          <>
+                            <MapPin className="w-4 h-4" />
+                            I'm in Class
+                          </>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         const slotId = (item as any).id;

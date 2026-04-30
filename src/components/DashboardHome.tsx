@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../contexts/TenantContext';
-import { Users, IndianRupee, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
-import { studentService, attendanceService, classService, calendarService, enquiryService, schoolService, feeService } from '../utils/centralDataService';
+import { Users, IndianRupee, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare, MapPin, CheckCircle2 } from 'lucide-react';
+import { studentService, attendanceService, classService, calendarService, enquiryService, schoolService, feeService, timetableService, teacherCheckinService } from '../utils/centralDataService';
 
 interface DashboardHomeProps {
   onNavigate?: (view: string, options?: any) => void;
@@ -29,6 +29,18 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   const [overdueEnquiries, setOverdueEnquiries] = useState<any[]>([]);
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Teacher Class Presence state
+  const [teacherPresenceData, setTeacherPresenceData] = useState<{
+    slotId: string;
+    teacherName: string;
+    subject: string;
+    classSection: string;
+    startTime: string;
+    endTime: string;
+    isCheckedIn: boolean;
+    checkedInAt?: string;
+  }[]>([]);
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -209,12 +221,49 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         });
         setOverdueEnquiries(overdue);
         setShowOverdueBanner(overdue.length > 0);
+        // 9. Teacher Class Presence Data
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          const todayDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+          
+          const [allSlots, allCheckins] = await Promise.all([
+            timetableService.getAll(),
+            teacherCheckinService.getByDate(today)
+          ]);
+
+          const todaySlots = allSlots.filter((s: any) => s.day === todayDay);
+          
+          const presence = todaySlots.map((slot: any) => {
+            const checkin = allCheckins.find((c: any) => c.slotId === slot.id);
+            return {
+              slotId: slot.id,
+              teacherName: slot.teacherName || 'Unknown',
+              subject: slot.subject || '',
+              classSection: `${slot.class}-${slot.section}`,
+              startTime: slot.startTime || '',
+              endTime: slot.endTime || '',
+              isCheckedIn: !!checkin,
+              checkedInAt: checkin?.markedAt
+            };
+          });
+
+          // Sort by time
+          presence.sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
+          setTeacherPresenceData(presence);
+        } catch (err) {
+          console.error('Teacher presence load error:', err);
+        }
+
         setIsLoading(false);
       } catch (err) {
         console.error('Dashboard load error:', err);
       }
     };
     loadDashboard();
+
+    // Refresh presence data every 60 seconds
+    const interval = setInterval(loadDashboard, 60000);
+    return () => clearInterval(interval);
   }, [schoolId]);
 
 
@@ -604,6 +653,102 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Teacher Class Presence - New Feature */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-gray-900">Teacher Class Presence</h3>
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full animate-pulse">LIVE</span>
+          </div>
+          <button
+            onClick={() => onNavigate?.('teachers')}
+            className="text-purple-600 hover:text-purple-700 transition-colors text-sm font-medium"
+          >
+            Manage Teachers
+          </button>
+        </div>
+        <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="px-6 py-4 text-sm font-bold text-gray-600">Teacher</th>
+                  <th className="px-6 py-4 text-sm font-bold text-gray-600">Class & Subject</th>
+                  <th className="px-6 py-4 text-sm font-bold text-gray-600">Time</th>
+                  <th className="px-6 py-4 text-sm font-bold text-gray-600">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {isLoading ? (
+                  [1, 2, 3].map(i => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-3/4"></div></td>
+                      <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-1/2"></div></td>
+                      <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-1/4"></div></td>
+                      <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded-full w-24"></div></td>
+                    </tr>
+                  ))
+                ) : teacherPresenceData.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-gray-500">
+                      <div className="flex flex-col items-center gap-2">
+                        <MapPin className="w-8 h-8 text-gray-300" />
+                        <p>No classes scheduled for today.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  teacherPresenceData.map((presence) => (
+                    <tr key={presence.slotId} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold text-xs">
+                            {presence.teacherName.charAt(0)}
+                          </div>
+                          <span className="font-medium text-gray-900">{presence.teacherName}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-gray-900 font-medium">Class {presence.classSection}</span>
+                          <span className="text-gray-500 text-sm">{presence.subject}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-gray-600 text-sm">
+                          <Clock className="w-4 h-4" />
+                          <span>{presence.startTime} - {presence.endTime}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {presence.isCheckedIn ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              IN CLASS
+                            </span>
+                            {presence.checkedInAt && (
+                              <span className="text-[10px] text-gray-400 ml-1">
+                                at {new Date(presence.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">
+                            <Clock className="w-3.5 h-3.5" />
+                            PENDING
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
