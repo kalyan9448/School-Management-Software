@@ -51,11 +51,11 @@ interface ChildProgress {
   }>;
 }
 
-export function ParentDashboardChildProgress() {
+export function ParentDashboardChildProgress({ targetChildId }: { targetChildId?: string | null }) {
   const { user } = useAuth();
   const [childrenProgress, setChildrenProgress] = useState<ChildProgress[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(targetChildId || null);
   const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -234,7 +234,10 @@ export function ParentDashboardChildProgress() {
         }
 
         setChildrenProgress(progressData);
-        if (progressData.length > 0) {
+        // Prioritize targetChildId if provided
+        if (targetChildId && progressData.some(p => p.studentId === targetChildId)) {
+          setSelectedChildId(targetChildId);
+        } else if (progressData.length > 0) {
           setSelectedChildId(progressData[0].studentId);
         }
       } catch (error) {
@@ -245,7 +248,7 @@ export function ParentDashboardChildProgress() {
     };
 
     loadChildrenProgress();
-  }, [user?.id]);
+  }, [user?.id, targetChildId]);
 
   if (loading) {
     return (

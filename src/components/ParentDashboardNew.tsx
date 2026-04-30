@@ -35,6 +35,7 @@ import {
   TrendingDown,
   Minus,
   Lightbulb,
+  UserCircle,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
@@ -143,23 +144,56 @@ export function ParentDashboardNew() {
   };
 
   // 1. Fetch children for this parent (tries parentId, then childrenIds, then email match)
-  const { students: children, loading: childrenLoading } = useStudents({
+  const { students: childrenRaw, loading: childrenLoading, refresh: refreshChildren } = useStudents({ 
     parentId: user?.id,
-    childrenIds: user?.childrenIds,
-    parentEmail: user?.email,
+    parentEmail: user?.email 
   });
 
-  // 2. State for selected child
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const children = useMemo(() => childrenRaw || [], [childrenRaw]);
 
-  // Initialize selected child when children load
+  // 2. State for selected child - persistent via localStorage
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(() => {
+    return localStorage.getItem('parent_dashboard_selected_child');
+  });
+
   useEffect(() => {
-    if (children.length > 0 && (!selectedChildId || !children.find(c => c.id === selectedChildId))) {
-      setSelectedChildId(children[0].id);
+    if (children.length > 0) {
+      if (!selectedChildId || !children.find(c => c.id === selectedChildId)) {
+        console.log(`[ParentDashboard] Initializing selectedChildId to: ${children[0].id}`);
+        setSelectedChildId(children[0].id);
+        localStorage.setItem('parent_dashboard_selected_child', children[0].id);
+      }
     }
-  }, [children]);
+  }, [children, selectedChildId]);
 
-  const selectedChild = children.find(c => c.id === selectedChildId) || children[0] || null;
+  const handleChildSelect = (childId: string) => {
+    const child = children.find(c => c.id === childId);
+    console.log(`[ParentDashboard] handleChildSelect called for: ${childId} (${child?.name})`);
+    setSelectedChildId(childId);
+    localStorage.setItem('parent_dashboard_selected_child', childId);
+  };
+
+  const selectedChild = useMemo(() => {
+    if (children.length === 0) return null;
+    const found = children.find(c => c.id === selectedChildId);
+    if (found) {
+      console.log(`[ParentDashboard] selectedChild updated: ${found.id} (${found.name})`);
+      return found;
+    }
+    console.log(`[ParentDashboard] selectedChild falling back to children[0]: ${children[0].id}`);
+    return children[0];
+  }, [children, selectedChildId]);
+
+  // Visual feedback when switching child
+  const [isSwitchingChild, setIsSwitchingChild] = useState(false);
+  useEffect(() => {
+    if (selectedChildId) {
+      console.log(`[ParentDashboard] Switch triggered for: ${selectedChildId}`);
+      setIsSwitchingChild(true);
+      const timer = setTimeout(() => setIsSwitchingChild(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedChildId]);
 
   // 3. Fetch dynamic data for selected child (only when a real child is selected)
   // Fetch attendance for last 90 days so both weekly and monthly reports work
@@ -169,19 +203,27 @@ export function ParentDashboardNew() {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }, []);
 
-  const { attendance: studentAttendance, stats: attendanceStats } = useAttendance(
-    selectedChild ? {
+  const attendanceParams = useMemo(() => {
+    const params = selectedChild ? {
       studentId: selectedChild.id,
       startDate: attendanceStartDate
-    } : undefined
-  );
+    } : undefined;
+    console.log(`[ParentDashboard] attendanceParams updated:`, params);
+    return params;
+  }, [selectedChild?.id, attendanceStartDate]);
 
-  const { lessons } = useLessons(
-    selectedChild ? {
+  const { attendance: studentAttendance, stats: attendanceStats, loading: attendanceLoading } = useAttendance(attendanceParams);
+
+  const lessonsParams = useMemo(() => {
+    const params = selectedChild ? {
       class: selectedChild.class,
       section: selectedChild.section
-    } : undefined
-  );
+    } : undefined;
+    console.log(`[ParentDashboard] lessonsParams updated:`, params);
+    return params;
+  }, [selectedChild?.class, selectedChild?.section]);
+
+  const { lessons, loading: lessonsLoading } = useLessons(lessonsParams);
 
   // Collect all children's classes for notification filtering (multi-child parents)
   const allChildClasses = useMemo(() => 
@@ -198,13 +240,23 @@ export function ParentDashboardNew() {
   );
 
   // Additional dynamic data for progress, fees, etc.
-  const { payments: feeRecords } = useFeePayments(selectedChild ? { studentId: selectedChild.id } : undefined);
-  const { performance: studentPerformance } = useStudentPerformance(selectedChild?.id);
-  const { assignments } = useAssignments(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
-  const { submissions: assignmentSubmissions } = useAssignmentSubmissions(selectedChild ? { studentId: selectedChild.id } : undefined);
-  const { exams } = useExams(selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined);
-  const { results: examResults } = useExamResults(selectedChild ? { studentId: selectedChild.id } : undefined);
-  const { invoices: feeInvoices } = useFeeInvoices(selectedChild ? { studentId: selectedChild.id } : undefined);
+  const feeParams = useMemo(() => selectedChild ? { studentId: selectedChild.id } : undefined, [selectedChild?.id]);
+  const { payments: feeRecords, loading: feesLoading } = useFeePayments(feeParams);
+  
+  const { performance: studentPerformance, loading: performanceLoading } = useStudentPerformance(selectedChild?.id);
+  
+  const assignmentsParams = useMemo(() => 
+    selectedChild ? { class: selectedChild.class, section: selectedChild.section } : undefined
+  , [selectedChild?.class, selectedChild?.section]);
+  const { assignments, loading: assignmentsLoading } = useAssignments(assignmentsParams);
+  
+  const { submissions: assignmentSubmissions, loading: submissionsLoading } = useAssignmentSubmissions(feeParams); // uses same studentId filter
+  
+  const { exams, loading: examsLoading } = useExams(assignmentsParams); // uses same class/section filter
+  
+  const { results: examResults, loading: resultsLoading } = useExamResults(feeParams); // uses same studentId filter
+  
+  const { invoices: feeInvoices, loading: invoicesLoading } = useFeeInvoices(feeParams); // uses same studentId filter
 
   // Fetch quiz results for selected child
   const [quizResults, setQuizResults] = useState<any[]>([]);
@@ -231,6 +283,7 @@ export function ParentDashboardNew() {
             dataService.quizResult.getByStudent(sid).catch(() => [])
           )
         );
+        if (cancelled) return;
 
         let merged = resultGroups.flat();
 
@@ -241,6 +294,7 @@ export function ParentDashboardNew() {
             const classResults = await dataService.quizResult.getByClass(
               selectedChild.class, selectedChild.section
             );
+            if (cancelled) return;
             const childName = (selectedChild.name || '').toLowerCase();
             const childEmail = (selectedChild.email || '').toLowerCase();
             merged = classResults.filter((qr: any) => {
@@ -850,17 +904,17 @@ export function ParentDashboardNew() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
               <p className="text-gray-700 mb-1">Student Name</p>
-              <p className="text-gray-900">{selectedChild.name}</p>
+              <p className="text-gray-900">{selectedChild?.name || 'N/A'}</p>
             </div>
             <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
               <p className="text-gray-700 mb-1">Class</p>
               <p className="text-gray-900">
-                {selectedChild.class} - {selectedChild.section}
+                {selectedChild?.class || 'N/A'} - {selectedChild?.section || 'N/A'}
               </p>
             </div>
             <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
               <p className="text-gray-700 mb-1">Roll Number</p>
-              <p className="text-gray-900">{selectedChild.rollNo}</p>
+              <p className="text-gray-900">{selectedChild?.rollNo || 'N/A'}</p>
             </div>
             <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
               <p className="text-gray-700 mb-1">Report Period</p>
@@ -1250,27 +1304,20 @@ export function ParentDashboardNew() {
                 <Users className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h2 className="text-white mb-1">{selectedChild.name}</h2>
+                <h2 className="text-white mb-1">{selectedChild?.name || 'Loading...'}</h2>
                 <p className="text-purple-100">
-                  Class {selectedChild.class} - Section {selectedChild.section} • Roll No:{' '}
-                  {selectedChild.rollNo}
+                  Class {selectedChild?.class || 'N/A'} - Section {selectedChild?.section || 'N/A'} • Roll No:{' '}
+                  {selectedChild?.rollNo || 'N/A'}
                 </p>
               </div>
             </div>
-            {/* Child Selector */}
-            {children.length > 1 && (
-              <select
-                value={selectedChildId || ''}
-                onChange={(e) => setSelectedChildId(e.target.value)}
-                className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
-              >
-                {children.map(c => (
-                  <option key={c.id} value={c.id} className="text-gray-900">
-                    {c.name} - Class {c.class}
-                  </option>
-                ))}
-              </select>
-            )}
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-white/60 font-bold italic">Student Profile</span>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm">
+                  <UserCircle className="w-4 h-4 text-white" />
+                  <span className="text-sm font-black">{selectedChild?.name}</span>
+                </div>
+              </div>
           </div>
         </div>
 
@@ -1307,12 +1354,20 @@ export function ParentDashboardNew() {
                 <p className="text-gray-700 font-medium">Attendance</p>
               </div>
               <p className={`text-2xl font-bold capitalize ${
+                attendanceLoading ? 'animate-pulse' :
                 todayAttendance.status === 'present' ? 'text-green-600' :
                 todayAttendance.status === 'absent' ? 'text-red-600' :
                 todayAttendance.status === 'late' ? 'text-orange-600' :
                 'text-gray-500'
               }`}>
-                {todayAttendance.status === 'not-marked' ? 'Not Marked' : todayAttendance.status}
+                {attendanceLoading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  todayAttendance.status === 'not-marked' ? 'Not Marked' : todayAttendance.status
+                )}
               </p>
               {todayAttendance.status !== 'not-marked' && todayAttendance.time && todayAttendance.time !== '--:--' && (
                 <p className="text-gray-600 text-sm">at {todayAttendance.time}</p>
@@ -1325,7 +1380,16 @@ export function ParentDashboardNew() {
                 <BookOpen className="w-5 h-5 text-blue-600" />
                 <p className="text-gray-700">Lessons Today</p>
               </div>
-              <p className="text-2xl text-blue-600">{effectiveActivities.length}</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {lessonsLoading ? (
+                  <span className="flex items-center gap-2 text-base font-normal">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  effectiveActivities.length
+                )}
+              </p>
               <p className="text-gray-600 text-sm">topics covered</p>
             </div>
 
@@ -1335,8 +1399,15 @@ export function ParentDashboardNew() {
                 <Brain className="w-5 h-5 text-purple-600" />
                 <p className="text-gray-700">Quizzes</p>
               </div>
-              <p className="text-2xl text-purple-600">
-                {completedQuizzes}/{effectiveActivities.filter((a) => a.quizAssigned).length}
+              <p className="text-2xl font-bold text-purple-600">
+                {lessonsLoading ? (
+                  <span className="flex items-center gap-2 text-base font-normal">
+                    <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  `${completedQuizzes}/${effectiveActivities.filter((a) => a.quizAssigned).length}`
+                )}
               </p>
               <p className="text-gray-600 text-sm">completed</p>
             </div>
@@ -1347,8 +1418,15 @@ export function ParentDashboardNew() {
                 <Award className="w-5 h-5 text-yellow-600" />
                 <p className="text-gray-700">Avg Score</p>
               </div>
-              <p className="text-2xl text-yellow-600">
-                {averageScore !== null ? Math.round(averageScore) : '—'}%
+              <p className="text-2xl font-bold text-yellow-600">
+                {lessonsLoading ? (
+                  <span className="flex items-center gap-2 text-base font-normal">
+                    <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  averageScore !== null ? `${Math.round(averageScore)}%` : '—'
+                )}
               </p>
               <p className="text-gray-600 text-sm">today</p>
             </div>
@@ -1364,7 +1442,7 @@ export function ParentDashboardNew() {
                 ✨ New Feature: AI Discussion Suggestions
               </h3>
               <p className="text-purple-100 mb-3">
-                Get personalized conversation starters for today's lessons! Our AI analyzes what {selectedChild.name} learned
+                Get personalized conversation starters for today's lessons! Our AI analyzes what {selectedChild?.name || 'your child'} learned
                 and suggests meaningful ways to discuss it at home.
               </p>
               <div className="flex items-center gap-4 flex-wrap">
@@ -1730,7 +1808,7 @@ export function ParentDashboardNew() {
             Back to Dashboard
           </button>
         </div>
-        <ParentDashboardChildProgress />
+        <ParentDashboardChildProgress targetChildId={selectedChildId} />
       </div>
     );
   };
@@ -1890,7 +1968,7 @@ export function ParentDashboardNew() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  <span>Personalized for {selectedChild.name}</span>
+                  <span>Personalized for {selectedChild?.name || 'your child'}</span>
                 </div>
               </div>
             </div>
@@ -2123,13 +2201,33 @@ export function ParentDashboardNew() {
       {/* Header */}
       <header className="bg-gradient-to-r from-purple-900 to-purple-800 text-white py-4 shadow-lg sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            <img src={logoImage} alt="Kidz Vision Logo" className="w-12 h-12" />
-            <div>
-              <h1 className="text-white mb-1">Parent Portal</h1>
-              <p className="text-purple-200 text-sm">{user?.name}</p>
+            <div className="flex items-center gap-4">
+              <img src={logoImage} alt="Kidz Vision Logo" className="w-12 h-12" />
+              <div>
+                <h1 className="text-white mb-0 text-xl font-black">Parent Portal</h1>
+                <p className="text-purple-200 text-xs font-medium">{user?.name}</p>
+              </div>
             </div>
-          </div>
+
+            {/* Child Selector in Header */}
+            {children.length > 1 && (
+              <div className="hidden md:flex items-center gap-2 bg-white/10 p-1 rounded-xl border border-white/20 backdrop-blur-md">
+                {children.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleChildSelect(c.id)}
+                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all flex items-center gap-2 ${
+                      selectedChildId === c.id
+                        ? 'bg-white text-purple-900 shadow-md scale-105'
+                        : 'text-white/60 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full ${selectedChildId === c.id ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]' : 'bg-white/20'}`} />
+                    {c.name.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+            )}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setCurrentView('notifications')}
@@ -2163,7 +2261,18 @@ export function ParentDashboardNew() {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto p-6">{renderContent()}</main>
+      <main className="max-w-7xl mx-auto p-6 relative">
+        {/* Switching Profile Overlay */}
+        {isSwitchingChild && (
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-xl transition-all duration-300">
+            <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-purple-900 font-bold animate-pulse">Switching Profile...</p>
+            <p className="text-purple-600 text-sm mt-1">Fetching {selectedChild?.name}'s latest data</p>
+          </div>
+        )}
+        
+        {renderContent()}
+      </main>
     </div>
   );
 }

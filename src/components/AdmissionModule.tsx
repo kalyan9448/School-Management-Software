@@ -355,7 +355,6 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
             // --- PROVISIONING LOGIC ---
             // Only create login accounts and student record if the student is marked as "Admitted"
             if (studentData.status === 'admitted') {
-              // 0. Also create or update a record in the students collection
               const studentPayload: Partial<Student> = {
                 admissionNo: studentData.admissionNo,
                 name: studentData.name,
@@ -375,61 +374,11 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                 academicYear: studentData.academicYear,
                 selectedFees: studentData.selectedFees,
                 status: 'active',
+                school_id: resolvedSchoolId,
               };
 
-              // Check if student already exists in 'students' collection to avoid duplicates
-              const allStudents = await studentService.getAll();
-              const existingStudent = allStudents.find(s => 
-                s.admissionNo === studentData.admissionNo || 
-                (s.name === studentData.name && s.dateOfBirth === studentData.dob)
-              );
-
-              let studentId: string;
-              if (existingStudent) {
-                await studentService.update(existingStudent.id, studentPayload);
-                studentId = existingStudent.id;
-              } else {
-                const createdStudent = await studentService.create(studentPayload);
-                studentId = createdStudent.id;
-              }
-              
-              // Student login accounts are NOT created in the 'users' collection.
-              // The AuthContext and backend auth route automatically resolve the
-              // 'student' role from the 'students' collection when the student
-              // logs in for the first time. Writing to 'users' is unnecessary
-              // and risks role conflicts (e.g. overwriting an admin with same email).
-
-              // 2. Provision/Link Parent Login Account
-              const allUsers = await userService.getAll();
-              const existingParent = allUsers.find((u: any) => u.email === studentData.parentEmail && u.role === 'parent');
-              let parentUserId = '';
-
-              if (existingParent) {
-                parentUserId = existingParent.id;
-                // Link student to existing parent account
-                const currentChildren = existingParent.childrenIds || [];
-                if (!currentChildren.includes(studentId)) {
-                  await userService.update(existingParent.id, {
-                    childrenIds: [...currentChildren, studentId]
-                  });
-                }
-              } else if (studentData.parentEmail) {
-                // Create new parent account and link student
-                const createdParent = await userService.create({
-                  email: studentData.parentEmail,
-                  name: studentData.parentName || studentData.guardianName || 'Parent',
-                  role: 'parent',
-                  school_id: user?.school_id,
-                  childrenIds: [studentId],
-                  isFirstLogin: true
-                });
-                parentUserId = createdParent.id;
-              }
-
-              // 3. Link parent back to student record
-              if (parentUserId) {
-                await studentService.update(studentId, { parentId: parentUserId });
-              }
+              // studentService.create now handles parent account provisioning automatically
+              await studentService.create(studentPayload);
               
               console.log('Automated provisioning completed for:', studentData.email, studentData.parentEmail);
             }

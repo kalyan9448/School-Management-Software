@@ -72,19 +72,34 @@ export const useStudents = (filters?: {
       let data: Student[];
       if (filters?.class && filters?.section) {
         data = await dataService.student.getByClass(filters.class, filters.section);
-      } else if (filters?.parentId) {
-        // Try parentId first, fall back to childrenIds, then parentEmail
-        data = await dataService.student.getByParentId(filters.parentId);
-        if (data.length === 0 && filters.childrenIds?.length) {
-          data = await dataService.student.getByIds(filters.childrenIds);
+      } else if (filters?.parentId || filters?.childrenIds?.length || filters?.parentEmail) {
+        // Fetch from all available identifiers and merge (deduplicated)
+        const [byParentId, byIds, byEmail] = await Promise.all([
+          filters.parentId ? dataService.student.getByParentId(filters.parentId) : Promise.resolve([]),
+          filters.childrenIds?.length ? dataService.student.getByIds(filters.childrenIds) : Promise.resolve([]),
+          filters.parentEmail ? dataService.student.getByParentEmail(filters.parentEmail) : Promise.resolve([]),
+        ]);
+
+        const merged = [...byParentId, ...byIds, ...byEmail];
+        const seen = new Set<string>();
+        data = merged.filter(s => {
+          if (!s.id || seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        });
+
+        // --- Self-Healing Logic ---
+        // If we found students via email that have an incorrect parentId, update them
+        if (filters.parentId) {
+          const incorrectParentStudents = data.filter(s => s.parentId !== filters.parentId);
+          if (incorrectParentStudents.length > 0) {
+            console.log(`[useStudents] Found ${incorrectParentStudents.length} students with mismatched parentId. Healing...`);
+            Promise.all(incorrectParentStudents.map(s => 
+              dataService.student.update(s.id, { parentId: filters.parentId })
+            )).catch(err => console.error('[useStudents] Self-healing failed:', err));
+          }
         }
-        if (data.length === 0 && filters.parentEmail) {
-          data = await dataService.student.getByParentEmail(filters.parentEmail);
-        }
-      } else if (filters?.childrenIds?.length) {
-        data = await dataService.student.getByIds(filters.childrenIds);
-      } else if (filters?.parentEmail) {
-        data = await dataService.student.getByParentEmail(filters.parentEmail);
+        // --------------------------
       } else {
         data = await dataService.student.getAll();
       }
@@ -177,7 +192,7 @@ export const useAttendance = (filters?: {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!filters) {
       setAttendance([]);
       setStats(null);
@@ -185,14 +200,21 @@ export const useAttendance = (filters?: {
       return;
     }
     setLoading(true);
+    // Clear previous data to avoid showing stale results for other children
+    setAttendance([]);
+    setStats(null);
+
     try {
       let data: AttendanceRecord[];
       if (filters?.studentId) {
         data = await dataService.attendance.getByStudent(filters.studentId, filters.startDate, filters.endDate);
+        if (isCancelled?.()) return;
+        
         const studentStats = await dataService.attendance.getAttendanceStats(
           filters.studentId,
           filters.startDate?.substring(0, 7),
         );
+        if (isCancelled?.()) return;
         setStats(studentStats);
       } else if (filters?.class && filters?.section && filters?.date) {
         data = await dataService.attendance.getByClass(filters.class, filters.section, filters.date);
@@ -201,16 +223,24 @@ export const useAttendance = (filters?: {
       } else {
         data = await dataService.attendance.getAll();
       }
+      
+      if (isCancelled?.()) { console.log('[useAttendance] Fetch cancelled.'); return; }
+      console.log(`[useAttendance] Finished fetching ${data.length} records.`);
       setAttendance(data);
     } catch (err) {
       console.error('useAttendance error:', err);
-      setAttendance([]);
+      if (!isCancelled?.()) setAttendance([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.studentId, filters?.date, filters?.class, filters?.section, filters?.startDate, filters?.endDate]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { attendance, stats, loading, refresh };
 };
 
@@ -224,13 +254,16 @@ export const useLessons = (filters?: {
   const [lessons, setLessons] = useState<LessonLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!filters) {
       setLessons([]);
       setLoading(false);
       return;
     }
+    console.log('[useLessons] Refreshing data...');
     setLoading(true);
+    setLessons([]); // Clear stale data
+
     try {
       let data: LessonLog[];
       if (filters?.teacherId) {
@@ -242,16 +275,24 @@ export const useLessons = (filters?: {
       } else {
         data = await dataService.lesson.getAll();
       }
+      
+      if (isCancelled?.()) { console.log('[useLessons] Fetch cancelled.'); return; }
+      console.log(`[useLessons] Finished fetching ${data.length} lessons.`);
       setLessons(data);
     } catch (err) {
       console.error('useLessons error:', err);
-      setLessons([]);
+      if (!isCancelled?.()) setLessons([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.teacherId, filters?.class, filters?.section, filters?.date]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { lessons, loading, refresh };
 };
 
@@ -263,27 +304,38 @@ export const useAssignments = (filters?: {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!filters) {
       setAssignments([]);
       setLoading(false);
       return;
     }
+    console.log('[useAssignments] Refreshing data...');
     setLoading(true);
+    setAssignments([]);
+
     try {
       const data = (filters?.class && filters?.section)
         ? await dataService.assignment.getByClass(filters.class, filters.section)
         : await dataService.assignment.getAll();
+      
+      if (isCancelled?.()) { console.log('[useAssignments] Fetch cancelled.'); return; }
+      console.log(`[useAssignments] Finished fetching ${data.length} assignments.`);
       setAssignments(data);
     } catch (err) {
       console.error('useAssignments error:', err);
-      setAssignments([]);
+      if (!isCancelled?.()) setAssignments([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.class, filters?.section]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { assignments, loading, refresh };
 };
 
@@ -295,8 +347,11 @@ export const useAssignmentSubmissions = (filters?: {
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
+    console.log('[useAssignmentSubmissions] Refreshing data...');
     setLoading(true);
+    setSubmissions([]); // Clear stale data
+
     try {
       let data: AssignmentSubmission[] = [];
       if (filters?.assignmentId) {
@@ -304,16 +359,24 @@ export const useAssignmentSubmissions = (filters?: {
       } else if (filters?.studentId) {
         data = await dataService.assignmentSubmission.getByStudent(filters.studentId);
       }
+      
+      if (isCancelled?.()) { console.log('[useAssignmentSubmissions] Fetch cancelled.'); return; }
+      console.log(`[useAssignmentSubmissions] Finished fetching ${data.length} submissions.`);
       setSubmissions(data);
     } catch (err) {
       console.error('useAssignmentSubmissions error:', err);
-      setSubmissions([]);
+      if (!isCancelled?.()) setSubmissions([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.studentId, filters?.assignmentId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { submissions, loading, refresh };
 };
 
@@ -326,13 +389,16 @@ export const useExams = (filters?: {
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!filters) {
       setExams([]);
       setLoading(false);
       return;
     }
+    console.log('[useExams] Refreshing data...');
     setLoading(true);
+    setExams([]); // Clear stale data
+
     try {
       let data: Exam[];
       if (filters?.upcoming) {
@@ -342,16 +408,24 @@ export const useExams = (filters?: {
       } else {
         data = await dataService.exam.getAll();
       }
+      
+      if (isCancelled?.()) { console.log('[useExams] Fetch cancelled.'); return; }
+      console.log(`[useExams] Finished fetching ${data.length} exams.`);
       setExams(data);
     } catch (err) {
       console.error('useExams error:', err);
-      setExams([]);
+      if (!isCancelled?.()) setExams([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.upcoming, filters?.class, filters?.section]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { exams, loading, refresh };
 };
 
@@ -363,13 +437,16 @@ export const useExamResults = (filters?: {
   const [results, setResults] = useState<ExamResult[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!filters) {
       setResults([]);
       setLoading(false);
       return;
     }
+    console.log('[useExamResults] Refreshing data...');
     setLoading(true);
+    setResults([]); // Clear stale data
+
     try {
       let data: ExamResult[] = [];
       if (filters?.studentId && filters?.examId) {
@@ -378,16 +455,24 @@ export const useExamResults = (filters?: {
       } else if (filters?.studentId) {
         data = await dataService.examResult.getByStudent(filters.studentId);
       }
+      
+      if (isCancelled?.()) { console.log('[useExamResults] Fetch cancelled.'); return; }
+      console.log(`[useExamResults] Finished fetching ${data.length} results.`);
       setResults(data);
     } catch (err) {
       console.error('useExamResults error:', err);
-      setResults([]);
+      if (!isCancelled?.()) setResults([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.studentId, filters?.examId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { results, loading, refresh };
 };
 
@@ -398,27 +483,38 @@ export const useFeePayments = (filters?: {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!filters) {
       setPayments([]);
       setLoading(false);
       return;
     }
+    console.log('[useFeePayments] Refreshing data...');
     setLoading(true);
+    setPayments([]); // Clear stale data
+
     try {
       const data = filters?.studentId
         ? await dataService.fee.getPaymentsByStudent(filters.studentId)
         : await dataService.fee.getAllPayments();
+      
+      if (isCancelled?.()) { console.log('[useFeePayments] Fetch cancelled.'); return; }
+      console.log(`[useFeePayments] Finished fetching ${data.length} payments.`);
       setPayments(data);
     } catch (err) {
       console.error('useFeePayments error:', err);
-      setPayments([]);
+      if (!isCancelled?.()) setPayments([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.studentId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { payments, loading, refresh };
 };
 
@@ -433,6 +529,7 @@ export const useAnnouncements = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    console.log('[useAnnouncements] Refreshing data...');
     setLoading(true);
     try {
       const data = await dataService.announcement.getForUser(
@@ -440,6 +537,7 @@ export const useAnnouncements = (filters?: {
         filters?.class,
         filters?.section,
       );
+      console.log(`[useAnnouncements] Finished fetching ${data.length} announcements.`);
       setAnnouncements(data);
     } catch (err) {
       console.error('useAnnouncements error:', err);
@@ -459,9 +557,12 @@ export const useEnquiries = () => {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    console.log('[useEnquiries] Refreshing data...');
     setLoading(true);
     try {
-      setEnquiries(await dataService.enquiry.getAll());
+      const data = await dataService.enquiry.getAll();
+      console.log(`[useEnquiries] Finished fetching ${data.length} enquiries.`);
+      setEnquiries(data);
     } catch (err) {
       console.error('useEnquiries error:', err);
       setEnquiries([]);
@@ -482,11 +583,13 @@ export const useEvents = (filters?: {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    console.log('[useEvents] Refreshing data...');
     setLoading(true);
     try {
       const data = filters?.upcoming
         ? await dataService.event.getUpcoming()
         : await dataService.event.getAll();
+      console.log(`[useEvents] Finished fetching ${data.length} events.`);
       setEvents(data);
     } catch (err) {
       console.error('useEvents error:', err);
@@ -576,24 +679,33 @@ export const useStudentPerformance = (studentId?: string) => {
   const [performance, setPerformance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     if (!studentId) {
       setPerformance(null);
       setLoading(false);
       return;
     }
     setLoading(true);
+    setPerformance(null); // Clear stale data
+
     try {
-      setPerformance(await dataService.statistics.getStudentPerformance(studentId));
+      const data = await dataService.statistics.getStudentPerformance(studentId);
+      if (isCancelled?.()) return;
+      setPerformance(data);
     } catch (err) {
       console.error('useStudentPerformance error:', err);
-      setPerformance(null);
+      if (!isCancelled?.()) setPerformance(null);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [studentId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { performance, loading, refresh };
 };
 
@@ -724,8 +836,10 @@ export const useFeeInvoices = (filters?: {
   const [invoices, setInvoices] = useState<FeeInvoice[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true);
+    setInvoices([]); // Clear stale data
+
     try {
       let data: FeeInvoice[];
       if (filters?.pendingOnly) {
@@ -737,16 +851,23 @@ export const useFeeInvoices = (filters?: {
       } else {
         data = await dataService.feeInvoice.getAll();
       }
+      
+      if (isCancelled?.()) return;
       setInvoices(data);
     } catch (err) {
       console.error('useFeeInvoices error:', err);
-      setInvoices([]);
+      if (!isCancelled?.()) setInvoices([]);
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [filters?.studentId, filters?.class, filters?.section, filters?.academicYear, filters?.pendingOnly]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    refresh(() => cancelled);
+    return () => { cancelled = true; };
+  }, [refresh]);
+
   return { invoices, loading, refresh };
 };
 

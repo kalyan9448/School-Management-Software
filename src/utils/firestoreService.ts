@@ -100,6 +100,7 @@ import type {
     AssignmentSubmission,
     Exam,
     ExamResult,
+    ExamScore,
     FeeStructure,
     FeePayment,
     Announcement,
@@ -148,19 +149,36 @@ export function clearFirestoreCache(collectionName?: string) {
 
 /** Generates a stable key for a query based on its constraints */
 function getQueryKey(collectionName: string, constraints: QueryConstraint[]): string {
-    // We can't easily stringify QueryConstraint objects, so we'll use a simplified
-    // approach: collection + a JSON string of any simple values we can extract.
-    // For now, let's keep it simple and just use the collection name + 
-    // JSON.stringify of the constraints array (it might be empty or have serializable parts)
+    const schoolId = getSchoolId();
     try {
         const parts = constraints.map(c => {
-            // Internal Firebase structure extraction is risky, so we try a safe path
-            const val = (c as any)._query?.filters || (c as any).value || '';
-            return JSON.stringify(val);
+            const cc = c as any;
+            const type = cc.type || 'unknown';
+            
+            if (type === 'where') {
+                // Handle various versions of Firebase SDK field access
+                const field = cc._field?.segments?.join('.') || cc.field || '';
+                const op = cc._op || cc.operator || '';
+                const val = cc._value !== undefined ? cc._value : (cc.value !== undefined ? cc.value : '');
+                return `where:${field}:${op}:${JSON.stringify(val)}`;
+            }
+            
+            if (type === 'orderBy') {
+                const field = cc._field?.segments?.join('.') || cc.field || '';
+                const dir = cc._direction || cc.direction || 'asc';
+                return `order:${field}:${dir}`;
+            }
+            
+            if (type === 'limit') {
+                return `limit:${cc._limit || cc.limit || 0}`;
+            }
+
+            return `unknown:${type}:${JSON.stringify(c)}`;
         });
-        return `${collectionName}:${parts.join('|')}`;
+        return `${collectionName}:${schoolId}:${parts.join('|')}`;
     } catch {
-        return `${collectionName}:unserialized`;
+        // Fallback to random key if serialization fails to prevent dangerous collisions
+        return `${collectionName}:${schoolId}:error:${Math.random()}`;
     }
 }
 
@@ -170,7 +188,7 @@ function getQueryKey(collectionName: string, constraints: QueryConstraint[]): st
 const GLOBAL_COLLECTIONS = new Set(['users', 'schools', 'organizations', 'plans', 'support_tickets']);
 
 function getSchoolId(): string {
-    return sessionStorage.getItem('active_school_id') || '';
+    return (sessionStorage.getItem('active_school_id') || '').trim();
 }
 
 /** Returns true if the cached user profile has the 'superadmin' role. */
@@ -277,18 +295,26 @@ export async function createDoc<T extends { id: string }>(
     data: Omit<T, 'id'> & { id?: string },
 ): Promise<T> {
     const { id: _unused, ...rest } = data as any;
+    const sid = requireSchoolId();
+    
+    // Explicitly reject empty school IDs for school-scoped collections to prevent rule violations
+    if (!GLOBAL_COLLECTIONS.has(collectionName) && !sid && !isSuperAdmin()) {
+        console.error(`[firestoreService] ERROR: Attempted to create doc in ${collectionName} with NO active school context.`);
+        throw new Error('School context missing. Please refresh and try again.');
+    }
+
     const payload = GLOBAL_COLLECTIONS.has(collectionName)
         ? rest
-        : { ...rest, school_id: requireSchoolId() };
+        : { ...rest, school_id: sid };
+
     // Generate a new doc reference to get a unique ID
     const ref = doc(collection(db, collectionName));
-    // Write id + payload in a single atomic setDoc (no follow-up updateDoc needed)
     const fullPayload = stripUndefined({ ...payload, id: ref.id });
+    
+    console.log(`[firestoreService] Creating doc in ${collectionName}:`, ref.id, sid ? `(School: ${sid})` : '(Global)');
+    
     await setDoc(ref, fullPayload);
-    
-    // Invalidate cache for this collection
     clearFirestoreCache(collectionName);
-    
     return { id: ref.id, ...payload } as T;
 }
 
@@ -318,15 +344,17 @@ async function updateDocById(
         if (!snap.exists()) throw new Error(`Document ${collectionName}/${id} not found`);
         const docSchoolId = (snap.data() as any).school_id;
         const currentSchoolId = requireSchoolId();
+        
         if (!isSuperAdmin() && docSchoolId && docSchoolId !== currentSchoolId) {
+            console.error(`[firestoreService] Access Denied: Doc ${id} belongs to ${docSchoolId}, but current session is ${currentSchoolId}`);
             throw new Error('Access denied: document belongs to a different school');
         }
         // Prevent school_id from being changed via update
         delete updates.school_id;
     }
-    await updateDoc(doc(db, collectionName, id), stripUndefined(updates));
     
-    // Invalidate cache for this collection
+    console.log(`[firestoreService] Updating doc ${collectionName}/${id}...`);
+    await updateDoc(doc(db, collectionName, id), stripUndefined(updates));
     clearFirestoreCache(collectionName);
 }
 
@@ -402,10 +430,14 @@ export const userService = {
 
     getByEmail: async (email: string): Promise<User | null> => {
         const schoolId = getSchoolId();
-        const constraints: QueryConstraint[] = [where('email', '==', email)];
+        const constraints: QueryConstraint[] = [where('email', '==', email.trim().toLowerCase())];
+        
+        // If a school context is active, scope the search to that school to satisfy security rules.
+        // Superadmins bypass this via fetchCollection's internal logic.
         if (schoolId) {
             constraints.push(where('school_id', '==', schoolId));
         }
+        
         const users = await fetchCollection<User>('users', ...constraints);
         return users[0] || null;
     },
@@ -564,7 +596,36 @@ export const studentService = {
         const results: Student[] = [];
         for (let i = 0; i < ids.length; i += 30) {
             const batch = ids.slice(i, i + 30);
-            const docs = await fetchCollection<Student>('students', where(documentId(), 'in', batch));
+            
+            // 1. Try fetching by documentId
+            const byDocId = await fetchCollection<Student>('students', where(documentId(), 'in', batch));
+            results.push(...byDocId);
+            
+            // 2. Also try fetching by admissionNo (fallback for cases where admissionNo is used as a reference)
+            const foundAdmissionNos = new Set(byDocId.map(d => d.admissionNo));
+            const remainingBatch = batch.filter(id => !foundAdmissionNos.has(id));
+            
+            if (remainingBatch.length > 0) {
+                const byAdmissionNo = await fetchCollection<Student>('students', where('admissionNo', 'in', remainingBatch));
+                // Avoid duplicates if admissionNo somehow matches a different docId in the same batch (unlikely but safe)
+                const seenIds = new Set(results.map(r => r.id));
+                for (const student of byAdmissionNo) {
+                    if (!seenIds.has(student.id)) {
+                        results.push(student);
+                        seenIds.add(student.id);
+                    }
+                }
+            }
+        }
+        return results;
+    },
+
+    getByAdmissionNos: async (nos: string[]): Promise<Student[]> => {
+        if (!nos.length) return [];
+        const results: Student[] = [];
+        for (let i = 0; i < nos.length; i += 30) {
+            const batch = nos.slice(i, i + 30);
+            const docs = await fetchCollection<Student>('students', where('admissionNo', 'in', batch));
             results.push(...docs);
         }
         return results;
@@ -615,9 +676,19 @@ export const studentService = {
     },
 
     create: async (student: Partial<Student>): Promise<Student> => {
+        const schoolId = student.school_id || getSchoolId();
         const allStudents = await studentService.getAll();
         const rollNo = student.rollNo ||
             await studentService.getNextRollNumber(student.class || '', student.section || 'A', student.academicYear || getActiveAcademicYearId());
+
+        // Automatically link parentId if parentEmail exists
+        let parentId = student.parentId || '';
+        if (!parentId && student.parentEmail) {
+            const existingParent = await userService.getByEmail(student.parentEmail);
+            if (existingParent) {
+                parentId = existingParent.id;
+            }
+        }
 
         const newStudent: Omit<Student, 'id'> & { id?: string } = {
             admissionNo: student.admissionNo || `KVS${new Date().getFullYear()}${String(allStudents.length + 1).padStart(3, '0')}`,
@@ -630,9 +701,9 @@ export const studentService = {
             fatherName: student.fatherName || '',
             motherName: student.motherName || '',
             parentPhone: student.parentPhone || '',
-            parentEmail: student.parentEmail || '',
+            parentEmail: (student.parentEmail || '').trim().toLowerCase(),
             email: (student.email || '').trim().toLowerCase(),
-            parentId: student.parentId || '',
+            parentId,
             address: student.address || '',
             admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],
             academicYear: student.academicYear || getActiveAcademicYearId(),
@@ -640,32 +711,38 @@ export const studentService = {
             photo: student.photo || '',
             bloodGroup: student.bloodGroup || '',
             medicalInfo: student.medicalInfo as any,
+            school_id: schoolId,
         };
         const createdStudent = await createDoc<Student>('students', newStudent);
 
-        // Auto-provision /users records so the student and parent can log in
-        // on first visit and be routed to the correct dashboard. Errors are
-        // non-fatal — the backend fallback will handle any missed provisioning.
+        // Auto-provision /users records for the parent if not already linked
+        if (newStudent.parentEmail && !newStudent.parentId) {
+            const parentName = newStudent.fatherName || newStudent.motherName || 'Parent';
+            try {
+                const parentUser = await userService.create({
+                    email: newStudent.parentEmail,
+                    name: parentName,
+                    role: 'parent',
+                    school_id: schoolId || undefined,
+                    isFirstLogin: true,
+                });
+                // Update the student with the newly created parent's ID
+                if (parentUser) {
+                    await studentService.update(createdStudent.id, { parentId: parentUser.id });
+                }
+            } catch (err) {
+                console.warn('[studentService] Auto-provisioning parent user failed:', err);
+            }
+        }
+
         if (newStudent.email) {
             userService.create({
                 email: newStudent.email,
                 name: newStudent.name,
                 role: 'student',
-                school_id: newStudent.academicYear ? undefined : getSchoolId() || undefined,
+                school_id: schoolId || undefined,
                 isFirstLogin: true,
             }).catch(err => console.warn('[studentService] Auto-provisioning student user failed:', err));
-        }
-
-        if (newStudent.parentEmail) {
-            const parentEmail = newStudent.parentEmail.trim().toLowerCase();
-            const parentName = newStudent.fatherName || newStudent.motherName || 'Parent';
-            userService.create({
-                email: parentEmail,
-                name: parentName,
-                role: 'parent',
-                school_id: getSchoolId() || undefined,
-                isFirstLogin: true,
-            }).catch(err => console.warn('[studentService] Auto-provisioning parent user failed:', err));
         }
 
         return createdStudent;
@@ -684,8 +761,7 @@ export const studentService = {
     getParentByStudentId: async (studentId: string): Promise<User | null> => {
         const student = await studentService.getById(studentId);
         if (!student || !student.parentEmail) return null;
-        const parentUsers = await fetchCollection<User>('users', where('email', '==', student.parentEmail));
-        return parentUsers.length > 0 ? parentUsers[0] : null;
+        return userService.getByEmail(student.parentEmail);
     },
 };
 
@@ -761,18 +837,24 @@ export const admissionService = {
         return admissions[0] || null;
     },
 
-    isEmailUnique: async (email: string, excludeId?: string): Promise<boolean> => {
+    isEmailUnique: async (email: string, excludeId?: string, excludeAdmissionNo?: string): Promise<boolean> => {
         if (!email) return true;
         const lowered = email.trim().toLowerCase();
 
         // Check admissions collection
         const admissions = await fetchCollection<Admission>('admissions', where('email', '==', lowered));
-        const admissionConflict = admissions.find(a => a.id !== excludeId);
+        // Conflict if another admission has this email (checking both ID and AdmissionNo)
+        const admissionConflict = admissions.find(a => 
+            a.id !== excludeId && a.admissionNo !== excludeAdmissionNo
+        );
         if (admissionConflict) return false;
 
         // Check students collection
         const students = await fetchCollection<Student>('students', where('email', '==', lowered));
-        const studentConflict = students.find(s => s.id !== excludeId && s.admissionNo !== excludeId);
+        // Conflict if another student has this email
+        const studentConflict = students.find(s => 
+            s.id !== excludeId && s.admissionNo !== excludeId && s.admissionNo !== excludeAdmissionNo
+        );
         if (studentConflict) return false;
 
         return true;
@@ -1009,13 +1091,23 @@ export const attendanceService = {
     },
 
     getByStudent: async (studentId: string, startDate?: string, endDate?: string): Promise<AttendanceRecord[]> => {
-        let records = await fetchCollection<AttendanceRecord>(
-            'attendance',
-            where('studentId', '==', studentId),
-        );
-        if (startDate) records = records.filter(r => r.date >= startDate);
-        if (endDate) records = records.filter(r => r.date <= endDate);
-        return records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        try {
+            let records = await fetchCollection<AttendanceRecord>(
+                'attendance',
+                where('studentId', '==', studentId),
+            );
+            if (startDate) records = records.filter(r => r.date >= startDate);
+            if (endDate) records = records.filter(r => r.date <= endDate);
+            return records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        } catch (error) {
+            console.warn('[attendanceService] getByStudent query failed, falling back to memory filter:', error);
+            // Fallback: fetch all for school and filter in memory
+            let all = await fetchCollection<AttendanceRecord>('attendance');
+            let records = all.filter(r => r.studentId === studentId);
+            if (startDate) records = records.filter(r => r.date >= startDate);
+            if (endDate) records = records.filter(r => r.date <= endDate);
+            return records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
     },
 
     getByClass: async (className: string, section: string, date: string): Promise<AttendanceRecord[]> => {
@@ -1087,10 +1179,10 @@ export const attendanceService = {
                 }
                 // Also try notification via parentEmail if parentId is not set
                 if (!student?.parentId && student?.parentEmail) {
-                    const parentUsers = await fetchCollection<User>('users', where('email', '==', student.parentEmail));
-                    if (parentUsers.length > 0) {
+                    const parentUser = await userService.getByEmail(student.parentEmail);
+                    if (parentUser) {
                         await notificationService.create({
-                            userId: parentUsers[0].id,
+                            userId: parentUser.id,
                             type: 'attendance',
                             title: r.status === 'present' ? 'Child Arrived at School' : 'Attendance Alert',
                             message: `${student.name} marked ${r.status} at ${data.time}`,
@@ -1176,12 +1268,19 @@ export const lessonService = {
     },
 
     getByClass: async (className: string, section: string): Promise<LessonLog[]> => {
-        const lessons = await fetchCollection<LessonLog>(
-            'lessons',
-            where('class', '==', className),
-            where('section', '==', section),
-        );
-        return lessons.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        try {
+            const lessons = await fetchCollection<LessonLog>(
+                'lessons',
+                where('class', '==', className),
+                where('section', '==', section),
+            );
+            return lessons.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        } catch (error) {
+            console.warn('[lessonService] getByClass query failed, falling back to memory filter:', error);
+            const all = await fetchCollection<LessonLog>('lessons');
+            return all.filter(l => l.class === className && l.section === section)
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
     },
 
     create: async (lesson: Partial<LessonLog>): Promise<LessonLog> => {
@@ -1213,12 +1312,19 @@ export const assignmentService = {
     },
 
     getByClass: async (className: string, section: string): Promise<Assignment[]> => {
-        const assignments = await fetchCollection<Assignment>(
-            'assignments',
-            where('class', '==', className),
-            where('section', '==', section),
-        );
-        return assignments.sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+        try {
+            const assignments = await fetchCollection<Assignment>(
+                'assignments',
+                where('class', '==', className),
+                where('section', '==', section),
+            );
+            return assignments.sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+        } catch (error) {
+            console.warn('[assignmentService] getByClass query failed, falling back to memory filter:', error);
+            const all = await fetchCollection<Assignment>('assignments');
+            return all.filter(a => a.class === className && a.section === section)
+                .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+        }
     },
 
     getById: async (id: string): Promise<Assignment | null> => {
@@ -1332,11 +1438,17 @@ export const examService = {
     },
 
     getByClass: async (className: string, section: string): Promise<Exam[]> => {
-        return fetchCollection<Exam>(
-            'exams',
-            where('class', '==', className),
-            where('section', '==', section),
-        );
+        try {
+            return await fetchCollection<Exam>(
+                'exams',
+                where('class', '==', className),
+                where('section', '==', section),
+            );
+        } catch (error) {
+            console.warn('[examService] getByClass query failed, falling back to memory filter:', error);
+            const all = await fetchCollection<Exam>('exams');
+            return all.filter(e => e.class === className && e.section === section);
+        }
     },
 
     create: async (exam: Partial<Exam>): Promise<Exam> => {
@@ -1363,7 +1475,13 @@ export const examResultService = {
     },
 
     getByStudent: async (studentId: string): Promise<ExamResult[]> => {
-        return fetchCollection<ExamResult>('exam_results', where('studentId', '==', studentId));
+        try {
+            return await fetchCollection<ExamResult>('exam_results', where('studentId', '==', studentId));
+        } catch (error) {
+            console.warn('[examResultService] getByStudent query failed, falling back to memory filter:', error);
+            const all = await fetchCollection<ExamResult>('exam_results');
+            return all.filter(r => r.studentId === studentId);
+        }
     },
 
     getByExam: async (examId: string): Promise<ExamResult[]> => {
@@ -1401,11 +1519,18 @@ export const examScoreService = {
     },
 
     getByStudent: async (studentId: string): Promise<ExamScore[]> => {
-        const scores = await fetchCollection<ExamScore>(
-            'exam_scores',
-            where('studentId', '==', studentId),
-        );
-        return scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        try {
+            const scores = await fetchCollection<ExamScore>(
+                'exam_scores',
+                where('studentId', '==', studentId),
+            );
+            return scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        } catch (error) {
+            console.warn('[examScoreService] getByStudent query failed, falling back to memory filter:', error);
+            const all = await fetchCollection<ExamScore>('exam_scores');
+            return all.filter(s => s.studentId === studentId)
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }
     },
 
     getByClass: async (classId: string, sectionId?: string): Promise<ExamScore[]> => {
@@ -1510,7 +1635,7 @@ export const examScoreService = {
     },
 
     getById: async (id: string): Promise<ExamScore | null> => {
-        return fetchDocById<ExamScore>('exam_scores', id);
+        return getDocById<ExamScore>('exam_scores', id);
     },
 
     delete: async (id: string): Promise<void> => {
@@ -2051,8 +2176,15 @@ export const quizService = {
 
     getResultsByQuiz: async (quizId: string) =>
         fetchCollection<any>('quiz_results', where('quizId', '==', quizId)),
-    getResultsByStudent: async (studentId: string) =>
-        fetchCollection<any>('quiz_results', where('student_id', '==', studentId)),
+    getResultsByStudent: async (studentId: string) => {
+        try {
+            return await fetchCollection<any>('quiz_results', where('student_id', '==', studentId));
+        } catch (error) {
+            console.warn('[quizService] getResultsByStudent query failed, falling back to memory filter:', error);
+            const all = await fetchCollection<any>('quiz_results');
+            return all.filter(r => r.student_id === studentId);
+        }
+    },
 
     getTeacherClasses: async (teacherEmail: string) => {
         const teacher = await teacherService.getByEmail(teacherEmail);

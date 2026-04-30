@@ -163,7 +163,8 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
         try {
           emailUnique = await admissionService.isEmailUnique(
             formData.email,
-            student?.id || student?.admissionNo
+            student?.id,
+            student?.admissionNo
           );
         } catch (err) {
           console.warn('Email uniqueness check failed (proceeding with save):', err);
