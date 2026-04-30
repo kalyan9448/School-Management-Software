@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../contexts/TenantContext';
-import { Users, DollarSign, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
+import { Users, IndianRupee, UserCheck, AlertCircle, TrendingUp, Calendar, Bell, BookOpen, Award, Clock, MessageSquare } from 'lucide-react';
 import { studentService, attendanceService, classService, calendarService, enquiryService, schoolService, feeService } from '../utils/centralDataService';
 
 interface DashboardHomeProps {
@@ -306,7 +306,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
           <div className="relative p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="w-14 h-14 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3">
-                <DollarSign className="w-7 h-7 text-white" />
+                <IndianRupee className="w-7 h-7 text-white" />
               </div>
               <div className="px-3 py-1 bg-yellow-100 rounded-full">
                 <span className="text-yellow-700">
@@ -407,7 +407,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                  <DollarSign className="w-5 h-5 text-red-600" />
+                  <IndianRupee className="w-5 h-5 text-red-600" />
                 </div>
                 <p className="text-red-700 font-semibold text-sm">Outstanding</p>
               </div>
@@ -489,7 +489,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                             'bg-gradient-to-br from-pink-400 to-pink-500'
                       }`}>
                       {activity.type === 'admission' && <Users className="w-5 h-5 text-white" />}
-                      {activity.type === 'fee' && <DollarSign className="w-5 h-5 text-white" />}
+                      {activity.type === 'fee' && <IndianRupee className="w-5 h-5 text-white" />}
                       {activity.type === 'enquiry' && <Bell className="w-5 h-5 text-white" />}
                       {activity.type === 'attendance' && <Calendar className="w-5 h-5 text-white" />}
                       {activity.type === 'communication' && <MessageSquare className="w-5 h-5 text-white" />}

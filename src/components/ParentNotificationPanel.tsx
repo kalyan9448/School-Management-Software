@@ -11,7 +11,7 @@ import {
   Volume2,
   AlertCircle,
   Calendar,
-  DollarSign,
+  IndianRupee,
   BookOpen,
   CheckCircle,
   X,
@@ -74,7 +74,7 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
       case 'announcement':
         return <Volume2 className={`${iconProps} text-teal-600`} />;
       case 'fee':
-        return <DollarSign className={`${iconProps} text-orange-600`} />;
+        return <IndianRupee className={`${iconProps} text-orange-600`} />;
       case 'event':
         return <Calendar className={`${iconProps} text-purple-600`} />;
       case 'assignment':

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { User, DollarSign, Calendar, FileText, LogOut, Bell, Download, AlertCircle, PartyPopper, Megaphone, Award, Sparkles, Heart, Star, TrendingUp } from 'lucide-react';
+import { User, IndianRupee, Calendar, FileText, LogOut, Bell, Download, AlertCircle, PartyPopper, Megaphone, Award, Sparkles, Heart, Star, TrendingUp } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 
 export function ParentDashboard() {
@@ -200,7 +200,7 @@ export function ParentDashboard() {
                       <div className="absolute top-0 right-0 w-16 h-16 bg-green-300/30 rounded-bl-full"></div>
                       <div className="relative">
                         <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center mb-3 shadow-lg">
-                          <DollarSign className="w-5 h-5 text-white" />
+                          <IndianRupee className="w-5 h-5 text-white" />
                         </div>
                         <p className="text-green-700 mb-1">Fee Status</p>
                         <p className="text-green-900">✓ Paid</p>
@@ -235,7 +235,7 @@ export function ParentDashboard() {
           <div>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3">
-                <DollarSign className="w-6 h-6 text-white" />
+                <IndianRupee className="w-6 h-6 text-white" />
               </div>
               <h2 className="text-gray-900">Fee History</h2>
             </div>
@@ -249,7 +249,7 @@ export function ParentDashboard() {
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-start gap-4">
                         <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                          <DollarSign className="w-6 h-6 text-white" />
+                          <IndianRupee className="w-6 h-6 text-white" />
                         </div>
                         <div>
                           <h3 className="text-gray-900 mb-2">{fee.category}</h3>
@@ -348,7 +348,7 @@ export function ParentDashboard() {
 
                   <div className="relative flex items-start gap-5">
                     <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-rose-600 rounded-3xl flex items-center justify-center flex-shrink-0 shadow-2xl transform rotate-3 group-hover:rotate-6 transition-transform">
-                      <DollarSign className="w-8 h-8 text-white" />
+                      <IndianRupee className="w-8 h-8 text-white" />
                     </div>
                     <div className="flex-1">
                       <h3 className="text-gray-900 mb-3">{reminder.title}</h3>
@@ -363,7 +363,7 @@ export function ParentDashboard() {
                         </span>
                       </div>
                       <button className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-2xl hover:shadow-xl transition-all shadow-lg shadow-red-500/40 hover:scale-105">
-                        <DollarSign className="w-5 h-5" />
+                        <IndianRupee className="w-5 h-5" />
                         Pay Now
                       </button>
                     </div>
@@ -497,7 +497,7 @@ export function ParentDashboard() {
 
               <div className="relative">
                 <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl flex items-center justify-center mb-5 shadow-2xl transform -rotate-6 group-hover:rotate-0 transition-transform">
-                  <DollarSign className="w-8 h-8 text-white" />
+                  <IndianRupee className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-gray-900 mb-2">Pay Fee</h3>
                 <p className="text-gray-600 leading-relaxed">Make online fee payment securely</p>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Download, Search, DollarSign, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard } from 'lucide-react';
+import { Plus, Download, Search, IndianRupee, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import { notificationService, feeService, studentService } from '../utils/centralDataService';
@@ -358,19 +358,19 @@ export function FeeModule() {
 
     // Table Rows
     doc.text(`Total Fee (${payment.feeType})`, 20, startY + 109);
-    doc.text(`Rs. ${netPayable.toLocaleString()}`, 140, startY + 109);
+    doc.text(`₹ ${netPayable.toLocaleString()}`, 140, startY + 109);
 
     doc.text(`Amount Paid NOW`, 20, startY + 116);
-    doc.text(`Rs. ${payment.totalAmount.toLocaleString()}`, 140, startY + 116);
+    doc.text(`₹ ${payment.totalAmount.toLocaleString()}`, 140, startY + 116);
 
     doc.text(`Remaining Balance`, 20, startY + 123);
-    doc.text(`Rs. ${balance.toLocaleString()}`, 140, startY + 123);
+    doc.text(`₹ ${balance.toLocaleString()}`, 140, startY + 123);
 
     centerText('---------------------------------------------------------', startY + 131);
 
     // Total
     doc.setFont('helvetica', 'bold');
-    doc.text(`Payment Received : Rs. ${payment.totalAmount.toLocaleString()}`, 20, startY + 139);
+    doc.text(`Payment Received : ₹ ${payment.totalAmount.toLocaleString()}`, 20, startY + 139);
     centerText('---------------------------------------------------------', startY + 146);
 
     // Footer
@@ -399,7 +399,7 @@ export function FeeModule() {
         userId: student.parentId,
         type: 'fee',
         title: 'Fee Payment Reminder',
-        message: `Dear Parent, this is a reminder regarding the outstanding fee of RS. ${student.dueAmount.toLocaleString()} for ${student.studentName}. Please ignore if already paid.`,
+        message: `Dear Parent, this is a reminder regarding the outstanding fee of ₹ ${student.dueAmount.toLocaleString()} for ${student.studentName}. Please ignore if already paid.`,
         date: new Date().toISOString(),
       });
       alert(`Notification sent successfully to ${student.studentName}'s parent!`);
@@ -695,7 +695,7 @@ export function FeeModule() {
             }`}
         >
           <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5" />
+            <IndianRupee className="w-5 h-5" />
             Fee Collection
           </div>
         </button>
@@ -1328,7 +1328,7 @@ export function FeeModule() {
             <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-red-100">Total Outstanding</p>
-                <DollarSign className="w-6 h-6 text-red-100" />
+                <IndianRupee className="w-6 h-6 text-red-100" />
               </div>
               <p className="text-white mb-1">₹{getTotalOutstanding().toLocaleString()}</p>
             </div>

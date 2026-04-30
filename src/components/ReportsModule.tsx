@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Download, FileText, TrendingUp, Users, DollarSign, Calendar, BarChart3, PieChart, Award, Sparkles } from 'lucide-react';
+﻿import React, { useEffect, useState } from 'react';
+import { Download, FileText, TrendingUp, Users, IndianRupee, Calendar, BarChart3, PieChart, Award, Sparkles } from 'lucide-react';
 import { studentService, attendanceService, feeService, enquiryService, reportsService } from '../utils/centralDataService';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -11,7 +11,7 @@ export function ReportsModule() {
       id: 1,
       title: 'Daily Fee Collection',
       description: 'Complete breakdown of fee collected today',
-      icon: DollarSign,
+      icon: IndianRupee,
       gradient: 'from-emerald-400 via-green-500 to-teal-600',
       bgPattern: 'from-emerald-50 to-green-100',
       borderColor: 'border-emerald-200',
@@ -192,7 +192,7 @@ export function ReportsModule() {
           payment.paymentDate || 'N/A',
           payment.studentName || 'N/A',
           payment.receiptNo || 'N/A',
-          `Rs. ${payment.amount?.toLocaleString() || 0}`,
+          `₹ ${payment.amount?.toLocaleString() || 0}`,
           'PAID'
         ]);
 

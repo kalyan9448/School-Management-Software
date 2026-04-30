@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp, Plus, X } from 'lucide-react';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { jsPDF } from 'jspdf';
@@ -191,7 +191,7 @@ export function ReportsApprovalView() {
           payment.studentName || 'N/A',
           payment.receiptNo || 'N/A',
           payment.paymentMode?.toUpperCase() || 'N/A',
-          `Rs. ${payment.amount?.toLocaleString() || 0}`,
+          `₹ ${payment.amount?.toLocaleString() || 0}`,
           'PAID'
         ]);
 

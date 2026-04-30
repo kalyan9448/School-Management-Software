@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Activity, Users, BookOpen, DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
+import { Activity, Users, BookOpen, IndianRupee, TrendingUp, Clock, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
 import { studentService, attendanceService, classService, timetableService, userService, academicYearService, teacherService } from '../utils/centralDataService';
 import { DEFAULT_YEARS } from '../utils/classUtils';
 
@@ -262,7 +262,7 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
               <p className="text-gray-500 text-sm mt-2">Requires attention</p>
             </div>
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-yellow-600" />
+              <IndianRupee className="w-6 h-6 text-yellow-600" />
             </div>
           </div>
         </div>

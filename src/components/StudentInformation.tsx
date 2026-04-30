@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, User, Phone, Mail, MapPin, Calendar, Heart, DollarSign, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
+import { Search, User, Phone, Mail, MapPin, Calendar, Heart, IndianRupee, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { createTemplatedDoc, addTemplatePage, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import { studentService, academicYearService, attendanceService, feeInvoiceService, type Student, type AttendanceRecord, type FeeInvoice } from '../utils/firestoreService';
@@ -1456,7 +1456,7 @@ export function StudentInformation({
               {/* Fee Status */}
               <div className="mb-8">
                 <h3 className="text-gray-900 mb-4 flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-green-600" />
+                  <IndianRupee className="w-5 h-5 text-green-600" />
                   Fee Status
                 </h3>
                 <div className="bg-green-50 rounded-lg p-6">
