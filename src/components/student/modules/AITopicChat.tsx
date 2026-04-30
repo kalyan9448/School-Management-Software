@@ -10,6 +10,7 @@ import {
   Lightbulb,
   BookOpen,
   HelpCircle,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -138,9 +139,83 @@ export function AITopicChat({
     handleSendMessage(question);
   };
 
-  // If AI features are disabled, don't render anything
+  // If AI features are disabled, show a locked/grayed-out chat button that explains why
   if (!isAIEnabled) {
-    return null;
+    return (
+      <>
+        <AnimatePresence>
+          {!isOpen && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              style={{ 
+                position: 'fixed',
+                bottom: '24px',
+                right: '24px',
+                zIndex: 999999 
+              }}
+            >
+              <Button
+                onClick={() => setIsOpen(true)}
+                className="w-16 h-16 rounded-full bg-gray-300 hover:bg-gray-400 text-gray-500 shadow-lg transition-colors border-4 border-gray-100 cursor-not-allowed"
+                size="lg"
+              >
+                <Lock className="w-7 h-7" />
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="shadow-2xl flex flex-col"
+              style={{ 
+                position: 'fixed',
+                bottom: '100px',
+                right: '24px',
+                width: '340px',
+                maxWidth: 'calc(100vw - 48px)',
+                zIndex: 999999 
+              }}
+            >
+              <Card className="shadow-2xl border border-gray-200 overflow-hidden bg-white">
+                <div className="bg-gray-100 p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-300 rounded-lg">
+                      <Lock className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-gray-600">AI Learning Assistant</h3>
+                      <p className="text-xs text-gray-400">Feature Disabled</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsOpen(false)}
+                    className="text-gray-400 hover:bg-gray-200 h-8 w-8 p-1 rounded-full"
+                  >
+                    <X className="w-6 h-6" />
+                  </Button>
+                </div>
+                <div className="p-6 text-center">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Lock className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <h4 className="font-semibold text-gray-700 mb-2">AI Features Disabled</h4>
+                  <p className="text-sm text-gray-500 leading-relaxed">{getDisabledMessage()}</p>
+                </div>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    );
   }
 
   return (

@@ -188,6 +188,39 @@ export function ObjectiveQuestionsPage() {
     );
   }
 
+  // Show disabled message if AI features are not enabled
+  if (!isAIEnabled && !isAILoading) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF]">
+        <div 
+          className="text-white p-6 md:p-10 lg:p-12 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative mb-8"
+          style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="text-white hover:bg-white/10 mb-4 -ml-2 rounded-lg"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+        </div>
+        
+        <div className="max-w-2xl mx-auto px-4 md:px-8 lg:px-12">
+          <Card className="border-2 border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100 p-8">
+            <div className="flex items-center justify-center mb-4">
+              <Lock className="w-12 h-12 text-gray-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">AI Features Disabled</h2>
+            <p className="text-gray-600 text-center mb-4">{getDisabledMessage()}</p>
+            <p className="text-sm text-gray-500 text-center">Please contact your school administrator to enable AI features.</p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   if (questions.length === 0) {
     return (
       <div className="min-h-screen bg-[#FAFBFF] flex items-center justify-center p-4">
@@ -225,39 +258,6 @@ export function ObjectiveQuestionsPage() {
         onBackToTopic={() => navigate(`/homework/${topicId}`)}
         timeSpent={timeFormatted}
       />
-    );
-  }
-
-  // Show disabled message if AI features are not enabled
-  if (!isAIEnabled) {
-    return (
-      <div className="min-h-screen bg-[#FAFBFF]">
-        <div 
-          className="text-white p-6 md:p-10 lg:p-12 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative mb-8"
-          style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(-1)}
-            className="text-white hover:bg-white/10 mb-4 -ml-2 rounded-lg"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-        </div>
-        
-        <div className="max-w-2xl mx-auto px-4 md:px-8 lg:px-12">
-          <Card className="border-2 border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100 p-8">
-            <div className="flex items-center justify-center mb-4">
-              <Lock className="w-12 h-12 text-gray-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">AI Features Disabled</h2>
-            <p className="text-gray-600 text-center mb-4">{getDisabledMessage()}</p>
-            <p className="text-sm text-gray-500 text-center">Please contact your school administrator to enable AI features.</p>
-          </Card>
-        </div>
-      </div>
     );
   }
 

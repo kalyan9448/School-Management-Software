@@ -390,11 +390,19 @@ export function TeachingFlowScreen({
               <p className="text-sm text-purple-700">Test your depth before the session</p>
             </div>
           </div>
-          {isLoadingQuestions && <RefreshCw className="w-5 h-5 text-purple-600 animate-spin" />}
+          {isLoadingQuestions && isAIEnabled && <RefreshCw className="w-5 h-5 text-purple-600 animate-spin" />}
         </div>
 
         <div className="p-8">
-          {isEvaluationComplete ? (
+          {!isAIEnabled ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-8 h-8 text-gray-400" />
+              </div>
+              <h4 className="text-lg font-semibold text-gray-700 mb-2">AI Features Disabled</h4>
+              <p className="text-gray-500 max-w-md mx-auto">{getDisabledMessage()}</p>
+            </div>
+          ) : isEvaluationComplete ? (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
               <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-8 text-white text-center shadow-xl">
                 <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">

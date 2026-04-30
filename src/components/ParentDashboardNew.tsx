@@ -39,6 +39,7 @@ import {
 import logoImage from '../assets/logo.jpeg';
 import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
 import { useAggregatedNotifications } from '../hooks/useAggregatedNotifications';
+import { useAIFeatureEnabled } from '../hooks/useAIFeatureEnabled';
 import dataService from '../utils/firestoreService';
 import { generateAndDownloadReport } from '../utils/reportPdfGenerator';
 
@@ -114,6 +115,7 @@ interface Notification {
 
 export function ParentDashboardNew() {
   const { user, logout } = useAuth();
+  const { isEnabled: isAIEnabled, getDisabledMessage } = useAIFeatureEnabled();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const d = new Date();
@@ -2058,6 +2060,31 @@ export function ParentDashboardNew() {
       case 'reports':
         return renderReports();
       case 'ai-suggestions':
+        if (!isAIEnabled) {
+          return (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-gray-900">AI Discussion Tips</h2>
+                  <p className="text-gray-600">Conversation ideas based on your child's lessons</p>
+                </div>
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+              <div className="bg-white rounded-xl shadow-md p-10 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Brain className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">AI Features Disabled</h3>
+                <p className="text-gray-500 max-w-md mx-auto">{getDisabledMessage()}</p>
+              </div>
+            </div>
+          );
+        }
         return renderAISuggestions();
       case 'calendar':
         return (

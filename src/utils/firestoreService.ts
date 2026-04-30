@@ -122,6 +122,48 @@ import type {
     QuizResult,
 } from '../types';
 
+// ── Cache & Deduplication ──────────────────────────────────────────────────
+const CACHE_TTL = 1 * 60 * 1000; // 1 minute cache for fast navigation
+const queryCache = new Map<string, { data: any; timestamp: number }>();
+const inFlightRequests = new Map<string, Promise<any>>();
+
+/** Clears cache for a specific collection or everything */
+export function clearFirestoreCache(collectionName?: string) {
+    if (collectionName) {
+        for (const key of queryCache.keys()) {
+            if (key.startsWith(`${collectionName}:`)) {
+                queryCache.delete(key);
+            }
+        }
+        for (const key of inFlightRequests.keys()) {
+            if (key.startsWith(`${collectionName}:`)) {
+                inFlightRequests.delete(key);
+            }
+        }
+    } else {
+        queryCache.clear();
+        inFlightRequests.clear();
+    }
+}
+
+/** Generates a stable key for a query based on its constraints */
+function getQueryKey(collectionName: string, constraints: QueryConstraint[]): string {
+    // We can't easily stringify QueryConstraint objects, so we'll use a simplified
+    // approach: collection + a JSON string of any simple values we can extract.
+    // For now, let's keep it simple and just use the collection name + 
+    // JSON.stringify of the constraints array (it might be empty or have serializable parts)
+    try {
+        const parts = constraints.map(c => {
+            // Internal Firebase structure extraction is risky, so we try a safe path
+            const val = (c as any)._query?.filters || (c as any).value || '';
+            return JSON.stringify(val);
+        });
+        return `${collectionName}:${parts.join('|')}`;
+    } catch {
+        return `${collectionName}:unserialized`;
+    }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Collections that are global (not scoped to a single school). */
@@ -183,19 +225,45 @@ async function fetchCollection<T>(
     collectionName: string,
     ...constraints: QueryConstraint[]
 ): Promise<T[]> {
-    const isGlobal = GLOBAL_COLLECTIONS.has(collectionName);
-    const superAdmin = isSuperAdmin();
+    const cacheKey = getQueryKey(collectionName, constraints);
     
-    // If it's a global collection OR the user is a superadmin, don't force a school_id filter.
-    const allConstraints = (isGlobal || superAdmin)
-        ? constraints
-        : [where('school_id', '==', requireSchoolId()), ...constraints];
-        
-    const q = allConstraints.length > 0
-        ? query(collection(db, collectionName), ...allConstraints)
-        : collection(db, collectionName);
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as T);
+    // 1. Check in-memory cache
+    const cached = queryCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+    }
+
+    // 2. Check for in-flight identical request (deduplication)
+    if (inFlightRequests.has(cacheKey)) {
+        return inFlightRequests.get(cacheKey);
+    }
+
+    const requestPromise = (async () => {
+        try {
+            const isGlobal = GLOBAL_COLLECTIONS.has(collectionName);
+            const superAdmin = isSuperAdmin();
+            
+            // If it's a global collection OR the user is a superadmin, don't force a school_id filter.
+            const allConstraints = (isGlobal || superAdmin)
+                ? constraints
+                : [where('school_id', '==', requireSchoolId()), ...constraints];
+                
+            const q = allConstraints.length > 0
+                ? query(collection(db, collectionName), ...allConstraints)
+                : collection(db, collectionName);
+            const snap = await getDocs(q);
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }) as T);
+            
+            // Update cache
+            queryCache.set(cacheKey, { data, timestamp: Date.now() });
+            return data;
+        } finally {
+            inFlightRequests.delete(cacheKey);
+        }
+    })();
+
+    inFlightRequests.set(cacheKey, requestPromise);
+    return requestPromise;
 }
 
 /**
@@ -217,6 +285,10 @@ export async function createDoc<T extends { id: string }>(
     // Write id + payload in a single atomic setDoc (no follow-up updateDoc needed)
     const fullPayload = stripUndefined({ ...payload, id: ref.id });
     await setDoc(ref, fullPayload);
+    
+    // Invalidate cache for this collection
+    clearFirestoreCache(collectionName);
+    
     return { id: ref.id, ...payload } as T;
 }
 
@@ -230,6 +302,9 @@ async function setDocById<T>(
         ? data
         : { ...data, school_id: requireSchoolId() };
     await setDoc(doc(db, collectionName, id), stripUndefined(payload as Record<string, any>), { merge: true });
+    
+    // Invalidate cache for this collection
+    clearFirestoreCache(collectionName);
 }
 
 /** Update specific fields of a doc. Verifies school_id ownership for school-scoped collections. */
@@ -250,6 +325,9 @@ async function updateDocById(
         delete updates.school_id;
     }
     await updateDoc(doc(db, collectionName, id), stripUndefined(updates));
+    
+    // Invalidate cache for this collection
+    clearFirestoreCache(collectionName);
 }
 
 /** Delete a doc by ID. Verifies school_id ownership for school-scoped collections. */
@@ -264,20 +342,49 @@ async function deleteDocById(collectionName: string, id: string): Promise<void> 
         }
     }
     await deleteDoc(doc(db, collectionName, id));
+    
+    // Invalidate cache for this collection
+    clearFirestoreCache(collectionName);
 }
 
 /** Get a single doc by ID. Verifies school_id ownership for school-scoped collections. */
 async function getDocById<T>(collectionName: string, id: string): Promise<T | null> {
-    const snap = await getDoc(doc(db, collectionName, id));
-    if (!snap.exists()) return null;
-    if (!GLOBAL_COLLECTIONS.has(collectionName)) {
-        const docSchoolId = (snap.data() as any).school_id;
-        const currentSchoolId = requireSchoolId();
-        if (!isSuperAdmin() && docSchoolId && docSchoolId !== currentSchoolId) {
-            return null; // Silently deny cross-school reads
-        }
+    const cacheKey = `${collectionName}:${id}`;
+    
+    // Check cache
+    const cached = queryCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
     }
-    return { id: snap.id, ...snap.data() } as T;
+
+    // Check in-flight
+    if (inFlightRequests.has(cacheKey)) {
+        return inFlightRequests.get(cacheKey);
+    }
+
+    const requestPromise = (async () => {
+        try {
+            const snap = await getDoc(doc(db, collectionName, id));
+            if (!snap.exists()) return null;
+            if (!GLOBAL_COLLECTIONS.has(collectionName)) {
+                const docSchoolId = (snap.data() as any).school_id;
+                const currentSchoolId = requireSchoolId();
+                if (!isSuperAdmin() && docSchoolId && docSchoolId !== currentSchoolId) {
+                    return null; // Silently deny cross-school reads
+                }
+            }
+            const data = { id: snap.id, ...snap.data() } as T;
+            
+            // Update cache
+            queryCache.set(cacheKey, { data, timestamp: Date.now() });
+            return data;
+        } finally {
+            inFlightRequests.delete(cacheKey);
+        }
+    })();
+
+    inFlightRequests.set(cacheKey, requestPromise);
+    return requestPromise;
 }
 
 // ==================== USER SERVICE ====================

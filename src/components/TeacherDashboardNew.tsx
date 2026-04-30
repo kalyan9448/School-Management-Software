@@ -33,6 +33,7 @@ import {
   Filter,
   Star,
   Upload,
+  Lock,
 } from 'lucide-react';
 import logoImage from '../assets/logo.jpeg';
 import {
@@ -2141,14 +2142,22 @@ export function TeacherDashboardNew() {
             </label>
             <button
               onClick={handleGenerateAILessonPlan}
-              disabled={isGeneratingAI || !lessonForm.topic}
+              disabled={isGeneratingAI || !lessonForm.topic || !isAIEnabled}
+              title={!isAIEnabled ? getDisabledMessage() : undefined}
               className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-sm
-                ${isGeneratingAI 
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-purple-200 active:scale-95'
+                ${!isAIEnabled
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-60'
+                  : isGeneratingAI
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-purple-200 active:scale-95'
                 }`}
             >
-              {isGeneratingAI ? (
+              {!isAIEnabled ? (
+                <>
+                  <Lock className="w-4 h-4" />
+                  AI Disabled
+                </>
+              ) : isGeneratingAI ? (
                 <>
                   <Clock className="w-4 h-4 animate-spin" />
                   Analyzing Class Matrix...

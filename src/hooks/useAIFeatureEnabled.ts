@@ -13,30 +13,33 @@ import { schoolService } from '../utils/centralDataService';
  * AI features include: flashcards, quizzes, chat, lesson plans, learning recommendations, etc.
  */
 export function useAIFeatureEnabled() {
-  const { tenant } = useTenant();
+  const { schoolId } = useTenant();
   const { user } = useAuth();
-  const [schoolData, setSchoolData] = useState<any>(null);
+  const [schoolData, setSchoolData] = useState<School | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSchoolData = async () => {
-      if (!tenant?.schoolId) {
+    async function fetchSchoolData() {
+      if (!schoolId) {
+        setSchoolData(null);
         setIsLoading(false);
         return;
       }
 
       try {
-        const school = await schoolService.getById(tenant.schoolId);
-        setSchoolData(school);
+        setIsLoading(true);
+        const data = await schoolService.getById(schoolId);
+        setSchoolData(data);
       } catch (error) {
-        console.error('Failed to fetch school data for AI check:', error);
+        console.error('Failed to fetch school AI settings:', error);
+        setSchoolData(null);
       } finally {
         setIsLoading(false);
       }
-    };
+    }
 
     fetchSchoolData();
-  }, [tenant?.schoolId]);
+  }, [schoolId]);
 
   const isEnabled = useCallback(() => {
     // If user is superadmin, always allow AI features
@@ -49,17 +52,14 @@ export function useAIFeatureEnabled() {
       return schoolData.aiEnabled !== false;
     }
 
-    // Default to enabled if no school data yet
-    return true;
+    // If we are still loading or have no school context, disable AI for safety
+    // This prevents access during the split second of loading or if the context is missing
+    return false;
   }, [schoolData, user?.role]);
 
   const getDisabledMessage = useCallback(() => {
-    return 'AI features are currently disabled for your school. Please contact your school administrator to enable them.';
+    return "AI features are currently disabled for your school. Please contact your school administrator to enable this service.";
   }, []);
 
-  return {
-    isEnabled: isEnabled(),
-    isLoading,
-    getDisabledMessage,
-  };
+  return { isEnabled: isEnabled(), isLoading, getDisabledMessage };
 }
