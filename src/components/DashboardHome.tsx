@@ -713,7 +713,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <span className="text-gray-900 font-medium">Class {presence.classSection}</span>
+                          <span className="text-gray-900 font-medium">{presence.classSection.startsWith('Class') ? presence.classSection : `Class ${presence.classSection}`}</span>
                           <span className="text-gray-500 text-sm">{presence.subject}</span>
                         </div>
                       </td>
