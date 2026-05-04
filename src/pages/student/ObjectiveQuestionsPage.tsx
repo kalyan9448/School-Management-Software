@@ -455,15 +455,19 @@ export function ObjectiveQuestionsPage() {
                 <Button
                   onClick={handleSubmitAnswer}
                   disabled={selectedAnswer === null}
-                  className="flex-1 h-14 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white text-lg font-bold rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-95 border-none"
+                  className={`flex-1 h-14 text-lg font-bold rounded-2xl transition-all active:scale-95 border-none ${
+                    selectedAnswer === null
+                      ? "bg-gray-200 text-gray-500 cursor-not-allowed shadow-none"
+                      : "bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-xl shadow-blue-100"
+                  }`}
                   size="lg"
                 >
-                  Submit Answer
+                  {selectedAnswer === null ? "Select an answer first" : "Submit Answer"}
                 </Button>
               ) : (
                 <Button
                   onClick={handleNextQuestion}
-                  className="flex-1 h-14 bg-[#0A2540] hover:bg-blue-900 text-white text-lg font-bold rounded-2xl shadow-lg transition-all active:scale-95 group"
+                  className="flex-1 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-lg font-bold rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-95 group border-none"
                   size="lg"
                 >
                   {currentQuestionIndex < questions.length - 1

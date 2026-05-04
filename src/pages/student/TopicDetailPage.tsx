@@ -467,19 +467,23 @@ export function TopicDetailPage() {
             </div>
 
             <Button
-              onClick={() => navigate(`/flashcards/${topic.id}`, { 
-                state: { 
-                  source: 'homework',
-                  subject: topic.subject,
-                  topic: topic.topic,
-                  grade: studentData.grade,
-                } 
-              })}
+              onClick={() => {
+                if (!flashcardCompleted) {
+                  navigate(`/flashcards/${topic.id}`, { 
+                    state: { 
+                      source: 'homework',
+                      subject: topic.subject,
+                      topic: topic.topic,
+                      grade: studentData.grade,
+                    } 
+                  });
+                }
+              }}
               disabled={flashcardCompleted}
               className={`w-full h-16 rounded-2xl font-bold text-lg outline-none transition-all active:scale-95 group relative overflow-hidden border-none ${
                 flashcardCompleted
-                  ? "bg-emerald-100 !text-emerald-700 cursor-default shadow-none"
-                  : "bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100"
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200 cursor-default"
+                  : "bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-100"
               }`}
             >
               <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -563,19 +567,22 @@ export function TopicDetailPage() {
             )}
 
             <Button
-              onClick={() =>
-                !questionsLocked && !questionsCompleted && navigate(`/objective-questions/${topic.id}`, {
-                  state: { subject: topic.subject, topic: topic.topic, grade: studentData.grade }
-                })
-              }
+              onClick={() => {
+                if (!questionsLocked && !questionsCompleted) {
+                  navigate(`/objective-questions/${topic.id}`, {
+                    state: { subject: topic.subject, topic: topic.topic, grade: studentData.grade }
+                  });
+                }
+              }}
               disabled={questionsLocked || questionsCompleted}
               variant={questionsLocked || questionsCompleted ? "secondary" : "default"}
-              className={`w-full h-16 rounded-2xl font-bold text-lg outline-none transition-all active:scale-95 ${questionsCompleted
-                  ? "bg-emerald-100 !text-emerald-700 cursor-not-allowed border-none shadow-none"
+              className={`w-full h-16 rounded-2xl font-bold text-lg outline-none transition-all active:scale-95 ${
+                questionsCompleted
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200 border-none cursor-default"
                   : questionsLocked
                   ? "bg-gray-200 !text-gray-500 cursor-not-allowed border-none shadow-none"
                   : "bg-blue-600 hover:bg-blue-700 !text-white shadow-xl shadow-blue-100 border-none relative overflow-hidden group/btn"
-                }`}
+              }`}
               size="lg"
             >
               {!questionsLocked && !questionsCompleted && <div className="absolute inset-0 bg-white/10 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>}
