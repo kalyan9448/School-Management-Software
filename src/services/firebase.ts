@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
+import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,6 +19,19 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// ── Firebase AI Logic (Gemini via Firebase) ───────────────────────────────────
+// Uses GoogleAIBackend so requests are routed through Firebase with your
+// existing Firebase API key — no separate Gemini key exposed in the client.
+const ai = getAI(app, { backend: new GoogleAIBackend() });
+
+/**
+ * Get a Gemini generative model via Firebase AI Logic.
+ * @param modelName - e.g. "gemini-2.0-flash-exp"
+ */
+function getGeminiModel(modelName: string = "gemini-2.0-flash-exp") {
+  return getGenerativeModel(ai, { model: modelName });
+}
+
 // Enable offline persistence
 enableMultiTabIndexedDbPersistence(db).catch((err) => {
     if (err.code === 'failed-precondition') {
@@ -29,5 +43,5 @@ enableMultiTabIndexedDbPersistence(db).catch((err) => {
     }
 });
 
-export { app, analytics, auth, db };
+export { app, analytics, auth, db, ai, getGeminiModel };
 export default app;

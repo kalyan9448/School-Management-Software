@@ -32,11 +32,11 @@ interface AITopicChatProps {
   curriculumTags?: string[];
 }
 
-export function AITopicChat({ 
-  topicName, 
-  subjectName, 
-  studentLevel = "Standard", 
-  curriculumTags = [] 
+export function AITopicChat({
+  topicName,
+  subjectName,
+  studentLevel = "Standard",
+  curriculumTags = []
 }: AITopicChatProps) {
   const { isEnabled: isAIEnabled, getDisabledMessage } = useAIFeatureEnabled();
   const [isOpen, setIsOpen] = useState(false);
@@ -76,17 +76,21 @@ export function AITopicChat({
   ];
 
   const generateAIResponse = async (userMessage: string): Promise<string> => {
-    // Convert current messages to format expected by API
-    const formattedHistory = messages.map(m => ({
-      role: m.role,
-      content: m.content
-    }));
+    // Convert current messages to the format expected by the API.
+    // Skip the very first assistant welcome message (id "1") — it's just a UI greeting,
+    // not a real API turn. Gemini requires history to start with 'user'.
+    const formattedHistory = messages
+      .filter(m => m.id !== "1")  // exclude the static welcome message
+      .map(m => ({
+        role: m.role,
+        content: m.content
+      }));
 
     // The service expects: (subject, topic, chatHistory, newMessage, studentLevel, curriculumTags)
     const response = await aiService.chatTopic(
-      subjectName, 
-      topicName, 
-      formattedHistory, 
+      subjectName,
+      topicName,
+      formattedHistory,
       userMessage,
       studentLevel,
       curriculumTags
@@ -113,7 +117,7 @@ export function AITopicChat({
     // Fetch AI response
     try {
       const responseContent = await generateAIResponse(messageToSend);
-      
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -149,11 +153,11 @@ export function AITopicChat({
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0 }}
-              style={{ 
+              style={{
                 position: 'fixed',
                 bottom: '24px',
                 right: '24px',
-                zIndex: 999999 
+                zIndex: 999999
               }}
             >
               <Button
@@ -174,13 +178,13 @@ export function AITopicChat({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               className="shadow-2xl flex flex-col"
-              style={{ 
+              style={{
                 position: 'fixed',
                 bottom: '100px',
                 right: '24px',
                 width: '340px',
                 maxWidth: 'calc(100vw - 48px)',
-                zIndex: 999999 
+                zIndex: 999999
               }}
             >
               <Card className="shadow-2xl border border-gray-200 overflow-hidden bg-white">
@@ -227,11 +231,11 @@ export function AITopicChat({
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
-            style={{ 
+            style={{
               position: 'fixed',
               bottom: '24px',
               right: '24px',
-              zIndex: 999999 
+              zIndex: 999999
             }}
           >
             <Button
@@ -260,7 +264,7 @@ export function AITopicChat({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             className="shadow-2xl flex flex-col"
-            style={{ 
+            style={{
               position: 'fixed',
               bottom: '100px',
               right: '24px',
@@ -268,12 +272,12 @@ export function AITopicChat({
               maxWidth: 'calc(100vw - 48px)',
               height: '600px',
               maxHeight: 'calc(100vh - 120px)',
-              zIndex: 999999 
+              zIndex: 999999
             }}
           >
             <Card className="shadow-2xl border border-gray-200 overflow-hidden h-full w-full flex flex-col bg-white">
               {/* Chat Header */}
-               <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white flex-shrink-0">
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white flex-shrink-0">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm flex-shrink-0">
@@ -302,17 +306,15 @@ export function AITopicChat({
                     key={message.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`flex gap-2 ${
-                      message.role === "user" ? "flex-row-reverse" : ""
-                    }`}
+                    className={`flex gap-2 ${message.role === "user" ? "flex-row-reverse" : ""
+                      }`}
                   >
                     {/* Avatar */}
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        message.role === "assistant"
+                      className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${message.role === "assistant"
                           ? "bg-gradient-to-br from-purple-400 to-blue-400"
                           : "bg-gradient-to-br from-green-400 to-teal-400"
-                      }`}
+                        }`}
                     >
                       {message.role === "assistant" ? (
                         <Bot className="w-3.5 h-3.5 text-white" />
@@ -323,16 +325,14 @@ export function AITopicChat({
 
                     {/* Message Bubble */}
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm ${
-                        message.role === "assistant"
+                      className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm ${message.role === "assistant"
                           ? "bg-white border border-gray-200 text-gray-800"
                           : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-br-none"
-                      }`}
+                        }`}
                     >
                       <p
-                        className={`text-xs whitespace-pre-wrap ${
-                          message.role === "user" ? "text-white" : "text-gray-800"
-                        }`}
+                        className={`text-xs whitespace-pre-wrap ${message.role === "user" ? "text-white" : "text-gray-800"
+                          }`}
                         dangerouslySetInnerHTML={{
                           __html: message.content
                             .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
@@ -340,9 +340,8 @@ export function AITopicChat({
                         }}
                       />
                       <p
-                        className={`text-[10px] mt-1 ${
-                          message.role === "user" ? "text-white/70" : "text-gray-500"
-                        }`}
+                        className={`text-[10px] mt-1 ${message.role === "user" ? "text-white/70" : "text-gray-500"
+                          }`}
                       >
                         {message.timestamp.toLocaleTimeString([], {
                           hour: "2-digit",

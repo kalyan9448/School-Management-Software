@@ -1,11 +1,12 @@
 // =============================================================================
-// AI Service — Google Gemini API integration
-// Set VITE_GEMINI_API_KEY in your .env file.
+// AI Service — Google Gemini API
+// Uses the Firebase project's API key (VITE_FIREBASE_API_KEY) to call Gemini
+// directly via the REST API — proven reliable approach.
 // =============================================================================
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY) as string | undefined;
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-1.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
@@ -13,13 +14,11 @@ interface ChatMessage {
 }
 
 /**
- * Helper to call the Google Gemini API
+ * Core helper — calls Gemini REST API using the Firebase project API key.
  */
 async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode = false): Promise<string> {
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your-gemini-api-key') {
-        const errorMsg = '[aiService] VITE_GEMINI_API_KEY not set or invalid. Please check your .env file.';
-        console.warn(errorMsg);
-        throw new Error(errorMsg);
+    if (!GEMINI_API_KEY) {
+        throw new Error('[aiService] VITE_FIREBASE_API_KEY not set. Please check your .env file.');
     }
 
     try {
@@ -39,12 +38,10 @@ async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode =
         const alternating: ChatMessage[] = [];
         sanitized.forEach((msg) => {
             const last = alternating[alternating.length - 1];
-            // Map 'assistant' to 'model' for comparison
             const currentRole = msg.role === 'assistant' ? 'assistant' : 'user';
             const lastRole = last ? (last.role === 'assistant' ? 'assistant' : 'user') : null;
-
             if (currentRole === lastRole) {
-                // If consecutive same roles, append content to last message instead of crashing
+                // Merge consecutive same-role messages
                 last.content += "\n" + msg.content;
             } else {
                 alternating.push({ ...msg });
@@ -56,14 +53,14 @@ async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode =
         }
 
         // Build Gemini request body
-        const body: any = {
+        const body: Record<string, any> = {
             contents: alternating.map(msg => ({
                 role: msg.role === 'assistant' ? 'model' : 'user',
                 parts: [{ text: msg.content }],
             })),
             generationConfig: {
                 temperature: 0.7,
-                maxOutputTokens: 2048, // Reduced for faster response
+                maxOutputTokens: 2048,
             },
         };
 
@@ -85,15 +82,16 @@ async function callAI(messages: ChatMessage[], model = DEFAULT_MODEL, jsonMode =
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Gemini API Error Details:', JSON.stringify(errorData, null, 2));
-            throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+            const errorMsg = errorData.error?.message || response.statusText || 'Unknown error';
+            console.error('[aiService] Gemini API error:', JSON.stringify(errorData, null, 2));
+            throw new Error(`Gemini API error: ${response.status} - ${errorMsg}`);
         }
 
         const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        return text;
+        return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
     } catch (error) {
-        console.error("Failed to fetch from Gemini:", error);
+        console.error("[aiService] AI call failed:", error);
         throw error;
     }
 }
