@@ -14,7 +14,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+// CORS configuration: allow configured URL or any localhost port for development
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedUrls = process.env.FRONTEND_URL?.split(',') || ['http://localhost:5173', 'http://localhost:5174'];
+    if (!origin || origin.startsWith('http://localhost:') || allowedUrls.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy violation'));
+    }
+  }
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // ── Tenant injection middleware ────────────────────────────────────────────────
