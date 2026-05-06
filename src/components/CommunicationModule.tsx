@@ -89,8 +89,8 @@ export function CommunicationModule() {
       // Also send to student dashboard if applicable (old system, kept for compatibility if needed)
       if (formData.targetAudience === 'students' || formData.targetAudience === 'all') {
         const studentNotifType = formData.type === 'general' ? 'announcement' :
-                                 formData.type === 'urgent' ? 'reminder' :
-                                 formData.type === 'event' ? 'reminder' : 'reminder';
+          formData.type === 'urgent' ? 'reminder' :
+            formData.type === 'event' ? 'reminder' : 'reminder';
 
         await NotificationService.add({
           type: studentNotifType as any,
@@ -161,7 +161,7 @@ export function CommunicationModule() {
     const dateStr = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     return announcements.filter(a => a.postedDate === dateStr && (a.type === 'event' || a.type === 'holiday' || a.type === 'exam'));
   };
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
     <div className="p-8">
@@ -199,17 +199,15 @@ export function CommunicationModule() {
       <div className="flex gap-2 mb-6 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('messages')}
-          className={`px-6 py-3 border-b-2 font-medium transition-colors ${
-            activeTab === 'messages' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
+          className={`px-6 py-3 border-b-2 font-medium transition-colors ${activeTab === 'messages' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
         >
           <span className="flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Messages</span>
         </button>
         <button
           onClick={() => setActiveTab('calendar')}
-          className={`px-6 py-3 border-b-2 font-medium transition-colors ${
-            activeTab === 'calendar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
+          className={`px-6 py-3 border-b-2 font-medium transition-colors ${activeTab === 'calendar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
         >
           <span className="flex items-center gap-2"><CalendarIcon className="w-4 h-4" /> Event Calendar</span>
         </button>
@@ -365,7 +363,7 @@ export function CommunicationModule() {
                         <Users className="w-3 h-3" />
                         <span>Sent to: {
                           announcement.targetAudience === 'all' ? 'All Users' :
-                          announcement.targetAudience.charAt(0).toUpperCase() + announcement.targetAudience.slice(1)
+                            announcement.targetAudience.charAt(0).toUpperCase() + announcement.targetAudience.slice(1)
                         }</span>
                       </div>
                     </div>
@@ -418,17 +416,14 @@ export function CommunicationModule() {
               const dayEvents = getEventsForDay(day);
               const isToday = new Date().toDateString() === new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day).toDateString();
               return (
-                <div key={day} className={`h-24 border-b border-r border-gray-100 p-1 ${
-                  isToday ? 'bg-blue-50' : 'hover:bg-gray-50'
-                } transition-colors`}>
-                  <span className={`text-sm font-semibold inline-flex w-7 h-7 items-center justify-center rounded-full mb-1 ${
-                    isToday ? 'bg-blue-600 text-white' : 'text-gray-700'
-                  }`}>{day}</span>
+                <div key={day} className={`h-24 border-b border-r border-gray-100 p-1 ${isToday ? 'bg-blue-50' : 'hover:bg-gray-50'
+                  } transition-colors`}>
+                  <span className={`text-sm font-semibold inline-flex w-7 h-7 items-center justify-center rounded-full mb-1 ${isToday ? 'bg-blue-600 text-white' : 'text-gray-700'
+                    }`}>{day}</span>
                   <div className="space-y-0.5 overflow-hidden">
                     {dayEvents.slice(0, 2).map(ev => (
-                      <div key={ev.id} className={`text-xs px-1 py-0.5 rounded truncate font-medium ${
-                        ev.type === 'holiday' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'
-                      }`} title={ev.title}>
+                      <div key={ev.id} className={`text-xs px-1 py-0.5 rounded truncate font-medium ${ev.type === 'holiday' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'
+                        }`} title={ev.title}>
                         {ev.title}
                       </div>
                     ))}

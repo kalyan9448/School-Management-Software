@@ -63,7 +63,7 @@ export function TeacherMarksUpload() {
       try {
         const allClasses = await classService.getAll();
         setAllClassesData(allClasses);
-        
+
         // Extract unique class names
         const uniqueClassNames = Array.from(new Set(allClasses.map(c => c.className))).sort();
         setClasses(uniqueClassNames);
@@ -83,7 +83,7 @@ export function TeacherMarksUpload() {
         .filter(c => c.className === selectedClass)
         .map(c => c.section)
         .sort();
-      
+
       setSections(availableSections);
       setSelectedSection('');
     } else {

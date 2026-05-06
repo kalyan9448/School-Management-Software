@@ -158,25 +158,25 @@ export function FeeModule() {
   // Dynamically calculate Student Ledgers
   useEffect(() => {
     if (studentsData.length === 0) return;
-    
+
     const ledgers: StudentLedger[] = studentsData.map((s: any) => {
       const studentPayments = payments.filter(
         (p: any) => p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase() || p.studentId === s.id
       );
       const paidAmount = studentPayments.reduce((sum: number, p: any) => sum + (parseFloat(p.totalAmount) || parseFloat(p.amount) || 0), 0);
-      
+
       // Clean up class name for lookup
       const studentClass = s.class?.replace(/^Class\s+/i, '') || '';
       const classStructure = feeStructures.find((str: any) => str.class?.replace(/^Class\s+/i, '') === studentClass);
-      
-      const calculatedTotalFee = classStructure 
+
+      const calculatedTotalFee = classStructure
         ? (parseFloat(classStructure.admissionFee as any) || 0) +
-          (parseFloat(classStructure.annualFee as any) || 0) +
-          ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) +
-          ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) +
-          ((parseFloat(classStructure.transportFee as any) || 0) * 12) +
-          ((parseFloat(classStructure.daycareFee as any) || 0) * 12) +
-          ((parseFloat(classStructure.activityFee as any) || 0) * 12)
+        (parseFloat(classStructure.annualFee as any) || 0) +
+        ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) +
+        ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) +
+        ((parseFloat(classStructure.transportFee as any) || 0) * 12) +
+        ((parseFloat(classStructure.daycareFee as any) || 0) * 12) +
+        ((parseFloat(classStructure.activityFee as any) || 0) * 12)
         : (parseFloat(s.totalFee as any) || 0);
 
       return {
@@ -219,33 +219,33 @@ export function FeeModule() {
   // Smart Search Logic
   const filteredSearchStudents = useMemo(() => {
     if (!studentSearchQuery && !studentSearchClass && !studentSearchSection) return [];
-    
+
     return studentsData.filter(student => {
       const query = studentSearchQuery.toLowerCase();
-      const matchesQuery = !query || 
+      const matchesQuery = !query ||
         student.name?.toLowerCase().includes(query) ||
         student.studentName?.toLowerCase().includes(query) ||
         student.admissionNo?.toLowerCase().includes(query) ||
         student.parentPhone?.includes(query) ||
         student.parentName?.toLowerCase().includes(query);
-        
-      const matchesClass = !studentSearchClass || 
+
+      const matchesClass = !studentSearchClass ||
         (student.class?.replace(/^Class\s+/i, '') === studentSearchClass.replace(/^Class\s+/i, ''));
       const matchesSection = !studentSearchSection || student.section === studentSearchSection;
-      
+
       return matchesQuery && matchesClass && matchesSection;
     }).slice(0, 8); // Display top 8 results rapidly
   }, [studentsData, studentSearchQuery, studentSearchClass, studentSearchSection]);
 
   const handleSelectStudentForFee = (student: any) => {
     setSelectedStudentForFee(student);
-    
+
     // Find ledger if exists
     const ledger = studentLedgers.find(
       l => l.admissionNo?.toLowerCase() === student.admissionNo?.toLowerCase()
     );
     setSelectedStudentLedger(ledger || null);
-    
+
     setCollectionForm(prev => ({
       ...prev,
       studentName: student.name || student.studentName || '',
@@ -255,7 +255,7 @@ export function FeeModule() {
       amount: '',
       paidAmount: '',
     }));
-    
+
     setStudentSearchQuery('');
     setIsSearchDropdownOpen(false);
   };
@@ -538,9 +538,9 @@ export function FeeModule() {
     // Automate sending notifications to parent and student dashboards
     if (selectedStudentForFee) {
       const now = new Date().toISOString();
-      
-      const statusText = balance > 0 
-        ? `Payment of ₹${paidAmount.toLocaleString()} received. Remaining ₹${balance.toLocaleString()}` 
+
+      const statusText = balance > 0
+        ? `Payment of ₹${paidAmount.toLocaleString()} received. Remaining ₹${balance.toLocaleString()}`
         : `Fee fully paid`;
 
       const parentMsg = `Dear Parent, ${statusText} towards ${collectionForm.feeType} for ${collectionForm.studentName}. Receipt No: ${receiptNo}.`;
@@ -579,10 +579,10 @@ export function FeeModule() {
       }
     }
     // Generate PDF and show success
-    const alertMessage = balance > 0 
+    const alertMessage = balance > 0
       ? `Payment Successful! (Partial)\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${paidAmount.toLocaleString()}\nRemaining Balance: ₹${balance.toLocaleString()}\n\nReceipt PDF generated automatically.`
       : `Payment Successful! (Full)\n\nReceipt No: ${receiptNo}\nAmount Paid: ₹${paidAmount.toLocaleString()}\nFee fully paid.\n\nReceipt PDF generated automatically.`;
-    
+
     alert(alertMessage);
 
     setCollectionForm({
@@ -922,11 +922,11 @@ export function FeeModule() {
             <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
               <h3 className="text-gray-900 mb-4">Payment Entry</h3>
               <form onSubmit={handleCollectionSubmit} className="space-y-6">
-                
+
                 {/* Smart Search Section */}
                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                   <h4 className="text-gray-900 font-medium mb-3">1. Select Student</h4>
-                  
+
                   {!selectedStudentForFee ? (
                     <div className="space-y-4">
                       {/* Search Filters */}
@@ -963,7 +963,7 @@ export function FeeModule() {
                           className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Search student (Name / Phone / Parent / Admission No)..."
                         />
-                        
+
                         {/* Dropdown Results */}
                         {isSearchDropdownOpen && (studentSearchQuery || studentSearchClass || studentSearchSection) && (
                           <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -1032,7 +1032,7 @@ export function FeeModule() {
                 <div className={`transition-opacity ${!selectedStudentForFee ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                   <h4 className="text-gray-900 font-medium mb-3">2. Payment Details</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    
+
                     <div>
                       <label className="block text-gray-700 mb-2">Fee Type *</label>
                       <select
@@ -1066,95 +1066,95 @@ export function FeeModule() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-gray-700 mb-2">Amount Paying Now (₹) *</label>
+                      <input
+                        type="number"
+                        value={collectionForm.paidAmount}
+                        onChange={(e) => setCollectionForm({ ...collectionForm, paidAmount: e.target.value })}
+                        required={!!selectedStudentForFee}
+                        disabled={!selectedStudentForFee}
+                        className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-bold text-blue-900 bg-blue-50"
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 mb-2">Payment Mode *</label>
+                      <select
+                        value={collectionForm.paymentMode}
+                        onChange={(e) => setCollectionForm({ ...collectionForm, paymentMode: e.target.value as any })}
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="upi">UPI</option>
+                        <option value="online">Online</option>
+                        <option value="bank-transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 mb-2">Discount (₹) - Optional</label>
+                      <input
+                        type="number"
+                        value={collectionForm.discount}
+                        onChange={(e) => setCollectionForm({ ...collectionForm, discount: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 mb-2">Late Fee (₹) - Optional</label>
+                      <input
+                        type="number"
+                        value={collectionForm.lateFee}
+                        onChange={(e) => setCollectionForm({ ...collectionForm, lateFee: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Calculation Display */}
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 shadow-sm mt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div>
+                        <p className="text-blue-700 mb-1">Total Fee</p>
+                        <p className="text-blue-900 font-semibold">₹{(parseFloat(collectionForm.amount) || 0).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-green-700 mb-1">Discount</p>
+                        <p className="text-green-900">- ₹{(parseFloat(collectionForm.discount) || 0).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-red-700 mb-1">Late Fee</p>
+                        <p className="text-red-900">+ ₹{(parseFloat(collectionForm.lateFee) || 0).toLocaleString()}</p>
+                      </div>
+                      <div className="border-l border-blue-200 pl-4">
+                        <p className="text-blue-800 font-medium mb-1">Net Payable</p>
+                        <p className="text-blue-900 font-bold text-lg">₹{calculateNetPayable().toLocaleString()}</p>
+                      </div>
+                      <div className="border-l border-indigo-200 pl-4">
+                        <p className="text-indigo-800 font-medium mb-1">Balance</p>
+                        <p className={`font-bold text-lg ${calculateBalance() > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          ₹{calculateBalance().toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-gray-700 mb-2">Amount Paying Now (₹) *</label>
-                    <input
-                      type="number"
-                      value={collectionForm.paidAmount}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, paidAmount: e.target.value })}
-                      required={!!selectedStudentForFee}
-                      disabled={!selectedStudentForFee}
-                      className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-bold text-blue-900 bg-blue-50"
-                      placeholder="0"
+                    <label className="block text-gray-700 mb-2">Notes</label>
+                    <textarea
+                      value={collectionForm.notes}
+                      onChange={(e) => setCollectionForm({ ...collectionForm, notes: e.target.value })}
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Additional notes..."
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2">Payment Mode *</label>
-                    <select
-                      value={collectionForm.paymentMode}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, paymentMode: e.target.value as any })}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="upi">UPI</option>
-                      <option value="online">Online</option>
-                      <option value="bank-transfer">Bank Transfer</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2">Discount (₹) - Optional</label>
-                    <input
-                      type="number"
-                      value={collectionForm.discount}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, discount: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 mb-2">Late Fee (₹) - Optional</label>
-                    <input
-                      type="number"
-                      value={collectionForm.lateFee}
-                      onChange={(e) => setCollectionForm({ ...collectionForm, lateFee: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-
-                {/* Calculation Display */}
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 shadow-sm mt-4">
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div>
-                      <p className="text-blue-700 mb-1">Total Fee</p>
-                      <p className="text-blue-900 font-semibold">₹{(parseFloat(collectionForm.amount) || 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-green-700 mb-1">Discount</p>
-                      <p className="text-green-900">- ₹{(parseFloat(collectionForm.discount) || 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-red-700 mb-1">Late Fee</p>
-                      <p className="text-red-900">+ ₹{(parseFloat(collectionForm.lateFee) || 0).toLocaleString()}</p>
-                    </div>
-                    <div className="border-l border-blue-200 pl-4">
-                      <p className="text-blue-800 font-medium mb-1">Net Payable</p>
-                      <p className="text-blue-900 font-bold text-lg">₹{calculateNetPayable().toLocaleString()}</p>
-                    </div>
-                    <div className="border-l border-indigo-200 pl-4">
-                      <p className="text-indigo-800 font-medium mb-1">Balance</p>
-                      <p className={`font-bold text-lg ${calculateBalance() > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        ₹{calculateBalance().toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 mb-2">Notes</label>
-                  <textarea
-                    value={collectionForm.notes}
-                    onChange={(e) => setCollectionForm({ ...collectionForm, notes: e.target.value })}
-                    rows={2}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Additional notes..."
-                  />
-                </div>
 
                 </div>
 
@@ -1162,11 +1162,10 @@ export function FeeModule() {
                   <button
                     type="submit"
                     disabled={!selectedStudentForFee}
-                    className={`px-4 py-2 text-white rounded-lg flex items-center gap-2 transition-colors ${
-                      !selectedStudentForFee 
-                        ? 'bg-gray-400 cursor-not-allowed' 
+                    className={`px-4 py-2 text-white rounded-lg flex items-center gap-2 transition-colors ${!selectedStudentForFee
+                        ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
+                      }`}
                   >
                     <Check className="w-4 h-4" />
                     Collect Payment
@@ -1256,7 +1255,7 @@ export function FeeModule() {
                           </div>
                           <p className="text-gray-900 font-black font-mono text-sm">{payment.receiptNo}</p>
                         </div>
-                        
+
                         {/* Box 4: Fee Category */}
                         <div className="bg-gray-50/70 rounded-2xl p-4 border border-gray-100 hover:bg-white transition-all">
                           <div className="flex items-center gap-2 text-gray-400 text-[10px] font-extrabold uppercase tracking-wider mb-2">

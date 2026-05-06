@@ -147,12 +147,12 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         student.rollNo.includes(searchQuery) ||
-                         student.admissionNo.toLowerCase().includes(searchQuery.toLowerCase());
+      student.rollNo.includes(searchQuery) ||
+      student.admissionNo.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesFilter = filterStatus === 'all' ||
-                         (filterStatus === 'unmarked' && student.attendance === null) ||
-                         student.attendance === filterStatus;
+      (filterStatus === 'unmarked' && student.attendance === null) ||
+      student.attendance === filterStatus;
 
     return matchesSearch && matchesFilter;
   });
@@ -320,33 +320,30 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
                         <div className="flex justify-center gap-2">
                           <button
                             onClick={() => markAttendance(student.id, 'present')}
-                            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                              student.attendance === 'present'
+                            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${student.attendance === 'present'
                                 ? 'bg-green-600 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'
-                            }`}
+                              }`}
                           >
                             <CheckCircle className="w-4 h-4" />
                             Present
                           </button>
                           <button
                             onClick={() => markAttendance(student.id, 'absent')}
-                            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                              student.attendance === 'absent'
+                            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${student.attendance === 'absent'
                                 ? 'bg-red-600 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600'
-                            }`}
+                              }`}
                           >
                             <XCircle className="w-4 h-4" />
                             Absent
                           </button>
                           <button
                             onClick={() => markAttendance(student.id, 'late')}
-                            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                              student.attendance === 'late'
+                            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${student.attendance === 'late'
                                 ? 'bg-orange-600 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-orange-50 hover:text-orange-600'
-                            }`}
+                              }`}
                           >
                             <AlertCircle className="w-4 h-4" />
                             Late
@@ -372,11 +369,10 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
           <button
             onClick={handleSave}
             disabled={students.length === 0 || saveStatus === 'saving'}
-            className={`px-6 py-3 rounded-lg transition-all shadow-lg flex items-center gap-2 ${
-              saveStatus === 'saved'
+            className={`px-6 py-3 rounded-lg transition-all shadow-lg flex items-center gap-2 ${saveStatus === 'saved'
                 ? 'bg-green-600 text-white'
                 : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-700 hover:to-purple-800 disabled:opacity-50'
-            }`}
+              }`}
           >
             {saveStatus === 'saving' ? (
               <><Loader2 className="w-5 h-5 animate-spin" /> Saving...</>
