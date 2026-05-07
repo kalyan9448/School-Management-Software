@@ -1901,8 +1901,9 @@ export const notificationService = {
         }
 
         const combined = [...personal, ...global];
+        const visible = combined.filter(n => !(n.deletedBy && n.deletedBy.includes(userId)));
         // Sort by date descending
-        return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return visible.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     },
 
     getUnreadCount: async (
@@ -1937,6 +1938,23 @@ export const notificationService = {
         const notifications = await notificationService.getByUser(userId);
         for (const n of notifications.filter(n => !n.read)) {
             await updateDocById('notifications', n.id, { read: true });
+        }
+    },
+
+    deleteAll: async (
+        userId: string,
+        role?: string,
+        userClass?: string,
+        userSection?: string,
+        allClasses?: { class: string; section: string }[]
+    ): Promise<void> => {
+        const notifications = await notificationService.getByUser(userId, role, userClass, userSection, allClasses);
+        for (const n of notifications) {
+            const deletedBy = n.deletedBy || [];
+            if (!deletedBy.includes(userId)) {
+                deletedBy.push(userId);
+                await updateDocById('notifications', n.id, { deletedBy });
+            }
         }
     },
 };

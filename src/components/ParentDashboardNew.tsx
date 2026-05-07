@@ -1929,6 +1929,10 @@ export function ParentDashboardNew() {
           onClose={() => setCurrentView('dashboard')}
           maxHeight="max-h-[calc(100vh-250px)]"
           showHeader={true}
+          userClass={selectedChild?.class}
+          userSection={selectedChild?.section}
+          allClasses={allChildClasses.length > 1 ? allChildClasses : undefined}
+          onNavigate={(view) => setCurrentView(view as any)}
         />
       </div>
     );

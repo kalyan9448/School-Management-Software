@@ -33,6 +33,10 @@ interface ParentNotificationPanelProps {
   maxHeight?: string;
   showHeader?: boolean;
   compact?: boolean;
+  userClass?: string;
+  userSection?: string;
+  allClasses?: { class: string; section: string }[];
+  onNavigate?: (view: string) => void;
 }
 
 export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = ({
@@ -41,9 +45,13 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
   maxHeight = 'max-h-[600px]',
   showHeader = true,
   compact = false,
+  userClass,
+  userSection,
+  allClasses,
+  onNavigate,
 }) => {
-  const { categories, unreadCount, loading, error, markAsRead, markAllAsRead, getRecentNotifications, refresh } =
-    useAggregatedNotifications('parent');
+  const { categories, unreadCount, loading, error, markAsRead, markAllAsRead, clearAllNotifications, getRecentNotifications, refresh } =
+    useAggregatedNotifications('parent', userClass, userSection, allClasses);
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,19 +97,19 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
   const getNotificationBgColor = (type: string) => {
     switch (type) {
       case 'exam':
-        return 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100';
+        return 'bg-indigo-50';
       case 'announcement':
-        return 'bg-teal-50 border-teal-200 hover:bg-teal-100';
+        return 'bg-teal-50';
       case 'fee':
-        return 'bg-orange-50 border-orange-200 hover:bg-orange-100';
+        return 'bg-orange-50';
       case 'event':
-        return 'bg-purple-50 border-purple-200 hover:bg-purple-100';
+        return 'bg-purple-50';
       case 'assignment':
-        return 'bg-blue-50 border-blue-200 hover:bg-blue-100';
+        return 'bg-blue-50';
       case 'attendance':
-        return 'bg-green-50 border-green-200 hover:bg-green-100';
+        return 'bg-green-50';
       default:
-        return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+        return 'bg-gray-50';
     }
   };
 
@@ -125,44 +133,74 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
     }
   };
 
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.read) {
+      markAsRead(notification.id);
+    }
+    
+    if (onNavigate) {
+      if (notification.type === 'fee') {
+        onNavigate('fees');
+      } else if (notification.type === 'exam' || notification.type === 'progress') {
+        onNavigate('progress');
+      } else if (notification.type === 'attendance' || notification.type === 'assignment') {
+        onNavigate('timeline');
+      } else if (notification.link && notification.link.includes('chat')) {
+        onNavigate('chat');
+      } else if (notification.link && notification.link.includes('reports')) {
+        onNavigate('reports');
+      }
+    }
+  };
+
   const NotificationCard: React.FC<{ notification: Notification; compact?: boolean }> = ({
     notification,
     compact: isCompact,
   }) => (
     <div
-      className={`p-3 rounded-lg border transition-all cursor-pointer ${
-        notification.read ? 'bg-white border-gray-200' : `${getNotificationBgColor(notification.type)} border-l-4`
+      className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
+        notification.read
+          ? 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm opacity-80'
+          : 'bg-white border-blue-100 shadow-sm hover:shadow-md relative overflow-hidden'
       } ${isCompact ? 'mb-2' : 'mb-3'}`}
-      onClick={() => !notification.read && markAsRead(notification.id)}
+      onClick={() => handleNotificationClick(notification)}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 mt-1">{getNotificationIcon(notification.type)}</div>
+      {!notification.read && (
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
+      )}
+      <div className="flex items-start gap-4">
+        <div className={`flex-shrink-0 mt-0.5 p-2.5 rounded-full ${getNotificationBgColor(notification.type)}`}>
+          {getNotificationIcon(notification.type)}
+        </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-gray-900 truncate">{notification.title}</h4>
-              <p className={`text-sm text-gray-600 ${isCompact ? 'line-clamp-1' : 'line-clamp-2'}`}>
+              <h4 className={`text-sm ${notification.read ? 'font-medium text-gray-700' : 'font-bold text-gray-900'} truncate`}>
+                {notification.title}
+              </h4>
+              <p className={`text-sm mt-1 ${notification.read ? 'text-gray-500' : 'text-gray-600'} ${isCompact ? 'line-clamp-1' : 'line-clamp-2'}`}>
                 {notification.message}
               </p>
             </div>
             {!notification.read && (
-              <span className="flex-shrink-0 w-2 h-2 bg-blue-600 rounded-full mt-2" />
+              <span className="flex-shrink-0 w-2.5 h-2.5 bg-blue-500 rounded-full mt-1.5 shadow-sm" />
             )}
           </div>
 
-          <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-            <Clock className="w-3 h-3" />
-            {formatTimeAgo(notification.date)}
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+              <Clock className="w-3.5 h-3.5" />
+              {formatTimeAgo(notification.date)}
+            </div>
+            <div className="flex-shrink-0 flex gap-1 opacity-0 hover:opacity-100 transition-opacity">
+              {notification.read ? (
+                <EyeOff className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+              ) : (
+                <Eye className="w-4 h-4 text-blue-500 hover:text-blue-700" />
+              )}
+            </div>
           </div>
-        </div>
-
-        <div className="flex-shrink-0 flex gap-1">
-          {notification.read ? (
-            <EyeOff className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-          ) : (
-            <Eye className="w-4 h-4 text-blue-500 hover:text-blue-700" />
-          )}
         </div>
       </div>
     </div>
@@ -234,15 +272,15 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
       )}
 
       {/* Category Filter Bar */}
-      <div className="bg-gray-50 border-b px-4 py-3 overflow-x-auto">
+      <div className="bg-white border-b px-4 py-3 overflow-x-auto">
         <div className="flex items-center gap-2 min-w-max">
-          <Filter className="w-4 h-4 text-gray-600 flex-shrink-0" />
+          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0 mr-1" />
           <button
             onClick={() => setActiveFilter(null)}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
               activeFilter === null
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900'
             }`}
           >
             All
@@ -251,15 +289,19 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
             <button
               key={category.type}
               onClick={() => setActiveFilter(category.type)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-all whitespace-nowrap flex items-center gap-1 ${
+              className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap flex items-center gap-1.5 ${
                 activeFilter === category.type
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
               {category.label}
               {category.unreadCount > 0 && (
-                <span className="ml-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                  activeFilter === category.type 
+                    ? 'bg-white text-blue-600' 
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
                   {category.unreadCount}
                 </span>
               )}
@@ -278,15 +320,26 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
             {viewMode === 'compact' ? 'Expand' : 'Compact'} View
           </button>
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={markAllAsRead}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-          >
-            <CheckCircle className="w-4 h-4" />
-            Mark all read
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {unreadCount > 0 && (
+            <button
+              onClick={markAllAsRead}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Mark all read
+            </button>
+          )}
+          {filteredNotifications.length > 0 && (
+            <button
+              onClick={clearAllNotifications}
+              className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Notifications List */}

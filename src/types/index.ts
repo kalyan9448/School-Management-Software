@@ -455,6 +455,7 @@ export interface Notification {
     link?: string;
     sentVia?: 'in_app' | 'email' | 'sms' | 'push';
     status?: 'sent' | 'delivered' | 'failed';
+    deletedBy?: string[];
     created_at?: string;
     updated_at?: string;
 }

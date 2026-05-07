@@ -26,8 +26,13 @@ export interface NotificationCategory {
   unreadCount: number;
 }
 
-export const useAggregatedNotifications = (role?: string, userClass?: string, userSection?: string) => {
-  const { currentUser } = useAuth();
+export const useAggregatedNotifications = (
+  role?: string, 
+  userClass?: string, 
+  userSection?: string,
+  allClasses?: { class: string; section: string }[]
+) => {
+  const { user } = useAuth();
   const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
   const [categories, setCategories] = useState<NotificationCategory[]>([]);
   const [stats, setStats] = useState<CategoryStats>({
@@ -44,7 +49,7 @@ export const useAggregatedNotifications = (role?: string, userClass?: string, us
   const [error, setError] = useState<string | null>(null);
 
   const fetchAndCategorize = useCallback(async () => {
-    if (!currentUser?.uid) {
+    if (!user?.id) {
       setAllNotifications([]);
       setCategories([]);
       setStats({
@@ -66,10 +71,11 @@ export const useAggregatedNotifications = (role?: string, userClass?: string, us
     try {
       // Fetch all notifications for the user
       const notifications = await dataService.notification.getByUser(
-        currentUser.uid,
+        user.id,
         role || 'parent',
         userClass,
-        userSection
+        userSection,
+        allClasses
       );
 
       // Sort by date descending
@@ -190,7 +196,7 @@ export const useAggregatedNotifications = (role?: string, userClass?: string, us
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.uid, role, userClass, userSection]);
+  }, [user?.id, role, userClass, userSection, allClasses]);
 
   // Fetch on mount and when dependencies change
   useEffect(() => {
@@ -213,15 +219,15 @@ export const useAggregatedNotifications = (role?: string, userClass?: string, us
   );
 
   const markAllAsRead = useCallback(async () => {
-    if (!currentUser?.uid) return;
+    if (!user?.id) return;
     try {
-      await dataService.notification.markAllAsRead(currentUser.uid);
+      await dataService.notification.markAllAsRead(user.id);
       setAllNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
     }
-  }, [currentUser?.uid]);
+  }, [user?.id]);
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
@@ -232,6 +238,24 @@ export const useAggregatedNotifications = (role?: string, userClass?: string, us
       console.error('Error deleting notification:', err);
     }
   }, []);
+
+  const clearAllNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      // Clear from UI immediately to give instant feedback
+      setAllNotifications([]);
+      setUnreadCount(0);
+      
+      // Delete personal notifications from backend and mark global ones as deleted by this user
+      await dataService.notification.deleteAll(user.id, role, userClass, userSection, allClasses);
+      
+      // Note: We deliberately do not call fetchAndCategorize() here, 
+      // as it would re-fetch global notifications (which can't be deleted)
+      // and make the clear action appear broken to the user.
+    } catch (err) {
+      console.error('Error clearing all notifications:', err);
+    }
+  }, [user?.id]);
 
   const getCategoryStats = useCallback((categoryType: string): number => {
     return stats[categoryType as keyof CategoryStats] || 0;
@@ -269,6 +293,7 @@ export const useAggregatedNotifications = (role?: string, userClass?: string, us
     refresh: fetchAndCategorize,
     markAsRead,
     markAllAsRead,
+    clearAllNotifications,
     deleteNotification,
     getCategoryStats,
     getNotificationsByCategory,
