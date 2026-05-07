@@ -25,7 +25,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useAggregatedNotifications, NotificationCategory } from '../hooks/useAggregatedNotifications';
-import { Notification } from '../types/index';
+import { Notification } from '../utils/centralDataService';
 
 interface ParentNotificationPanelProps {
   onClose?: () => void;

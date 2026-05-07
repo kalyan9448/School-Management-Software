@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import dataService from '../utils/firestoreService';
-import { Notification } from '../types/index';
+import { Notification } from '../utils/centralDataService';
 
 export interface CategoryStats {
   exam: number;

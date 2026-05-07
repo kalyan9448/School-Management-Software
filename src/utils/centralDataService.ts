@@ -433,12 +433,13 @@ export interface Notification {
   recipientRole?: string;
   class?: string;
   section?: string;
-  type: 'attendance' | 'assignment' | 'exam' | 'fee' | 'announcement' | 'general';
+  type: 'attendance' | 'assignment' | 'exam' | 'fee' | 'announcement' | 'progress' | 'general';
   title: string;
   message: string;
   date: string;
   read: boolean;
   link?: string;
+  deletedBy?: string[];
 }
 
 export interface TicketResponse {
