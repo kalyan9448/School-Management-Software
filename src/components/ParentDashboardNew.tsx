@@ -1298,26 +1298,60 @@ export function ParentDashboardNew() {
 
         {/* Child Info Card */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm shrink-0">
                 <Users className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h2 className="text-white mb-1">{selectedChild?.name || 'Loading...'}</h2>
-                <p className="text-purple-100">
+                <h2 className="text-white mb-1 text-xl font-bold">{selectedChild?.name || 'Loading...'}</h2>
+                <p className="text-purple-100 text-sm">
                   Class {selectedChild?.class || 'N/A'} - Section {selectedChild?.section || 'N/A'} • Roll No:{' '}
                   {selectedChild?.rollNo || 'N/A'}
                 </p>
               </div>
             </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-white/60 font-bold italic">Student Profile</span>
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm">
+            
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-white/60 font-bold italic hidden md:block text-right">Student Profile</span>
+              
+              {/* Mobile Child Switcher */}
+              {children.length > 1 ? (
+                <div className="md:hidden mt-2 pt-4 border-t border-white/20">
+                  <span className="text-[10px] uppercase tracking-wider text-white/60 font-bold italic block mb-2">Switch Child:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {children.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => handleChildSelect(c.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-tight transition-all flex items-center gap-1.5 ${
+                          selectedChildId === c.id
+                            ? 'bg-white text-purple-900 shadow-md'
+                            : 'bg-white/20 text-white hover:bg-white/30 border border-white/10'
+                        }`}
+                      >
+                        <div className={`w-1.5 h-1.5 rounded-full ${selectedChildId === c.id ? 'bg-green-500' : 'bg-white/40'}`} />
+                        {c.name.split(' ')[0]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Desktop Profile Label */}
+              <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm w-fit self-end">
+                <UserCircle className="w-4 h-4 text-white" />
+                <span className="text-sm font-black">{selectedChild?.name}</span>
+              </div>
+              
+              {/* Mobile Profile Label (Only if 1 child) */}
+              {children.length <= 1 && (
+                <div className="md:hidden flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm w-fit mt-2">
                   <UserCircle className="w-4 h-4 text-white" />
                   <span className="text-sm font-black">{selectedChild?.name}</span>
                 </div>
-              </div>
+              )}
+            </div>
           </div>
         </div>
 
