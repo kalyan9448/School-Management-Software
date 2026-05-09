@@ -170,6 +170,31 @@ function resolveRoleForNewUser(email: string): UserRole {
     return superadminList.includes(email.toLowerCase()) ? 'superadmin' : 'admin';
 }
 
+/** Fetch with retry + exponential backoff for cold-start resilience. */
+async function fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    maxRetries = 2,
+    baseTimeoutMs = 15000,
+): Promise<Response> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const timeout = baseTimeoutMs + attempt * 5000; // 15s, 20s, 25s
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeout);
+        try {
+            const resp = await fetch(url, { ...options, signal: ctrl.signal });
+            clearTimeout(timer);
+            return resp;
+        } catch (err) {
+            clearTimeout(timer);
+            if (attempt === maxRetries) throw err;
+            // Wait before retrying (1s, 2s)
+            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        }
+    }
+    throw new Error('All retries exhausted');
+}
+
 
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -205,6 +230,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen to Firebase auth state — handles all session changes including page refresh
     useEffect(() => {
+        // Proactively wake backend on app mount (before user types email)
+        const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+        fetch(`${apiBase}/api/health`).catch(() => {}); // fire-and-forget warm-up
+
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 const email = firebaseUser.email ?? '';
@@ -263,14 +292,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 try {
                     const token = await firebaseUser.getIdToken();
                     const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
-                    const ctrl = new AbortController();
-                    const timer = setTimeout(() => ctrl.abort(), 5000);
-                    const resp = await fetch(`${apiBase}/api/auth/login`, {
+                    const resp = await fetchWithRetry(`${apiBase}/api/auth/login`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        signal: ctrl.signal,
                     });
-                    clearTimeout(timer);
                     if (resp.ok) {
                         const data = await resp.json();
                         if (data.user) appUser = { ...appUser!, ...data.user } as User;
@@ -365,15 +390,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ── 1. Try the backend (Admin SDK) first — most accurate ──────────────
         try {
             const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 5000);
-            const resp = await fetch(`${apiBase}/api/auth/check-email`, {
+            const resp = await fetchWithRetry(`${apiBase}/api/auth/check-email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: email.trim() }),
-                signal: ctrl.signal,
             });
-            clearTimeout(timer);
             if (resp.ok) {
                 const data = await resp.json();
                 if (!data.exists) {
