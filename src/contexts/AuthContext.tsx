@@ -8,6 +8,7 @@ import {
     signOut,
     onAuthStateChanged,
     updatePassword,
+    fetchSignInMethodsForEmail,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 
@@ -392,11 +393,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const usersSnap = await getDocs(usersQ);
 
             if (!usersSnap.empty) {
-                const userData = usersSnap.docs[0].data();
-                // If isFirstLogin is explicitly true, the user needs to create a password
-                // Existing users will have it as false or undefined (not set)
-                const isFirstLogin = userData.isFirstLogin === true;
-                return { exists: true, isFirstLogin };
+                // Don't rely on the stale isFirstLogin field in Firestore — it may
+                // never have been cleared. Instead, probe Firebase Auth directly to
+                // see if this email already has a credential.
+                let hasAuthAccount = false;
+                try {
+                    const methods = await fetchSignInMethodsForEmail(auth, emailLower);
+                    hasAuthAccount = methods.length > 0;
+                } catch {
+                    // fetchSignInMethods may fail due to email enumeration protection.
+                    // Fall back to trying a dummy sign-in: if it throws
+                    // 'auth/wrong-password' or 'auth/invalid-credential' that means
+                    // the account EXISTS (just wrong pw). 'auth/user-not-found'
+                    // means no account.
+                    try {
+                        await signInWithEmailAndPassword(auth, emailLower, '__probe__' + Date.now());
+                        hasAuthAccount = true; // extremely unlikely to succeed, but handle it
+                    } catch (probeErr: any) {
+                        const code = probeErr?.code as string;
+                        if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+                            hasAuthAccount = true;
+                        }
+                        // 'auth/user-not-found' → hasAuthAccount stays false
+                    }
+                }
+                return { exists: true, isFirstLogin: !hasAuthAccount };
             }
 
             // Not in /users — check if provisioned in auxiliary collections
@@ -408,17 +429,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ]);
 
             if (!teacherSnap.empty || !studentSnap.empty || !parentSnap.empty) {
-                // Found in the system — definitely a first-time user with no password yet
-                return { exists: true, isFirstLogin: true };
+                // Found in the system — check if they already have a Firebase Auth account
+                let hasAuthAccount = false;
+                try {
+                    const methods = await fetchSignInMethodsForEmail(auth, emailLower);
+                    hasAuthAccount = methods.length > 0;
+                } catch {
+                    try {
+                        await signInWithEmailAndPassword(auth, emailLower, '__probe__' + Date.now());
+                        hasAuthAccount = true;
+                    } catch (probeErr: any) {
+                        const code = probeErr?.code as string;
+                        if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+                            hasAuthAccount = true;
+                        }
+                    }
+                }
+                return { exists: true, isFirstLogin: !hasAuthAccount };
             }
 
             // Not found anywhere — reject
             return { exists: false, isFirstLogin: false, error: 'No account found for this email address.' };
         } catch {
-            // Firestore also unavailable — safe default: show create-password.
-            // createPassword handles auth/email-already-in-use by signing in normally,
-            // so returning isFirstLogin: true is always safe for returning users too.
-            return { exists: true, isFirstLogin: true };
+            // Firestore also unavailable — default to showing the password screen.
+            // It's safer to show "Enter Password" for returning users than to show
+            // "Create Password" — createPassword handles auth/email-already-in-use
+            // but the UX is confusing for returning users.
+            return { exists: true, isFirstLogin: false };
         }
     };
 

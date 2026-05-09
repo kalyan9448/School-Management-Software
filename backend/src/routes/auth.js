@@ -50,6 +50,7 @@ router.post('/check-email', async (req, res) => {
 
         if (!snapshot.empty) {
             const userData = snapshot.docs[0].data();
+            const docRef = snapshot.docs[0].ref;
 
             // Check if the user has a Firebase Auth account already.
             let hasAuthAccount = false;
@@ -63,6 +64,17 @@ router.post('/check-email', async (req, res) => {
             // First login: only if they don't have a Firebase Auth account yet.
             // Once they have an account, they're not a first-time user anymore.
             const isFirstLogin = !hasAuthAccount;
+
+            // If the Firestore doc still has isFirstLogin: true but the user already
+            // has a Firebase Auth account, clear the stale flag immediately.
+            // This prevents the frontend's Firestore fallback from showing
+            // "Create Password" for returning users when the backend is slow.
+            if (hasAuthAccount && userData.isFirstLogin === true) {
+                try {
+                    await docRef.update({ isFirstLogin: false, updated_at: new Date().toISOString() });
+                } catch (e) { /* best effort */ }
+            }
+
             return res.json({ exists: true, isFirstLogin });
         }
 
