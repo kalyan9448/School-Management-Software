@@ -26,7 +26,7 @@ import {
 } from 'firebase/firestore';
 
 // Re-export all interfaces from centralDataService (they stay the same)
-export type {
+import type {
     User,
     Student,
     Teacher,
@@ -53,6 +53,34 @@ export type {
     GeneratedReport,
     ScheduledReport,
 } from './centralDataService';
+
+export type {
+    User,
+    Student,
+    Teacher,
+    Class,
+    Subject,
+    AttendanceRecord,
+    LessonLog,
+    Assignment,
+    AssignmentSubmission,
+    Exam,
+    ExamResult,
+    ExamScore,
+    FeeStructure,
+    FeeComponent,
+    FeePayment,
+    Announcement,
+    Enquiry,
+    CalendarEvent,
+    Notification,
+    DayOfWeek,
+    TimetableSlot,
+    Admission,
+    SubjectMappingRecord,
+    GeneratedReport,
+    ScheduledReport,
+};
 import { getActiveAcademicYearId } from './classUtils';
 
 export interface StudentNote {
@@ -89,31 +117,8 @@ export type {
     AuditLog,
 } from '../types';
 
-import type {
-    User,
-    Student,
-    Teacher,
-    Class,
-    Subject,
-    AttendanceRecord,
-    LessonLog,
-    Assignment,
-    AssignmentSubmission,
-    Exam,
-    ExamResult,
-    ExamScore,
-    FeeStructure,
-    FeePayment,
-    Announcement,
-    Enquiry,
-    CalendarEvent,
-    Notification,
-    TimetableSlot,
-    Admission,
-    SubjectMappingRecord,
-    GeneratedReport,
-    ScheduledReport,
-} from './centralDataService';
+// Removed duplicate import block to avoid confusion and resolve TS issues
+
 
 import type {
     SchoolSettings,

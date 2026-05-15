@@ -191,6 +191,7 @@ export interface AttendanceRecord {
   remarks?: string;
   class?: string;
   section?: string;
+  academicYear?: string;
   studentName?: string;
   rollNo?: string;
   parentPhone?: string;
