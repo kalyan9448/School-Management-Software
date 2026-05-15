@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "timetable",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "school_id", "order": "ASCENDING" },
         { "fieldPath": "teacherId", "order": "ASCENDING" },
@@ -12,7 +12,7 @@
     },
     {
       "collectionGroup": "timetable",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "school_id", "order": "ASCENDING" },
         { "fieldPath": "teacherId", "order": "ASCENDING" },
@@ -21,12 +21,41 @@
     },
     {
       "collectionGroup": "timetable",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "school_id", "order": "ASCENDING" },
         { "fieldPath": "class", "order": "ASCENDING" },
         { "fieldPath": "section", "order": "ASCENDING" },
         { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendance",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "school_id", "order": "ASCENDING" },
+        { "fieldPath": "class", "order": "ASCENDING" },
+        { "fieldPath": "section", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lessons",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "school_id", "order": "ASCENDING" },
+        { "fieldPath": "teacherId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "exam_scores",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "school_id", "order": "ASCENDING" },
+        { "fieldPath": "classId", "order": "ASCENDING" },
+        { "fieldPath": "subjectId", "order": "ASCENDING" },
+        { "fieldPath": "examType", "order": "ASCENDING" }
       ]
     }
   ],

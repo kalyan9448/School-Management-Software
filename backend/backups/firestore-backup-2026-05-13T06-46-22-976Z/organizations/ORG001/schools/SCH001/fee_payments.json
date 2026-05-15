@@ -1,0 +1,104 @@
+{
+  "QA70JD5tBrOAnIvkVENa": {
+    "data": {
+      "studentId": "5wpdQ3RmdlOkE4pkHDy8",
+      "studentName": "Harsha",
+      "admissionNo": "KVS2026009",
+      "class": "Class 10",
+      "receiptNo": "RCP0006",
+      "amount": 150000,
+      "paymentDate": "2026-04-30",
+      "paymentMode": "cash",
+      "collectedBy": "",
+      "components": [],
+      "academicYear": "2026-2027",
+      "school_id": "SCH001",
+      "id": "QA70JD5tBrOAnIvkVENa",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "c8j6bjJTT0OY4ChqnYzo": {
+    "data": {
+      "studentId": "",
+      "receiptNo": "RCP0004",
+      "amount": 0,
+      "paymentDate": "2026-03-26",
+      "paymentMode": "cash",
+      "collectedBy": "",
+      "components": [],
+      "academicYear": "2024-2025",
+      "school_id": "SCH001",
+      "id": "c8j6bjJTT0OY4ChqnYzo",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "d46mtC9IkxCCQPwKxyR7": {
+    "data": {
+      "studentId": "yURzP2PiQXJNfif1lyVI",
+      "studentName": "Bhanu Kumar",
+      "admissionNo": "KVS2026005",
+      "class": "Class 10",
+      "receiptNo": "RCP0005",
+      "amount": 500,
+      "paymentDate": "2026-03-27",
+      "paymentMode": "cash",
+      "collectedBy": "",
+      "components": [],
+      "academicYear": "2026-2027",
+      "school_id": "SCH001",
+      "id": "d46mtC9IkxCCQPwKxyR7",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "hnLwE43mJGfcIlU8fD8h": {
+    "data": {
+      "studentId": "",
+      "receiptNo": "RCP0001",
+      "amount": 50000,
+      "paymentDate": "2026-03-26",
+      "paymentMode": "cash",
+      "collectedBy": "",
+      "components": [],
+      "academicYear": "2024-2025",
+      "school_id": "SCH001",
+      "id": "hnLwE43mJGfcIlU8fD8h",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "nliRedgndS0ZYm5QC6sg": {
+    "data": {
+      "studentId": "",
+      "receiptNo": "RCP0001",
+      "amount": 50000,
+      "paymentDate": "2026-03-26",
+      "paymentMode": "cash",
+      "collectedBy": "",
+      "components": [],
+      "academicYear": "2024-2025",
+      "school_id": "SCH001",
+      "id": "nliRedgndS0ZYm5QC6sg",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "y2GZkEjMhhBpIhyhg3db": {
+    "data": {
+      "studentId": "",
+      "receiptNo": "RCP0003",
+      "amount": 0,
+      "paymentDate": "2026-03-26",
+      "paymentMode": "cash",
+      "collectedBy": "",
+      "components": [],
+      "academicYear": "2024-2025",
+      "school_id": "SCH001",
+      "id": "y2GZkEjMhhBpIhyhg3db",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}

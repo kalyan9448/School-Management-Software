@@ -1,0 +1,551 @@
+{
+  "1wMRvSRqS6gYvUtvxEVy8VaCkV92": {
+    "data": {
+      "role": "student",
+      "school_id": "SCH001",
+      "childrenIds": [],
+      "name": "Harsha",
+      "id": "1wMRvSRqS6gYvUtvxEVy8VaCkV92",
+      "email": "harsha@gmail.com",
+      "parentId": "",
+      "isFirstLogin": false,
+      "updated_at": "2026-04-27T08:34:35.539Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "1z2om4OJsNYvGPLiLmTZEntYG2H2": {
+    "data": {
+      "role": "parent",
+      "school_id": "SCH001",
+      "childrenIds": [
+        "5wpdQ3RmdlOkE4pkHDy8"
+      ],
+      "name": "yadagiri",
+      "id": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "email": "yadagiri@gmail.com",
+      "parentId": "",
+      "isFirstLogin": false,
+      "updated_at": "2026-04-30T07:53:19.053Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "6o6LHBpYd6Mvhq98UPjA": {
+    "data": {
+      "email": "krishna@gmail.com",
+      "name": "Krishna Shetty ",
+      "role": "parent",
+      "isFirstLogin": true,
+      "passwordCreated": false,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [
+        "zjJsIMO6sqsOf4lNNRse"
+      ],
+      "id": "6o6LHBpYd6Mvhq98UPjA",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "6z3nkGo4aYS3IRFpleKj1o8YVaF3": {
+    "data": {
+      "role": "admin",
+      "name": "sujith",
+      "id": "6z3nkGo4aYS3IRFpleKj1o8YVaF3",
+      "email": "sujith@gmail.com",
+      "school_id": "SCH002",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "8KeaveN3mefRJNLOHX0t": {
+    "data": {
+      "email": "bhumika@gmail.com",
+      "name": "Bhumika",
+      "role": "student",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "8KeaveN3mefRJNLOHX0t",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "9kawJK7Lg1g1FBKTpaRP2IVp47T2": {
+    "data": {
+      "role": "admin",
+      "school_id": "SCH005",
+      "childrenIds": [],
+      "name": "Dr.somanadham",
+      "id": "9kawJK7Lg1g1FBKTpaRP2IVp47T2",
+      "email": "kondapur@gmail.com",
+      "parentId": "",
+      "isFirstLogin": false,
+      "updated_at": "2026-05-13T05:17:36.209Z"
+    },
+    "subcollections": []
+  },
+  "A5GGzV9IbPVW2ZvUtmj4Qg2MlXL2": {
+    "data": {
+      "passwordCreated": false,
+      "role": "student",
+      "school_id": "SCH001",
+      "childrenIds": [],
+      "name": "jevan",
+      "id": "A5GGzV9IbPVW2ZvUtmj4Qg2MlXL2",
+      "email": "kalyantej255@gmail.com",
+      "parentId": "",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "CnWy2dCJWINKhfvBH6z7a47Mwhn2": {
+    "data": {
+      "role": "parent",
+      "school_id": "SCH001",
+      "name": "venkatreddy",
+      "id": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "email": "venkat@gmail.com",
+      "parentId": "",
+      "childrenIds": [
+        "c5BpGJ3Y0xESIG1CCriZ",
+        "yURzP2PiQXJNfif1lyVI",
+        "SYE9LwleLGFAtXobcI8w",
+        "PkD0OgJrlBVPK9HYRfjE"
+      ],
+      "isFirstLogin": false,
+      "updated_at": "2026-04-30T07:55:00.638Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "DH2gKZwDVxpXWlc32us0": {
+    "data": {
+      "email": "uday@gmail.com",
+      "name": "Udaykiran Jawazi",
+      "role": "student",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "DH2gKZwDVxpXWlc32us0",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "E6jhei3gEPP1f9f3NQt3dpfyHKZ2": {
+    "data": {
+      "role": "admin",
+      "school_id": "SCH004",
+      "childrenIds": [],
+      "name": "Jaya Chandra Reddy ",
+      "id": "E6jhei3gEPP1f9f3NQt3dpfyHKZ2",
+      "email": "sriviswam2007@gmail.com",
+      "parentId": "",
+      "isFirstLogin": false,
+      "updated_at": "2026-05-08T06:51:18.728Z",
+      "org_id": "ORG003"
+    },
+    "subcollections": []
+  },
+  "EmQa8SKTKexhYVD3BGyP": {
+    "data": {
+      "email": "mahesh@gmail.com",
+      "name": "Mahesh babu",
+      "role": "student",
+      "isFirstLogin": true,
+      "passwordCreated": false,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "EmQa8SKTKexhYVD3BGyP",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "F3fhpQyFf4hOdv6OVU4EYnJlmjI2": {
+    "data": {
+      "name": "superadmin",
+      "id": "F3fhpQyFf4hOdv6OVU4EYnJlmjI2",
+      "email": "superadmin@gmail.com",
+      "role": "superadmin"
+    },
+    "subcollections": []
+  },
+  "FKmzo4VLNKXDMObG2bvQTavoka92": {
+    "data": {
+      "createdAt": "2026-05-06T10:40:02.229Z",
+      "role": "teacher",
+      "isFirstLogin": false,
+      "school_id": "test-school-001",
+      "displayName": "Test Existing User",
+      "id": "FKmzo4VLNKXDMObG2bvQTavoka92",
+      "email": "test-existing@example.com",
+      "updatedAt": "2026-05-06T10:40:02.229Z"
+    },
+    "subcollections": []
+  },
+  "G4auXSBXUXgaYG08r4XnCMgpurX2": {
+    "data": {
+      "role": "admin",
+      "name": "superadmin",
+      "id": "G4auXSBXUXgaYG08r4XnCMgpurX2",
+      "email": "superadmin@platform.com",
+      "school_id": "SCH001",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "HJGyDYTBkHpJkNsRJ1g4": {
+    "data": {
+      "email": "kavitha@gmail.com",
+      "name": "Kavitha",
+      "role": "parent",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "HJGyDYTBkHpJkNsRJ1g4",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "PH2LfErZ9gOOcAmF7w8xHvpcEyo2": {
+    "data": {
+      "name": "parent",
+      "id": "PH2LfErZ9gOOcAmF7w8xHvpcEyo2",
+      "email": "parent@gmail.com",
+      "role": "parent"
+    },
+    "subcollections": []
+  },
+  "QP73VlCNFOkixrLOTUgB": {
+    "data": {
+      "email": "priya@gmail.com",
+      "name": "Mrs. Priya Patel ",
+      "role": "parent",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [
+        "JjBNznn2Mh6pOAXvapIe"
+      ],
+      "id": "QP73VlCNFOkixrLOTUgB",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "TWVdNPzGLDZo6zplJ4Zc": {
+    "data": {
+      "email": "teja@gmail.com",
+      "name": "Teja",
+      "role": "teacher",
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "TWVdNPzGLDZo6zplJ4Zc",
+      "isFirstLogin": false,
+      "updated_at": "2026-05-09T10:37:37.643Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "UK2EtmY8j3R3PGIdX6fryEOLvPR2": {
+    "data": {
+      "role": "teacher",
+      "name": "teacher01",
+      "id": "UK2EtmY8j3R3PGIdX6fryEOLvPR2",
+      "email": "teacher@gmail.com"
+    },
+    "subcollections": []
+  },
+  "UkqRUqQ3FrY2Z9giOhvBKHZqdSB2": {
+    "data": {
+      "name": "student",
+      "id": "UkqRUqQ3FrY2Z9giOhvBKHZqdSB2",
+      "email": "student@gmail.com",
+      "role": "student\n"
+    },
+    "subcollections": []
+  },
+  "YkYbnwOQ0MhzglLULAVio2dJ7gv1": {
+    "data": {
+      "role": "admin",
+      "name": "karthik",
+      "id": "YkYbnwOQ0MhzglLULAVio2dJ7gv1",
+      "email": "karthik@gmail.com",
+      "school_id": "SCH001",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "ZIvD4iK7ckNABouyuyZyN5YTDaG3": {
+    "data": {
+      "role": "admin",
+      "name": "sai",
+      "id": "ZIvD4iK7ckNABouyuyZyN5YTDaG3",
+      "email": "sai@gmail.com",
+      "school_id": "SCH001",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "baRy6Yeg6R0M1rYipPvh": {
+    "data": {
+      "email": "bhai@gmail.com",
+      "name": "Bhaii",
+      "role": "parent",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "id": "baRy6Yeg6R0M1rYipPvh",
+      "childrenIds": [
+        "VuWJh6HWbOnTmRI0Edds",
+        "axmYAlRqIUOXi4uOAP1R"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "cPIpLhQs1jUj8TxrPmcoIFPdbhz1": {
+    "data": {
+      "name": "teacher01",
+      "id": "cPIpLhQs1jUj8TxrPmcoIFPdbhz1",
+      "role": "teacher",
+      "email": "teacher@gmail.com"
+    },
+    "subcollections": []
+  },
+  "gRQ79uv6x0wYLTqkB7lg": {
+    "data": {
+      "email": "varma@gmail.com",
+      "name": "Varma",
+      "role": "student",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "gRQ79uv6x0wYLTqkB7lg",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "h8yWmrWukLb8HCXDYlNkwkQo9612": {
+    "data": {
+      "role": "teacher",
+      "school_id": "SCH001",
+      "childrenIds": [],
+      "name": "Teja",
+      "id": "h8yWmrWukLb8HCXDYlNkwkQo9612",
+      "email": "teja@gmail.com",
+      "parentId": "",
+      "isFirstLogin": false,
+      "updated_at": "2026-04-27T08:35:34.919Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "hd9jez6mX9z7g6koch73": {
+    "data": {
+      "email": "sriviswam2007@gmail.com",
+      "name": "Jaya Chandra Reddy ",
+      "role": "admin",
+      "isFirstLogin": true,
+      "school_id": "SCH004",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "hd9jez6mX9z7g6koch73",
+      "org_id": "ORG003"
+    },
+    "subcollections": []
+  },
+  "hp3sQJ0Nv8dXJwqKODfyqKAmcCr2": {
+    "data": {
+      "role": "admin",
+      "name": "madhu",
+      "id": "hp3sQJ0Nv8dXJwqKODfyqKAmcCr2",
+      "email": "madhu@gmail.com",
+      "school_id": "SCH003",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "n1a3gIpTAkWCLAaPXMLu84ijn7b2": {
+    "data": {
+      "email": "mm@gmail.com",
+      "role": "user",
+      "createdAt": "2026-04-23T13:58:15.008Z"
+    },
+    "subcollections": []
+  },
+  "q57EivhzMefm7VfjbEylJbj9QgP2": {
+    "data": {
+      "id": "q57EivhzMefm7VfjbEylJbj9QgP2",
+      "email": "chatrasilikitha@gmail.com",
+      "name": "chatrasilikitha",
+      "role": "admin",
+      "school_id": null,
+      "created_at": "2026-05-06T05:00:38.536Z",
+      "isFirstLogin": false,
+      "updated_at": "2026-05-06T05:03:07.395Z"
+    },
+    "subcollections": []
+  },
+  "qJVXweZ8O0dlp3IOZQQksHWJyQu1": {
+    "data": {
+      "role": "parent",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "name": "Subba reddy",
+      "id": "qJVXweZ8O0dlp3IOZQQksHWJyQu1",
+      "email": "subba@gmail.com",
+      "parentId": "",
+      "childrenIds": [
+        "Vw12tZTkxadw5FuTM8yX",
+        "Qopi08vNfcJNwj2lY63Z"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "r3ibBNuOZjQUlpI6gRrNXewS0zn1": {
+    "data": {
+      "role": "admin",
+      "name": "suresh",
+      "id": "r3ibBNuOZjQUlpI6gRrNXewS0zn1",
+      "email": "suresh@gmail.com",
+      "school_id": "SCH001",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "rcf09ze7NEQgAcDxMvXG86hUb9p2": {
+    "data": {
+      "role": "student",
+      "school_id": "SCH001",
+      "childrenIds": [],
+      "name": "Grapes",
+      "id": "rcf09ze7NEQgAcDxMvXG86hUb9p2",
+      "email": "grapes@gmail.com",
+      "parentId": "",
+      "isFirstLogin": false,
+      "updated_at": "2026-04-30T09:15:39.575Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "rxQvAThCmUWZdBPjUrHa": {
+    "data": {
+      "email": "kalyantej255@gmail.com",
+      "name": "jevan",
+      "role": "student",
+      "passwordCreated": false,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "rxQvAThCmUWZdBPjUrHa",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "sreVKdf2e56sMHXrVs7s": {
+    "data": {
+      "email": "madhav@gmail.com",
+      "name": "Madhav sethu",
+      "role": "parent",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [
+        "S20acfkPDXVhVHlRMqb9"
+      ],
+      "id": "sreVKdf2e56sMHXrVs7s",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "test-existing@example.com": {
+    "data": {
+      "createdAt": "2026-05-06T10:40:02.229Z",
+      "role": "teacher",
+      "isFirstLogin": false,
+      "school_id": "test-school-001",
+      "displayName": "Test Existing User",
+      "email": "test-existing@example.com",
+      "updatedAt": "2026-05-06T10:40:02.229Z"
+    },
+    "subcollections": []
+  },
+  "tvfpC7e0mhOcnTWNnPy5": {
+    "data": {
+      "email": "sun@gmail.com",
+      "name": "Sunriseres",
+      "role": "student",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "tvfpC7e0mhOcnTWNnPy5",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "ukaaHRO2vs0UkhRKQbLO": {
+    "data": {
+      "email": "subba@gmail.com",
+      "name": "Subba reddy",
+      "role": "parent",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [
+        "Vw12tZTkxadw5FuTM8yX"
+      ],
+      "id": "ukaaHRO2vs0UkhRKQbLO",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "x7pQqCu3YeWNrtmhqM0n": {
+    "data": {
+      "email": "kondapur@gmail.com",
+      "name": "Dr.somanadham",
+      "role": "admin",
+      "isFirstLogin": true,
+      "school_id": "SCH005",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "x7pQqCu3YeWNrtmhqM0n"
+    },
+    "subcollections": []
+  },
+  "y06MMQo3p8Ycb7A3ASoB": {
+    "data": {
+      "email": "harsha@gmail.com",
+      "name": "Harsha",
+      "role": "student",
+      "isFirstLogin": true,
+      "school_id": "SCH001",
+      "parentId": "",
+      "childrenIds": [],
+      "id": "y06MMQo3p8Ycb7A3ASoB",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "zUqU1SdSUqT5AsLrpAsXZNfXz4h2": {
+    "data": {
+      "id": "zUqU1SdSUqT5AsLrpAsXZNfXz4h2",
+      "email": "yaminipriyakarjala@gmail.com",
+      "name": "yaminipriyakarjala",
+      "role": "admin",
+      "school_id": null,
+      "created_at": "2026-05-06T05:00:18.294Z",
+      "isFirstLogin": false,
+      "updated_at": "2026-05-06T05:00:31.073Z"
+    },
+    "subcollections": []
+  }
+}

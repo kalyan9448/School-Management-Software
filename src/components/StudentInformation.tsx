@@ -107,9 +107,14 @@ export function StudentInformation({
         feeInvoiceService.getAll()
       ]);
 
-      // 1. Group attendance by studentId
+      // 1. Group attendance by studentId (Filtered by Academic Year)
       const attendanceMap = new Map<string, { present: number; total: number }>();
       (allAttendance as AttendanceRecord[]).forEach(record => {
+        // Senior Architect Note: Enforce year isolation. 
+        // If the record has a year, it must match. If not (legacy), we might show it or filter by date.
+        const matchesYear = selectedAcademicYear === 'all' || record.academicYear === selectedAcademicYear;
+        if (!matchesYear) return;
+
         if (!attendanceMap.has(record.studentId)) {
           attendanceMap.set(record.studentId, { present: 0, total: 0 });
         }
@@ -120,9 +125,12 @@ export function StudentInformation({
         }
       });
 
-      // 2. Group fee invoices by studentId
+      // 2. Group fee invoices by studentId (Filtered by Academic Year)
       const feeMap = new Map<string, { totalDue: number; totalPaid: number }>();
       (allInvoices as FeeInvoice[]).forEach(inv => {
+        const matchesYear = selectedAcademicYear === 'all' || inv.academicYear === selectedAcademicYear;
+        if (!matchesYear) return;
+
         if (!feeMap.has(inv.studentId)) {
           feeMap.set(inv.studentId, { totalDue: 0, totalPaid: 0 });
         }
@@ -163,12 +171,12 @@ export function StudentInformation({
     } finally {
         setLoading(false);
     }
-  }, []);
+  }, [selectedAcademicYear]);
 
-  // Sync data on mount or when navigation parameters suggest a change
+  // Sync data on mount or when academic year context changes
   useEffect(() => {
     loadDynamicStudents();
-  }, [loadDynamicStudents, initialClass, initialSection]);
+  }, [loadDynamicStudents, selectedAcademicYear]);
 
   // Attendance and Search state
   const [selectedClass, setSelectedClass] = useState(initialClass);

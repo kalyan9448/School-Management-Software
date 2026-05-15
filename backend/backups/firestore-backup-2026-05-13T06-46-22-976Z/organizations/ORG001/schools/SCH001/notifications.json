@@ -1,0 +1,393 @@
+{
+  "0PUZHwOhqrwDNEsbrRhP": {
+    "data": {
+      "userId": "PGZUKfFQuA12JB3afvJs",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Harsha marked present at 11:50 AM",
+      "date": "2026-04-01",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "0PUZHwOhqrwDNEsbrRhP",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "6OMeWk3CgeThqXVJVO4i": {
+    "data": {
+      "userId": "PGZUKfFQuA12JB3afvJs",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Attendance Alert",
+      "message": "Harsha marked late at 01:19 PM",
+      "date": "2026-04-30",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "6OMeWk3CgeThqXVJVO4i",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "7o5Xdt9rWzbxLJnMLmj2": {
+    "data": {
+      "userId": "",
+      "type": "holiday",
+      "title": "holiday",
+      "message": "SRI RAMA NVAMI",
+      "date": "2026-03-26T16:17:29.678Z",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "7o5Xdt9rWzbxLJnMLmj2",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "94khV8R3h0GWinwmJcpU": {
+    "data": {
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "type": "fee",
+      "title": "Fee Payment Received",
+      "message": "Payment of ₹500 received. Receipt No: RCP0005",
+      "date": "2026-03-27",
+      "school_id": "SCH001",
+      "id": "94khV8R3h0GWinwmJcpU",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "AxOpwcvKGBJrc7QbFLKp": {
+    "data": {
+      "userId": "PGZUKfFQuA12JB3afvJs",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Harsha marked present at 11:12 AM",
+      "date": "2026-03-31",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "AxOpwcvKGBJrc7QbFLKp",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "DE6z2nPsSFj7Suzy8dCg": {
+    "data": {
+      "userId": "",
+      "type": "holiday",
+      "title": "holiday",
+      "message": "SRI RAMA NVAMI",
+      "date": "2026-03-26T16:17:29.256Z",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "DE6z2nPsSFj7Suzy8dCg",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "HP5RLiRhEDpJNzMfsx6h": {
+    "data": {
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Bhanu Kumar marked present at 11:50 AM",
+      "date": "2026-04-01",
+      "school_id": "SCH001",
+      "id": "HP5RLiRhEDpJNzMfsx6h",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "JL8HnegeIjtpGScjYdNW": {
+    "data": {
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "type": "fee",
+      "title": "Fee Payment Successful",
+      "message": "Dear Parent, Fee fully paid towards Admission Fee for Bhanu Kumar. Receipt No: RCP0005.",
+      "date": "2026-03-27T11:44:41.435Z",
+      "school_id": "SCH001",
+      "id": "JL8HnegeIjtpGScjYdNW",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "NlIAElgU28xTGQJhijjE": {
+    "data": {
+      "userId": "F2iWqynyO8fk1kOmX0Sc",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Karthik marked present at 11:50 AM",
+      "date": "2026-04-01",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "NlIAElgU28xTGQJhijjE",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "OkRAJfnG5qCwIq1sjyqV": {
+    "data": {
+      "userId": "HJGyDYTBkHpJkNsRJ1g4",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Sunriseres marked present at 01:19 PM",
+      "date": "2026-04-30",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "OkRAJfnG5qCwIq1sjyqV",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "T4Hoe9zwHO0PbwKzpptC": {
+    "data": {
+      "userId": "Osx5FkYwgBf1kYCUom7M",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Kalyanteja Goshika marked present at 01:40 PM",
+      "date": "2026-03-27",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "T4Hoe9zwHO0PbwKzpptC",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "Uh5mfnbMgYunwYA7KCyW": {
+    "data": {
+      "userId": "PGZUKfFQuA12JB3afvJs",
+      "recipientRole": "",
+      "type": "fee",
+      "title": "Fee Payment Received",
+      "message": "Payment of ₹150000 received. Receipt No: RCP0006",
+      "date": "2026-04-30",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "Uh5mfnbMgYunwYA7KCyW",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "VoNnJUUSI6FQhyYJBphZ": {
+    "data": {
+      "school_id": "SCH001",
+      "userId": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "type": "general",
+      "title": "New message from Teja",
+      "message": "Re: Harsha — \"hii harsha father\"",
+      "date": "2026-04-21T07:21:36.660Z",
+      "link": "/chat?conversation=Yy2UsS2YDZWJRK3FiwkO",
+      "created_at": "2026-04-21T07:21:36.660Z",
+      "read": true,
+      "deletedBy": [
+        "1z2om4OJsNYvGPLiLmTZEntYG2H2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "b46GkJIYg5Lxzcl6Rdmt": {
+    "data": {
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "type": "attendance",
+      "title": "Attendance Alert",
+      "message": "Bhanu Kumar marked absent at 01:40 PM",
+      "date": "2026-03-27",
+      "school_id": "SCH001",
+      "id": "b46GkJIYg5Lxzcl6Rdmt",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "f6G7q0fRJdonbYq3Px9A": {
+    "data": {
+      "userId": "yURzP2PiQXJNfif1lyVI",
+      "type": "fee",
+      "title": "Fee Payment Successful",
+      "message": "Fee fully paid for Admission Fee. Receipt No: RCP0005.",
+      "date": "2026-03-27T11:44:41.435Z",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "f6G7q0fRJdonbYq3Px9A",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "jmd3AjclIOQskJckKmAF": {
+    "data": {
+      "userId": "jgTBWeNsBZA4hQjXKTzE",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Harsha marked present at 01:40 PM",
+      "date": "2026-03-27",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "jmd3AjclIOQskJckKmAF",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "lQjpNDZMma0PB8S6clqU": {
+    "data": {
+      "school_id": "SCH001",
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "type": "general",
+      "title": "New message from Teja",
+      "message": "Re: Bhanu Kumar — \"Hlo\"",
+      "date": "2026-05-05T06:34:57.625Z",
+      "link": "/chat?conversation=E0sj5hKmIAPbdwiG2jLS",
+      "created_at": "2026-05-05T06:34:57.625Z",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "nc7oprrTS1tksAmRcp0L": {
+    "data": {
+      "userId": "5wpdQ3RmdlOkE4pkHDy8",
+      "recipientRole": "",
+      "type": "fee",
+      "title": "Fee Payment Successful",
+      "message": "Fee fully paid for Annual Fee. Receipt No: RCP0006.",
+      "date": "2026-04-30T07:24:46.767Z",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "nc7oprrTS1tksAmRcp0L",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "pqtQlvA2GRmGkMV7s4GZ": {
+    "data": {
+      "userId": "6o6LHBpYd6Mvhq98UPjA",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Attendance Alert",
+      "message": "Mahesh babu marked absent at 01:19 PM",
+      "date": "2026-04-30",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "pqtQlvA2GRmGkMV7s4GZ",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "sukTWjvVihpMNLK936xC": {
+    "data": {
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Bhanu Kumar marked present at 11:12 AM",
+      "date": "2026-03-31",
+      "school_id": "SCH001",
+      "id": "sukTWjvVihpMNLK936xC",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "v2cUrfjKJrr3GjAjU9yh": {
+    "data": {
+      "userId": "PGZUKfFQuA12JB3afvJs",
+      "recipientRole": "",
+      "type": "fee",
+      "title": "Fee Payment Successful",
+      "message": "Dear Parent, Fee fully paid towards Annual Fee for Harsha. Receipt No: RCP0006.",
+      "date": "2026-04-30T07:24:46.767Z",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "v2cUrfjKJrr3GjAjU9yh",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "v5fNLgg36tQSfX5ZMw4Y": {
+    "data": {
+      "userId": "F2iWqynyO8fk1kOmX0Sc",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Karthik marked present at 01:19 PM",
+      "date": "2026-04-30",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "v5fNLgg36tQSfX5ZMw4Y",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "ve7icSFAYSMxMrwOmyj9": {
+    "data": {
+      "userId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Bhanu Kumar marked present at 01:19 PM",
+      "date": "2026-04-30",
+      "school_id": "SCH001",
+      "id": "ve7icSFAYSMxMrwOmyj9",
+      "read": true,
+      "deletedBy": [
+        "CnWy2dCJWINKhfvBH6z7a47Mwhn2"
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "xboKfT8bA8Z9IvdleXGm": {
+    "data": {
+      "userId": "6o6LHBpYd6Mvhq98UPjA",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Attendance Alert",
+      "message": "Mahesh babu marked absent at 11:51 AM",
+      "date": "2026-04-01",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "xboKfT8bA8Z9IvdleXGm",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "ypB0r4VgOckBWkSuMg9I": {
+    "data": {
+      "userId": "6o6LHBpYd6Mvhq98UPjA",
+      "recipientRole": "",
+      "type": "attendance",
+      "title": "Child Arrived at School",
+      "message": "Mahesh babu marked present at 11:12 AM",
+      "date": "2026-03-31",
+      "read": false,
+      "school_id": "SCH001",
+      "id": "ypB0r4VgOckBWkSuMg9I",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}

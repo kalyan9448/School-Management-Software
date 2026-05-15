@@ -1,0 +1,34 @@
+{
+  "OE75lSuIA1hLF7x5xUwa": {
+    "data": {
+      "school_id": "SCH001",
+      "terms": [],
+      "created_at": "2026-03-26T18:55:38.223Z",
+      "id": "OE75lSuIA1hLF7x5xUwa",
+      "endDate": "2026-03-31",
+      "name": "2025-2026",
+      "startDate": "2025-06-15",
+      "status": "active",
+      "isCurrent": true,
+      "updated_at": "2026-03-27T02:06:58.522Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "XNWKGkkg2arwlZyaMuI5": {
+    "data": {
+      "school_id": "SCH001",
+      "name": "2026-2027",
+      "startDate": "2026-06-15",
+      "endDate": "2027-04-06",
+      "terms": [],
+      "created_at": "2026-03-26T18:57:19.282Z",
+      "id": "XNWKGkkg2arwlZyaMuI5",
+      "status": "active",
+      "isCurrent": false,
+      "updated_at": "2026-03-27T02:06:58.108Z",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}

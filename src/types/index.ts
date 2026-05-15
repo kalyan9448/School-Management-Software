@@ -16,6 +16,7 @@ export interface User {
     phone?: string;
     avatar?: string;
     school_id?: string; // null for superadmin (platform-level)
+    organization_id?: string;    // organization context for multi-tenancy
     isFirstLogin?: boolean;
     status?: 'active' | 'inactive' | 'disabled';
     last_login_at?: string;
@@ -46,6 +47,7 @@ export interface User {
 
 export interface School {
     id: string;
+    organizationId: string; // Linked organization
     name: string;
     code?: string;
     address: string;
@@ -94,6 +96,7 @@ export interface KnowledgeGap {
 export interface Student {
     id: string;
     school_id: string;
+    organization_id?: string;
     admissionNo: string;
     name: string;
     rollNo: string;
@@ -130,6 +133,7 @@ export interface Student {
 export interface Teacher {
     id: string;
     school_id: string;
+    organization_id?: string;
     employeeId: string;
     name: string;
     email: string;

@@ -1,0 +1,18 @@
+{
+  "f0MJ9vyitwBsr2h6BpNv": {
+    "data": {
+      "school_id": "SCH001",
+      "teacherName": "Teja",
+      "updated_at": "2026-03-27T06:17:48.919Z",
+      "org_id": "ORG001",
+      "created_at": "2026-03-27T06:17:48.919Z",
+      "periods": 6,
+      "className": "Class 10",
+      "section": "A",
+      "id": "f0MJ9vyitwBsr2h6BpNv",
+      "academic_year_id": "OE75lSuIA1hLF7x5xUwa",
+      "subjectName": "Mathematics"
+    },
+    "subcollections": []
+  }
+}

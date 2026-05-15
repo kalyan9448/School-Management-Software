@@ -30,22 +30,34 @@ interface SidebarProps {
 export function Sidebar({ activeView, setActiveView }: SidebarProps) {
   const { user, logout } = useAuth();
   const [schoolCode, setSchoolCode] = useState<string>('');
+  const [schoolName, setSchoolName] = useState<string>('');
 
   useEffect(() => {
-    const loadSchoolCode = async () => {
+    const loadSchoolInfo = async () => {
+      // 1. Check Session Storage First
+      const sessionName = sessionStorage.getItem('active_school_name');
+      if (sessionName) {
+        setSchoolName(sessionName);
+      }
+
       if (user?.school_id) {
         try {
           const schools = await schoolService.getAll();
           const school = schools.find((s: any) => s.id === user.school_id);
-          if (school?.schoolCode) {
-            setSchoolCode(school.schoolCode);
+          if (school) {
+            if (school.schoolCode) {
+              setSchoolCode(school.schoolCode);
+            }
+            if (school.name) {
+              setSchoolName(school.name);
+            }
           }
         } catch (err) {
           console.error('Failed to load schools:', err);
         }
       }
     };
-    loadSchoolCode();
+    loadSchoolInfo();
   }, [user]);
 
   const menuItems = [
@@ -73,8 +85,12 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
         <div className="flex flex-col items-center gap-3">
           <img src={logoImage} alt="Kidz Vision Logo" className="w-20 h-20" />
           <div className="text-center">
-            <p className="text-yellow-300">Kidz Vision</p>
-            <p className="text-purple-200 text-sm">School of Education</p>
+            <p className="text-yellow-300 font-bold uppercase tracking-tight">
+              {schoolName || 'Kidz Vision'}
+            </p>
+            <p className="text-purple-200 text-sm">
+              {schoolName ? 'School Portal' : 'School of Education'}
+            </p>
           </div>
         </div>
       </div>

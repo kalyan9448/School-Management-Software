@@ -24,11 +24,13 @@ export interface User {
   childrenIds?: string[];
   isFirstLogin?: boolean;
   school_id?: string;
+  organization_id?: string;
 }
 
 export interface Student {
   id: string;
   school_id?: string;
+  organization_id?: string;
   admissionNo: string;
   name: string;
   rollNo: string;
@@ -80,6 +82,7 @@ export interface Student {
 export interface Teacher {
   id: string;
   school_id?: string;
+  organization_id?: string;
   employeeId: string;
   name: string;
   email: string;

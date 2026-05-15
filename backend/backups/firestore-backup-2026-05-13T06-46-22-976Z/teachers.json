@@ -1,0 +1,95 @@
+{
+  "esueqzNoudFc2DGl66Rx": {
+    "data": {
+      "address": "Lig-493",
+      "gender": "Male",
+      "emergencyContact": "",
+      "classes": [
+        {
+          "class": "Class 10",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 10",
+          "section": "B",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 3",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 4",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 5",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 4",
+          "section": "B",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 5",
+          "section": "B",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 6",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 6",
+          "section": "B",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 7",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 8",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 9",
+          "section": "A",
+          "subject": "Mathematics"
+        },
+        {
+          "class": "Class 9",
+          "section": "B",
+          "subject": "Mathematics"
+        }
+      ],
+      "subjects": [
+        "Mathematics"
+      ],
+      "photo": null,
+      "employeeId": "EMP007",
+      "joiningDate": "2026-03-27",
+      "experience": 1,
+      "salary": 0,
+      "bloodGroup": "B+",
+      "qualification": "Btech",
+      "school_id": "SCH001",
+      "phone": "3333333333",
+      "dob": "2026-03-12",
+      "org_id": "ORG001",
+      "name": "Teja",
+      "id": "esueqzNoudFc2DGl66Rx",
+      "email": "teja@gmail.com",
+      "status": "active"
+    },
+    "subcollections": []
+  }
+}

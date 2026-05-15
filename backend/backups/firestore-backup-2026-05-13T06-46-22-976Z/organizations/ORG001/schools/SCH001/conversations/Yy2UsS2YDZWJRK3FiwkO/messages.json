@@ -1,0 +1,50 @@
+{
+  "G1MbxvYH1BsiCHjwHrkH": {
+    "data": {
+      "conversationId": "Yy2UsS2YDZWJRK3FiwkO",
+      "senderId": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "senderRole": "parent",
+      "senderName": "yadagiri",
+      "message": "iam harsha father",
+      "createdAt": "2026-04-21T06:14:47.774Z",
+      "isRead": true
+    },
+    "subcollections": []
+  },
+  "Pz1ebW5zotX5ZLdEAKKm": {
+    "data": {
+      "conversationId": "Yy2UsS2YDZWJRK3FiwkO",
+      "senderId": "h8yWmrWukLb8HCXDYlNkwkQo9612",
+      "senderRole": "teacher",
+      "senderName": "Teja",
+      "message": "hii harsha father",
+      "createdAt": "2026-04-21T07:21:36.256Z",
+      "isRead": true
+    },
+    "subcollections": []
+  },
+  "i15Bra1iLZKdnRUVd9p3": {
+    "data": {
+      "conversationId": "Yy2UsS2YDZWJRK3FiwkO",
+      "senderId": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "senderRole": "parent",
+      "senderName": "yadagiri",
+      "message": "hlo",
+      "createdAt": "2026-04-21T07:20:31.688Z",
+      "isRead": true
+    },
+    "subcollections": []
+  },
+  "jG4hJUSboAs9X5kRDwI5": {
+    "data": {
+      "conversationId": "Yy2UsS2YDZWJRK3FiwkO",
+      "senderId": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "senderRole": "parent",
+      "senderName": "yadagiri",
+      "message": "hello harsha sir",
+      "createdAt": "2026-04-21T06:13:52.395Z",
+      "isRead": true
+    },
+    "subcollections": []
+  }
+}

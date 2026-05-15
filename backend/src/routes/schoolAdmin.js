@@ -9,7 +9,42 @@ function db() {
 }
 
 function resolveSchoolId(req) {
-	return req.schoolId || req.firebaseUser?.school_id || null;
+    return req.schoolId || req.firebaseUser?.school_id || null;
+}
+
+function resolveOrganizationId(req) {
+    return req.organizationId || req.firebaseUser?.organization_id || null;
+}
+
+/**
+ * Resolves the Firestore CollectionReference for a module.
+ * If organizationId/schoolId are present, uses nested path: /organizations/{oid}/schools/{sid}/{module}
+ * Otherwise, falls back to legacy root collection (for backward compatibility during migration).
+ */
+async function getModuleCollection(req, collectionName) {
+    let schoolId = resolveSchoolId(req);
+    let orgId = resolveOrganizationId(req);
+
+    // Robust fallback: If orgId is missing but schoolId is present, resolve it from the schools collection
+    if (!orgId && schoolId) {
+        try {
+            const schoolSnap = await db().collection('schools').doc(schoolId).get();
+            if (schoolSnap.exists) {
+                const sd = schoolSnap.data();
+                orgId = sd.organization_id || sd.organizationId;
+            }
+        } catch (err) {
+            console.warn(`[schoolAdmin] Failed to resolve orgId fallback for ${schoolId}:`, err.message);
+        }
+    }
+
+    if (orgId && schoolId) {
+        return db().collection('organizations').doc(orgId).collection('schools').doc(schoolId).collection(collectionName);
+    }
+
+    // Fallback for transition phase or if context is truly missing
+    console.warn(`[schoolAdmin] Missing path context for ${collectionName}. Falling back to root. Org: ${orgId}, School: ${schoolId}`);
+    return db().collection(collectionName);
 }
 
 // All routes scoped to req.schoolId (from x-school-id header)
@@ -22,8 +57,7 @@ router.get('/students', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Missing school context' });
 		}
 
-		const studentsSnap = await db
-			.collection('students')
+		const studentsSnap = await (await getModuleCollection(req, 'students'))
 			.where('school_id', '==', schoolId)
 			.get();
 
@@ -57,8 +91,7 @@ router.get('/admissions', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Missing school context' });
 		}
 
-		const admissionsSnap = await db
-			.collection('admissions')
+		const admissionsSnap = await (await getModuleCollection(req, 'admissions'))
 			.where('school_id', '==', schoolId)
 			.get();
 
@@ -82,7 +115,8 @@ router.post('/admissions', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Admission data with at least a name is required' });
 		}
 
-		const admissionRef = db().collection('admissions').doc();
+		const admissionsColl = await getModuleCollection(req, 'admissions');
+		const admissionRef = admissionsColl.doc();
 		const payload = {
 			...data,
 			id: admissionRef.id,

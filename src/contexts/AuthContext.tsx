@@ -212,6 +212,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (parsed?.school_id && !sessionStorage.getItem('active_school_id')) {
                 sessionStorage.setItem('active_school_id', parsed.school_id);
             }
+            if (parsed?.organization_id && !sessionStorage.getItem('active_organization_id')) {
+                sessionStorage.setItem('active_organization_id', parsed.organization_id);
+            }
             return parsed;
         } catch {
             return null;
@@ -366,9 +369,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                 }
 
-                // 5. Set tenant context (school_id) so dashboard data loads correctly
+                // 5. Set tenant context (school_id & organization_id) so dashboard data loads correctly
                 if (appUser!.school_id) {
                     sessionStorage.setItem('active_school_id', appUser!.school_id);
+                    
+                    // 5.1 Resolve organization context (organization_id) if missing
+                    if (!appUser!.organization_id) {
+                        try {
+                            const schoolSnap = await getDoc(doc(db, 'schools', appUser!.school_id));
+                            if (schoolSnap.exists()) {
+                                const sd = schoolSnap.data();
+                                const oid = sd.organizationId || sd.organization_id;
+                                if (oid) {
+                                    appUser!.organization_id = oid;
+                                    sessionStorage.setItem('active_organization_id', oid);
+                                    await saveUserToFirestore(firebaseUser.uid, appUser!);
+                                    console.log('[AuthContext] Resolved organization_id:', oid);
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('[AuthContext] organization_id resolution failed:', err);
+                        }
+                    } else {
+                        sessionStorage.setItem('active_organization_id', appUser!.organization_id);
+                    }
                 }
 
                 setUser(appUser!);
@@ -587,6 +611,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(STORAGE_KEY);
         sessionStorage.removeItem('active_school_id');
         sessionStorage.removeItem('active_school_name');
+        sessionStorage.removeItem('active_organization_id');
     };
 
     return (

@@ -30,8 +30,9 @@ app.use(express.json());
 
 // ── Tenant injection middleware ────────────────────────────────────────────────
 app.use((req, res, next) => {
-    // Extract school_id from header (set by apiClient.ts on every request)
+    // Extract school_id and organization_id from headers (set by apiClient.ts)
     req.schoolId = req.headers['x-school-id'] || null;
+    req.organizationId = req.headers['x-organization-id'] || null;
     next();
 });
 

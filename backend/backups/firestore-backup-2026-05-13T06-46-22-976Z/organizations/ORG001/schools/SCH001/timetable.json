@@ -1,0 +1,146 @@
+{
+  "Class 10-A-Friday-09:00": {
+    "data": {
+      "classId": "Class 10-A",
+      "teacherId": "",
+      "school_id": "SCH001",
+      "teacherName": "Teja",
+      "subject": "Mathematics",
+      "section": "A",
+      "startTime": "09:00",
+      "endTime": "10:00",
+      "id": "Class 10-A-Friday-09:00",
+      "class": "Class 10",
+      "day": "Friday",
+      "subjectId": "Mathematics",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "Class 10-A-Friday-11:00": {
+    "data": {
+      "classId": "Class 10-A",
+      "teacherId": "",
+      "school_id": "SCH001",
+      "teacherName": "Teja",
+      "subject": "Mathematics",
+      "section": "A",
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "id": "Class 10-A-Friday-11:00",
+      "class": "Class 10",
+      "day": "Friday",
+      "subjectId": "Mathematics",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "IMDGW5GBn1cL4cBeVrlD": {
+    "data": {
+      "day": "Saturday",
+      "section": "A",
+      "teacherId": "Teja",
+      "classId": "Class 10-A",
+      "school_id": "SCH001",
+      "teacherName": "Teja",
+      "endTime": "10:00",
+      "startTime": "09:00",
+      "class": "Class 10",
+      "subjectId": "Mathematics",
+      "subject": "Mathematics",
+      "id": "IMDGW5GBn1cL4cBeVrlD",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "LXDsM5AcgcojXTQ5x9bu": {
+    "data": {
+      "subject": "Mathematics",
+      "class": "Class 10",
+      "startTime": "09:00",
+      "subjectId": "Mathematics",
+      "teacherName": "Teja",
+      "endTime": "10:00",
+      "school_id": "SCH001",
+      "classId": "Class 10-A",
+      "teacherId": "Teja",
+      "section": "A",
+      "day": "Wednesday",
+      "id": "LXDsM5AcgcojXTQ5x9bu",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "S3CPTrLmV4SFx9KuMLmA": {
+    "data": {
+      "teacherName": "Teja",
+      "endTime": "10:00",
+      "class": "Class 10",
+      "startTime": "09:00",
+      "subjectId": "Mathematics",
+      "subject": "Mathematics",
+      "day": "Thursday",
+      "section": "A",
+      "teacherId": "Teja",
+      "school_id": "SCH001",
+      "classId": "Class 10-A",
+      "id": "S3CPTrLmV4SFx9KuMLmA",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "ZNpa2nbusJYriEDnc0Om": {
+    "data": {
+      "teacherName": "Teja",
+      "endTime": "10:00",
+      "startTime": "09:00",
+      "class": "Class 10",
+      "subjectId": "Mathematics",
+      "subject": "Mathematics",
+      "day": "Tuesday",
+      "section": "A",
+      "teacherId": "Teja",
+      "school_id": "SCH001",
+      "classId": "Class 10-A",
+      "id": "ZNpa2nbusJYriEDnc0Om",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "bBshpZBrPa48msWlDDFq": {
+    "data": {
+      "teacherName": "Teja",
+      "endTime": "11:00",
+      "class": "Class 10",
+      "startTime": "10:00",
+      "subjectId": "Mathematics",
+      "subject": "Mathematics",
+      "day": "Monday",
+      "section": "A",
+      "teacherId": "Teja",
+      "school_id": "SCH001",
+      "classId": "Class 10-A",
+      "id": "bBshpZBrPa48msWlDDFq",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "qNKu1DpoJZ4KEPPdrUmV": {
+    "data": {
+      "school_id": "SCH001",
+      "classId": "Class 10-A",
+      "teacherId": "Teja",
+      "section": "A",
+      "day": "Monday",
+      "subject": "Mathematics",
+      "class": "Class 10",
+      "startTime": "09:00",
+      "subjectId": "Mathematics",
+      "teacherName": "Teja",
+      "endTime": "10:00",
+      "id": "qNKu1DpoJZ4KEPPdrUmV",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}

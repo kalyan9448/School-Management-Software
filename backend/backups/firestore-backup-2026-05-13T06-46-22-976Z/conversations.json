@@ -1,0 +1,48 @@
+{
+  "E0sj5hKmIAPbdwiG2jLS": {
+    "data": {
+      "teacherEmail": "teja@gmail.com",
+      "unreadParent": 1,
+      "teacherName": "Teja",
+      "unreadTeacher": 0,
+      "lastMessage": "Hlo",
+      "created_at": "2026-04-30T07:58:39.497Z",
+      "lastMessageSenderRole": "teacher",
+      "parentId": "CnWy2dCJWINKhfvBH6z7a47Mwhn2",
+      "studentId": "yURzP2PiQXJNfif1lyVI",
+      "classId": "Class 10-A",
+      "parentName": "venkatreddy",
+      "teacherId": "esueqzNoudFc2DGl66Rx",
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "studentName": "Bhanu Kumar",
+      "teacherSubject": "Mathematics",
+      "updatedAt": "2026-05-05T06:34:57.140Z"
+    },
+    "subcollections": []
+  },
+  "Yy2UsS2YDZWJRK3FiwkO": {
+    "data": {
+      "teacherEmail": "teja@gmail.com",
+      "teacherName": "Teja",
+      "created_at": "2026-04-21T06:13:37.022Z",
+      "parentId": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "studentId": "5wpdQ3RmdlOkE4pkHDy8",
+      "classId": "Class 10-A",
+      "parentName": "yadagiri",
+      "teacherId": "esueqzNoudFc2DGl66Rx",
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "studentName": "Harsha",
+      "teacherSubject": "Mathematics",
+      "unreadParent": 0,
+      "unreadTeacher": 1,
+      "lastMessage": "good afternoon",
+      "lastMessageSenderRole": "parent",
+      "updatedAt": "2026-05-12T11:04:13.755Z"
+    },
+    "subcollections": [
+      "messages"
+    ]
+  }
+}

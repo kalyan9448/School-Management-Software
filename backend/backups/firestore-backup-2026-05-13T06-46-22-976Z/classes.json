@@ -1,0 +1,212 @@
+{
+  "0DXXCBfwoKQuA1TnOuUO": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 10",
+      "section": "A",
+      "classTeacher": "",
+      "id": "0DXXCBfwoKQuA1TnOuUO",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "0KEdozGwCqQhzMnYjK1X": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 7",
+      "section": "A",
+      "classTeacher": "",
+      "id": "0KEdozGwCqQhzMnYjK1X",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "8WBPPhR3cpIoxMzZfIgI": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 5",
+      "section": "B",
+      "classTeacher": "",
+      "id": "8WBPPhR3cpIoxMzZfIgI",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "B7QGeJ82Kp3ZFzMpD7tr": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 9",
+      "section": "B",
+      "classTeacher": "",
+      "id": "B7QGeJ82Kp3ZFzMpD7tr",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "GedHjTHZh5yNm92CHIRN": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 8",
+      "section": "A",
+      "classTeacher": "",
+      "id": "GedHjTHZh5yNm92CHIRN",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "MQegzN1ZHDSbcZiPnP8v": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 4",
+      "section": "B",
+      "classTeacher": "",
+      "id": "MQegzN1ZHDSbcZiPnP8v",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "PAUwD5ks1mBzuCdQC5NN": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 10",
+      "section": "B",
+      "classTeacher": "",
+      "id": "PAUwD5ks1mBzuCdQC5NN",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "bV0j3RXsY2G8SJLKDxnP": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 3",
+      "section": "A",
+      "classTeacher": "",
+      "id": "bV0j3RXsY2G8SJLKDxnP",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "bzDJhCoAmpQdVIqzjEvn": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 8",
+      "section": "A",
+      "classTeacher": "",
+      "id": "bzDJhCoAmpQdVIqzjEvn",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "f2OvkAFDwYQeGNhifLIR": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 9",
+      "section": "A",
+      "classTeacher": "",
+      "id": "f2OvkAFDwYQeGNhifLIR",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "jFYy81C1bVQCeIoHBTCV": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 6",
+      "section": "B",
+      "classTeacher": "",
+      "id": "jFYy81C1bVQCeIoHBTCV",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "lDj1bDQtBmN8NarnIyXb": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 6",
+      "section": "A",
+      "classTeacher": "",
+      "id": "lDj1bDQtBmN8NarnIyXb",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "nTlrxqR2Yukk62v2WIOO": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 4",
+      "section": "A",
+      "classTeacher": "",
+      "id": "nTlrxqR2Yukk62v2WIOO",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "qlFCqyAhD1raQxWkKNck": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 5",
+      "section": "A",
+      "classTeacher": "",
+      "id": "qlFCqyAhD1raQxWkKNck",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  },
+  "z6T74V3DgS5OIX6SByMU": {
+    "data": {
+      "school_id": "SCH001",
+      "org_id": "ORG001",
+      "subjects": [],
+      "className": "Class 7",
+      "section": "A",
+      "classTeacher": "",
+      "id": "z6T74V3DgS5OIX6SByMU",
+      "currentStrength": 0,
+      "capacity": 30
+    },
+    "subcollections": []
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "U1aZOT2kNmXJx5r78vj5": {
+    "data": {
+      "quarterlyFee": 0,
+      "admissionFee": 500,
+      "activityFee": 0,
+      "school_id": "SCH001",
+      "transportFee": 10000,
+      "org_id": "ORG001",
+      "daycareFee": 0,
+      "annualFee": 150000,
+      "id": "U1aZOT2kNmXJx5r78vj5",
+      "class": "Class 10",
+      "customCategories": [],
+      "monthlyFee": 0
+    },
+    "subcollections": []
+  },
+  "VPLCFxm8stqX29QGXh8G": {
+    "data": {
+      "quarterlyFee": 0,
+      "admissionFee": 500,
+      "activityFee": 0,
+      "school_id": "SCH001",
+      "transportFee": 10000,
+      "org_id": "ORG001",
+      "daycareFee": 0,
+      "annualFee": 125000,
+      "id": "VPLCFxm8stqX29QGXh8G",
+      "class": "Class 9",
+      "customCategories": [],
+      "monthlyFee": 0
+    },
+    "subcollections": []
+  },
+  "qyZH2dscKbB78AqoKl8U": {
+    "data": {
+      "quarterlyFee": 0,
+      "admissionFee": 500,
+      "activityFee": 0,
+      "school_id": "SCH001",
+      "transportFee": 0,
+      "org_id": "ORG001",
+      "daycareFee": 0,
+      "annualFee": 115000,
+      "id": "qyZH2dscKbB78AqoKl8U",
+      "class": "Class 8",
+      "customCategories": [],
+      "monthlyFee": 0
+    },
+    "subcollections": []
+  }
+}

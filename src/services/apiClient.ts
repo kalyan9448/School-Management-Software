@@ -30,10 +30,15 @@ apiClient.interceptors.request.use(
             }
         }
 
-        // Attach school_id for multi-tenant backend filtering
+        // Attach school_id and organization_id for multi-tenant backend filtering
         const schoolId = sessionStorage.getItem('active_school_id');
+        const organizationId = sessionStorage.getItem('active_organization_id');
+        
         if (schoolId) {
             config.headers['x-school-id'] = schoolId;
+        }
+        if (organizationId) {
+            config.headers['x-organization-id'] = organizationId;
         }
 
         return config;

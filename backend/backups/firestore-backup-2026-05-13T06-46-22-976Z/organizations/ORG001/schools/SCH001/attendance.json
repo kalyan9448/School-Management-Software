@@ -1,0 +1,242 @@
+{
+  "0ZOBdZ8Na4em3kbHsaHh": {
+    "data": {
+      "studentId": "2NZzkNa2AbNMrZNrzK7M",
+      "date": "2026-04-30",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "time": "01:19 PM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "0ZOBdZ8Na4em3kbHsaHh",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "3CDNzT7c7rKIkmz9TrcS": {
+    "data": {
+      "studentId": "yURzP2PiQXJNfif1lyVI",
+      "date": "2026-03-31",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "time": "11:12 AM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "3CDNzT7c7rKIkmz9TrcS",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "6MNQ3zUTXLLPP0FDg3B4": {
+    "data": {
+      "studentId": "WCvBQ6ba6JCa5lpHxiCI",
+      "date": "2026-04-30",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "time": "01:19 PM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "6MNQ3zUTXLLPP0FDg3B4",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "B4qcNvwAsKazgxp2NrUJ": {
+    "data": {
+      "studentId": "yURzP2PiQXJNfif1lyVI",
+      "date": "2026-04-30",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "time": "01:19 PM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "B4qcNvwAsKazgxp2NrUJ",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "LiK6tIjUJtJgZqfI7dl1": {
+    "data": {
+      "studentId": "5wpdQ3RmdlOkE4pkHDy8",
+      "date": "2026-04-30",
+      "status": "late",
+      "class": "Class 10",
+      "section": "A",
+      "time": "01:19 PM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "LiK6tIjUJtJgZqfI7dl1",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "Lj6P3Cj49brJXxaAAVy7": {
+    "data": {
+      "studentId": "WCvBQ6ba6JCa5lpHxiCI",
+      "date": "2026-04-01",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "Lj6P3Cj49brJXxaAAVy7",
+      "time": "11:51 AM",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "MShDOPgFpTKtjDnJridD": {
+    "data": {
+      "studentId": "5wpdQ3RmdlOkE4pkHDy8",
+      "date": "2026-03-31",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "time": "11:12 AM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "MShDOPgFpTKtjDnJridD",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "Nv954vqpzvAbN3TXL7Hf": {
+    "data": {
+      "studentId": "yURzP2PiQXJNfif1lyVI",
+      "date": "2026-04-01",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "Nv954vqpzvAbN3TXL7Hf",
+      "time": "11:51 AM",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "QuB7wEJ8DLdlLuNwXZoO": {
+    "data": {
+      "studentId": "APr9Qna0GvYy8ywoSpVT",
+      "date": "2026-03-27",
+      "status": "present",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "QuB7wEJ8DLdlLuNwXZoO",
+      "time": "01:42 PM",
+      "section": "A",
+      "markedBy": "School Admin",
+      "class": "",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "SIbqubpcB8zFO5B4bmON": {
+    "data": {
+      "studentId": "zjJsIMO6sqsOf4lNNRse",
+      "date": "2026-03-31",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "time": "11:12 AM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "SIbqubpcB8zFO5B4bmON",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "dLmpLFbAw2iLmxWlMGcu": {
+    "data": {
+      "studentId": "zjJsIMO6sqsOf4lNNRse",
+      "date": "2026-04-30",
+      "status": "absent",
+      "class": "Class 10",
+      "section": "A",
+      "time": "01:19 PM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "dLmpLFbAw2iLmxWlMGcu",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "mAVYmaczxEdHjrhXkrqg": {
+    "data": {
+      "studentId": "yURzP2PiQXJNfif1lyVI",
+      "date": "2026-03-27",
+      "status": "absent",
+      "time": "01:40 PM",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "mAVYmaczxEdHjrhXkrqg",
+      "section": "A",
+      "markedBy": "School Admin",
+      "class": "",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "qhLJ0wz7KqTf11kYspeA": {
+    "data": {
+      "studentId": "zjJsIMO6sqsOf4lNNRse",
+      "date": "2026-04-01",
+      "status": "absent",
+      "class": "Class 10",
+      "section": "A",
+      "time": "11:51 AM",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "qhLJ0wz7KqTf11kYspeA",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "u5dfB4oR5XVAi9BN45MP": {
+    "data": {
+      "studentId": "5wpdQ3RmdlOkE4pkHDy8",
+      "date": "2026-04-01",
+      "status": "present",
+      "class": "Class 10",
+      "section": "A",
+      "markedBy": "teja@gmail.com",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "u5dfB4oR5XVAi9BN45MP",
+      "time": "11:51 AM",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  },
+  "uDBfqDV0lu1BwNFheypS": {
+    "data": {
+      "studentId": "XIp9ukXL999cVA4Z83aT",
+      "date": "2026-03-27",
+      "status": "present",
+      "remarks": "",
+      "school_id": "SCH001",
+      "id": "uDBfqDV0lu1BwNFheypS",
+      "time": "01:42 PM",
+      "section": "A",
+      "markedBy": "School Admin",
+      "class": "",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}

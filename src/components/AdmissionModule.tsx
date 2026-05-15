@@ -29,7 +29,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(initialData || null);
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string>('admitted');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -133,12 +133,15 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
           
           setAcademicYears(mappedYears);
 
-          // Set default selected year to the active one
+          // Add "All Years" option at the start
+          const yearOptions = [{ id: 'all', name: 'All Years' }, ...mappedYears];
+          
+          // Set default selected year
           const activeYear = mappedYears.find(y => y.isCurrent);
           if (activeYear && !selectedYear) {
             setSelectedYear(activeYear.name);
-          } else if (mappedYears.length > 0 && !selectedYear) {
-            setSelectedYear(mappedYears[0].name);
+          } else if (!selectedYear) {
+            setSelectedYear('All Years');
           }
         }
       } catch (error) {
@@ -255,8 +258,8 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
 
   const filteredStudents = students.filter(student => {
     // If student has no academic year recorded, assume current for demo purposes
-    const studentYear = student.academicYear || getActiveAcademicYearId();
-    const matchesYear = studentYear === selectedYear;
+    const studentYear = student.academicYear || '';
+    const matchesYear = selectedYear === 'All Years' || studentYear === selectedYear || (selectedYear === getActiveAcademicYearId() && !studentYear);
     const matchesFilter = filterStatus === 'all' || student.status === filterStatus;
     return matchesYear && matchesFilter;
   });
@@ -290,6 +293,15 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
             if (!resolvedSchoolId) {
               alert('School context is not available. Please reload the page and try again.');
               return;
+            }
+
+            // Also ensure organization context is available for the API headers
+            if (!sessionStorage.getItem('active_organization_id')) {
+              const school = await schoolService.getById(resolvedSchoolId);
+              const orgId = school?.organization_id || school?.organizationId;
+              if (orgId) {
+                sessionStorage.setItem('active_organization_id', orgId);
+              }
             }
 
             // Sync JWT claims so Firestore rules see the correct school_id
@@ -566,8 +578,14 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-gray-900 mb-2">Admitted Students List</h1>
-          <p className="text-gray-600">View and manage the list of successfully admitted students</p>
+          <h1 className="text-gray-900 mb-2">
+            {filterStatus === 'all' ? 'All Admissions' : 
+             filterStatus === 'enquiry' ? 'Admission Enquiries' :
+             filterStatus === 'in-process' ? 'In-Process Admissions' :
+             filterStatus === 'confirmed' ? 'Confirmed Admissions' :
+             'Admitted Students List'}
+          </h1>
+          <p className="text-gray-600">View and manage the list of student admissions for the selected academic year</p>
           {loading && (
             <p className="text-blue-600 mt-1">⏳ Loading admissions from server...</p>
           )}
@@ -630,7 +648,29 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
         </div>
       </div>
 
-      {/* Stats Cards Removed to focus on Admitted List */}
+      {/* Stats Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div className="bg-white p-6 rounded-3xl border-2 border-gray-100 shadow-sm">
+          <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Total</p>
+          <p className="text-2xl font-black text-gray-900">{stats.total}</p>
+        </div>
+        <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 shadow-sm">
+          <p className="text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">Enquiries</p>
+          <p className="text-2xl font-black text-blue-900">{stats.enquiry}</p>
+        </div>
+        <div className="bg-yellow-50 p-6 rounded-3xl border-2 border-yellow-100 shadow-sm">
+          <p className="text-yellow-600 text-xs font-bold uppercase tracking-wider mb-1">In Process</p>
+          <p className="text-2xl font-black text-yellow-900">{stats.inProcess}</p>
+        </div>
+        <div className="bg-purple-50 p-6 rounded-3xl border-2 border-purple-100 shadow-sm">
+          <p className="text-purple-600 text-xs font-bold uppercase tracking-wider mb-1">Confirmed</p>
+          <p className="text-2xl font-black text-purple-900">{stats.confirmed}</p>
+        </div>
+        <div className="bg-green-50 p-6 rounded-3xl border-2 border-green-100 shadow-sm">
+          <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Admitted</p>
+          <p className="text-2xl font-black text-green-900">{stats.admitted}</p>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 mb-6">
@@ -642,18 +682,36 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
           <div className="relative flex-1 md:max-w-xs">
             <select
               value={selectedYear}
-              onChange={(e) => {
-                setLoading(true);
-                setTimeout(() => {
-                  setSelectedYear(e.target.value);
-                  setLoading(false);
-                }, 400); // Simulate dynamic loading
-              }}
+              onChange={(e) => setSelectedYear(e.target.value)}
               className="w-full pl-4 pr-10 py-3 border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white font-medium text-gray-700"
             >
+              <option value="All Years">All Academic Years</option>
               {academicYears.map(year => (
                 <option key={year.id} value={year.name}>{year.name} {year.isCurrent ? '(Current)' : ''}</option>
               ))}
+            </select>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 md:ml-6">
+            <Filter className="w-5 h-5 text-purple-600" />
+            <span className="font-bold text-gray-700">Status:</span>
+          </div>
+          <div className="relative flex-1 md:max-w-xs">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full pl-4 pr-10 py-3 border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white font-medium text-gray-700"
+            >
+              <option value="all">All Admissions</option>
+              <option value="enquiry">Enquiries</option>
+              <option value="in-process">In Process</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="admitted">Admitted</option>
             </select>
             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

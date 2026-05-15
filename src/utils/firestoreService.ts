@@ -20,6 +20,7 @@ import {
     orderBy,
     documentId,
     Timestamp,
+    collectionGroup,
     type DocumentData,
     type QueryConstraint,
 } from 'firebase/firestore';
@@ -185,7 +186,11 @@ function getQueryKey(collectionName: string, constraints: QueryConstraint[]): st
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Collections that are global (not scoped to a single school). */
-const GLOBAL_COLLECTIONS = new Set(['users', 'schools', 'organizations', 'plans', 'support_tickets']);
+const GLOBAL_COLLECTIONS = new Set(['users', 'organizations', 'plans', 'support_tickets']);
+
+function getOrganizationId(): string {
+    return (sessionStorage.getItem('active_organization_id') || '').trim();
+}
 
 function getSchoolId(): string {
     return (sessionStorage.getItem('active_school_id') || '').trim();
@@ -203,6 +208,27 @@ function isSuperAdmin(): boolean {
     return false;
 }
 
+/** Returns organization_id or throws if not set. */
+function requireOrganizationId(): string {
+    let oid = getOrganizationId();
+    if (!oid) {
+        try {
+            const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
+            if (cached) {
+                const user = JSON.parse(cached);
+                if (user?.organization_id) {
+                    oid = user.organization_id;
+                    sessionStorage.setItem('active_organization_id', oid!);
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    if (!oid && !isSuperAdmin()) {
+        throw new Error('No active organization selected.');
+    }
+    return oid || '';
+}
+
 /** Returns school_id or throws if not set. Ensures multi-tenant queries are always scoped. */
 function requireSchoolId(): string {
     let sid = getSchoolId();
@@ -216,8 +242,6 @@ function requireSchoolId(): string {
                     sid = user.school_id;
                     sessionStorage.setItem('active_school_id', sid!);
                 } else if (user?.role === 'superadmin') {
-                    // Superadmins don't have a default school_id, return empty string
-                    // instead of throwing, as they are allowed to query globally.
                     return '';
                 }
             }
@@ -227,6 +251,51 @@ function requireSchoolId(): string {
         throw new Error('No active school selected. Please select a school first.');
     }
     return sid || '';
+}
+
+/** 
+ * Returns a Firestore CollectionReference for the given module name, 
+ * automatically handling the nested multi-tenant path.
+ */
+function getModuleCollection(name: string, overrideOrgId?: string, overrideSchoolId?: string) {
+    if (GLOBAL_COLLECTIONS.has(name)) {
+        return collection(db, name);
+    }
+    
+    // For schools specifically, it's /organizations/{orgId}/schools
+    if (name === 'schools') {
+        const orgId = overrideOrgId || getOrganizationId();
+        
+        // If orgId is missing and we're superadmin, we fallback to a root collection reference.
+        // This avoids the 'organizations//schools' (even segment count) error.
+        // fetchCollection will catch this and use collectionGroup for actual data fetching.
+        if (!orgId && isSuperAdmin()) {
+            return collection(db, name); 
+        }
+        
+        // Ensure we have an orgId if not a global superadmin view
+        if (!orgId) throw new Error('Organization ID required for school-scoped operations');
+        
+        return collection(db, 'organizations', orgId, 'schools');
+    }
+
+    // For all other modules, it's /organizations/{orgId}/schools/{schoolId}/{module}
+    const orgId = overrideOrgId || getOrganizationId();
+    const schoolId = overrideSchoolId || getSchoolId();
+    
+    if (!orgId || !schoolId) {
+        if (isSuperAdmin()) {
+            return collection(db, name); 
+        }
+        throw new Error(`Path context missing for ${name}. Org: ${orgId}, School: ${schoolId}`);
+    }
+
+    return collection(db, 'organizations', orgId, 'schools', schoolId, name);
+}
+
+/** Returns a document reference using the appropriate path resolution. */
+function getDocRef(collectionName: string, id: string) {
+    return doc(getModuleCollection(collectionName), id);
 }
 
 /** Remove keys whose value is undefined — Firestore rejects undefined field values. */
@@ -258,17 +327,29 @@ async function fetchCollection<T>(
 
     const requestPromise = (async () => {
         try {
-            const isGlobal = GLOBAL_COLLECTIONS.has(collectionName);
-            const superAdmin = isSuperAdmin();
-            
-            // If it's a global collection OR the user is a superadmin, don't force a school_id filter.
-            const allConstraints = (isGlobal || superAdmin)
-                ? constraints
-                : [where('school_id', '==', requireSchoolId()), ...constraints];
+            // Support global fetching for Super Admins on nested collections
+            const activeOrg = getOrganizationId();
+            if (isSuperAdmin() && !activeOrg && !GLOBAL_COLLECTIONS.has(collectionName)) {
+                console.log(`[firestoreService] Global View: Using collectionGroup for '${collectionName}'`);
+                const q = constraints.length > 0
+                    ? query(collectionGroup(db, collectionName), ...constraints)
+                    : collectionGroup(db, collectionName);
+                    
+                const snap = await getDocs(q);
+                const data = snap.docs.map(d => ({ id: d.id, ...d.data() }) as T);
                 
-            const q = allConstraints.length > 0
-                ? query(collection(db, collectionName), ...allConstraints)
-                : collection(db, collectionName);
+                queryCache.set(cacheKey, { data, timestamp: Date.now() });
+                return data;
+            }
+
+            const colRef = getModuleCollection(collectionName);
+            
+            // In the nested model, we no longer need the 'where school_id == sid' filter
+            // because the path itself enforces the scope.
+            const q = constraints.length > 0
+                ? query(colRef, ...constraints)
+                : colRef;
+                
             const snap = await getDocs(q);
             const data = snap.docs.map(d => ({ id: d.id, ...d.data() }) as T);
             
@@ -308,7 +389,8 @@ export async function createDoc<T extends { id: string }>(
         : { ...rest, school_id: sid };
 
     // Generate a new doc reference to get a unique ID
-    const ref = doc(collection(db, collectionName));
+    // Generate a new doc reference to get a unique ID
+    const ref = doc(getModuleCollection(collectionName));
     const fullPayload = stripUndefined({ ...payload, id: ref.id });
     
     console.log(`[firestoreService] Creating doc in ${collectionName}:`, ref.id, sid ? `(School: ${sid})` : '(Global)');
@@ -327,7 +409,7 @@ async function setDocById<T>(
     const payload = GLOBAL_COLLECTIONS.has(collectionName)
         ? data
         : { ...data, school_id: requireSchoolId() };
-    await setDoc(doc(db, collectionName, id), stripUndefined(payload as Record<string, any>), { merge: true });
+    await setDoc(getDocRef(collectionName, id), stripUndefined(payload as Record<string, any>), { merge: true });
     
     // Invalidate cache for this collection
     clearFirestoreCache(collectionName);
@@ -340,7 +422,7 @@ async function updateDocById(
     updates: Record<string, any>,
 ): Promise<void> {
     if (!GLOBAL_COLLECTIONS.has(collectionName)) {
-        const snap = await getDoc(doc(db, collectionName, id));
+        const snap = await getDoc(getDocRef(collectionName, id));
         if (!snap.exists()) throw new Error(`Document ${collectionName}/${id} not found`);
         const docSchoolId = (snap.data() as any).school_id;
         const currentSchoolId = requireSchoolId();
@@ -354,14 +436,14 @@ async function updateDocById(
     }
     
     console.log(`[firestoreService] Updating doc ${collectionName}/${id}...`);
-    await updateDoc(doc(db, collectionName, id), stripUndefined(updates));
+    await updateDoc(getDocRef(collectionName, id), stripUndefined(updates));
     clearFirestoreCache(collectionName);
 }
 
 /** Delete a doc by ID. Verifies school_id ownership for school-scoped collections. */
 async function deleteDocById(collectionName: string, id: string): Promise<void> {
     if (!GLOBAL_COLLECTIONS.has(collectionName)) {
-        const snap = await getDoc(doc(db, collectionName, id));
+        const snap = await getDoc(getDocRef(collectionName, id));
         if (!snap.exists()) return;
         const docSchoolId = (snap.data() as any).school_id;
         const currentSchoolId = requireSchoolId();
@@ -369,7 +451,7 @@ async function deleteDocById(collectionName: string, id: string): Promise<void> 
             throw new Error('Access denied: document belongs to a different school');
         }
     }
-    await deleteDoc(doc(db, collectionName, id));
+    await deleteDoc(getDocRef(collectionName, id));
     
     // Invalidate cache for this collection
     clearFirestoreCache(collectionName);
@@ -392,7 +474,7 @@ async function getDocById<T>(collectionName: string, id: string): Promise<T | nu
 
     const requestPromise = (async () => {
         try {
-            const snap = await getDoc(doc(db, collectionName, id));
+            const snap = await getDoc(getDocRef(collectionName, id));
             if (!snap.exists()) return null;
             if (!GLOBAL_COLLECTIONS.has(collectionName)) {
                 const docSchoolId = (snap.data() as any).school_id;
@@ -466,6 +548,31 @@ export const userService = {
         await updateDocById('users', id, updates);
         return getDocById<User>('users', id);
     },
+
+    /**
+     * Synchronizes core student data to their corresponding user account.
+     * This is critical for maintaining identity consistency in a SaaS environment.
+     */
+    syncStudentToUser: async (student: Student): Promise<void> => {
+        if (!student.email) return;
+        try {
+            const user = await userService.getByEmail(student.email);
+            if (user) {
+                const updates: Partial<User> = {
+                    name: student.name,
+                    class: student.class,
+                    section: student.section,
+                    rollNo: student.rollNo,
+                    school_id: student.school_id,
+                    studentId: student.id,
+                };
+                await userService.update(user.id, updates);
+                console.log(`[userService] Synced user profile for ${student.email}`);
+            }
+        } catch (err) {
+            console.error(`[userService] Sync failed for ${student.email}:`, err);
+        }
+    }
 };
 
 // ==================== SCHOOL SERVICE ====================
@@ -482,7 +589,8 @@ export const schoolService = {
     create: async (school: any): Promise<any> => {
         // Use the caller-provided id (e.g. "SCH001") as the Firestore doc id
         // so the UI id and the persisted id always match.
-        const schoolId = school.id || doc(collection(db, 'schools')).id;
+        const orgId = school.organizationId || school.organization_id;
+        const schoolId = school.id || doc(getModuleCollection('schools', orgId)).id;
         const { id: _stripId, ...rest } = school;
 
         // Normalize email to lowercase for consistent lookups across the system
@@ -491,6 +599,7 @@ export const schoolService = {
         const payload = {
             ...rest,
             id: schoolId,
+            organizationId: orgId, // Ensure it's stored correctly
             // Store as both 'email' and 'principalEmail' so every lookup path works
             email: adminEmail || rest.email,
             principalEmail: adminEmail || rest.principalEmail,
@@ -499,7 +608,7 @@ export const schoolService = {
             updated_at: new Date().toISOString(),
         };
 
-        await setDoc(doc(db, 'schools', schoolId), payload);
+        await setDoc(doc(getModuleCollection('schools', orgId), schoolId), payload);
 
         // Auto-create admin user for the school.
         // This is a best-effort operation — if it fails (e.g. due to Firestore
@@ -541,19 +650,19 @@ export const organizationService = {
     create: async (org: any): Promise<any> => {
         // Use the caller-provided id (e.g. "ORG001") as the Firestore doc id so the
         // UI id and the persisted id always match — same pattern as schoolService.create().
-        const orgId = org.id || doc(collection(db, 'organizations')).id;
+        const orgId = org.id || doc(getModuleCollection('organizations')).id;
         const { id: _strip, ...rest } = org;
         const payload = {
             ...rest,
             id: orgId,
             created_at: new Date().toISOString(),
         };
-        await setDoc(doc(db, 'organizations', orgId), payload);
+        await setDoc(getDocRef('organizations', orgId), payload);
         return { id: orgId, ...payload };
     },
 
     getById: async (id: string): Promise<any | null> => {
-        const snap = await getDoc(doc(db, 'organizations', id));
+        const snap = await getDoc(getDocRef('organizations', id));
         if (!snap.exists()) return null;
         return { id: snap.id, ...snap.data() };
     },
@@ -1141,6 +1250,7 @@ export const attendanceService = {
                 status: r.status!,
                 class: r.class || '',
                 section: r.section || '',
+                academicYear: r.academicYear || getActiveAcademicYearId(),
                 time: r.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                 markedBy: r.markedBy || 'teacher',
                 remarks: r.remarks || '',
@@ -2131,8 +2241,8 @@ export const statisticsService = {
     },
 
     getPlatformStats: async () => {
-        const studentSnap = await getDocs(collection(db, 'students'));
-        const teacherSnap = await getDocs(collection(db, 'teachers'));
+        const studentSnap = await getDocs(collectionGroup(db, 'students'));
+        const teacherSnap = await getDocs(collectionGroup(db, 'teachers'));
         const parentSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'parent')));
 
         return {
@@ -2157,8 +2267,8 @@ export const statisticsService = {
     getAllSchoolsMetrics: async () => {
         // Fetch all students and teachers to calculate counts per school
         // This is more efficient for the Super Admin dashboard than querying each school individually
-        const studentSnap = await getDocs(collection(db, 'students'));
-        const teacherSnap = await getDocs(collection(db, 'teachers'));
+        const studentSnap = await getDocs(collectionGroup(db, 'students'));
+        const teacherSnap = await getDocs(collectionGroup(db, 'teachers'));
 
         const metrics: Record<string, { students: number; teachers: number }> = {};
 
@@ -2923,6 +3033,10 @@ export interface TeacherClassCheckin {
     startTime: string;
     endTime: string;
     markedAt: string;        // ISO timestamp
+    verifiedAt?: string;
+    academicYear?: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export const teacherCheckinService = {

@@ -1,0 +1,26 @@
+{
+  "4eHM0eS1ov3RkiNyEsDd": {
+    "data": {
+      "conversationId": "Yy2UsS2YDZWJRK3FiwkO",
+      "senderId": "h8yWmrWukLb8HCXDYlNkwkQo9612",
+      "senderRole": "teacher",
+      "senderName": "Teja",
+      "message": "hlo",
+      "createdAt": "2026-05-12T11:02:52.521Z",
+      "isRead": true
+    },
+    "subcollections": []
+  },
+  "sJXF0lnuYsvme1YVyhZt": {
+    "data": {
+      "conversationId": "Yy2UsS2YDZWJRK3FiwkO",
+      "senderId": "1z2om4OJsNYvGPLiLmTZEntYG2H2",
+      "senderRole": "parent",
+      "senderName": "yadagiri",
+      "message": "good afternoon",
+      "createdAt": "2026-05-12T11:04:13.755Z",
+      "isRead": false
+    },
+    "subcollections": []
+  }
+}

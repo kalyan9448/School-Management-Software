@@ -373,12 +373,30 @@ router.post('/login', verifyFirebaseToken, async (req, res) => {
             }
         }
 
+        // Resolve organization_id if missing but school_id is present
+        if (!user.organization_id && user.school_id) {
+            try {
+                const schoolSnap = await db().collection('schools').doc(user.school_id).get();
+                if (schoolSnap.exists) {
+                    const sd = schoolSnap.data();
+                    const oid = sd.organization_id || sd.organizationId;
+                    if (oid) {
+                        user.organization_id = oid;
+                        await userRef.update({ organization_id: oid, updated_at: new Date().toISOString() });
+                    }
+                }
+            } catch (err) {
+                console.warn('[Auth] Failed to resolve organization_id for claims:', err.message);
+            }
+        }
+
         // Set Firebase Auth custom claims so Firestore security rules can check
         // request.auth.token.role without any extra Firestore reads.
         // Must be done AFTER the profile is finalised so the claim matches the profile.
         await admin.auth().setCustomUserClaims(uid, {
             role: user.role,
             school_id: user.school_id || null,
+            organization_id: user.organization_id || null,
         });
 
         res.json({

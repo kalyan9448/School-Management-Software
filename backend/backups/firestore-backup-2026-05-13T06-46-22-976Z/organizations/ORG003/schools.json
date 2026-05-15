@@ -1,0 +1,35 @@
+{
+  "SCH004": {
+    "data": {
+      "name": "Sri Viswam Public School",
+      "organizationId": "ORG003",
+      "organizationName": "Sri Viswam Public School",
+      "status": "active",
+      "students": 0,
+      "teachers": 0,
+      "storage": "0 GB",
+      "subscriptionEnd": "2027-05-08",
+      "principal": "Jaya Chandra Reddy ",
+      "email": "sriviswam2007@gmail.com",
+      "principalEmail": "sriviswam2007@gmail.com",
+      "principalName": "Jaya Chandra Reddy ",
+      "phone": "9441572757",
+      "principalAddress": "Vavi Estate Murganpalli Chittoor ",
+      "principalGmail": "reddyjayachandra08@gmail.com",
+      "address": "Sundararajapuram, Puttur Road.",
+      "city": "Chittoor",
+      "state": "Andhra Pradesh",
+      "pincode": "517125",
+      "plan": "Enterprise",
+      "maxStudents": 1000,
+      "maxTeachers": 100,
+      "subscriptionStart": "2026-05-08",
+      "schoolCode": "SVPS",
+      "id": "SCH004",
+      "created_at": "2026-05-08T06:47:19.177Z",
+      "updated_at": "2026-05-08T06:47:19.177Z",
+      "org_id": "ORG003"
+    },
+    "subcollections": []
+  }
+}

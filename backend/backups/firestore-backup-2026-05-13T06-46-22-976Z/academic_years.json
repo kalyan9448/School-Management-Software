@@ -1,0 +1,49 @@
+{
+  "OE75lSuIA1hLF7x5xUwa": {
+    "data": {
+      "isCurrent": true,
+      "school_id": "SCH001",
+      "updated_at": "2026-03-27T02:06:58.522Z",
+      "endDate": "2026-03-31",
+      "terms": [],
+      "org_id": "ORG001",
+      "name": "2025-2026",
+      "created_at": "2026-03-26T18:55:38.223Z",
+      "id": "OE75lSuIA1hLF7x5xUwa",
+      "startDate": "2025-06-15",
+      "status": "active"
+    },
+    "subcollections": []
+  },
+  "XNWKGkkg2arwlZyaMuI5": {
+    "data": {
+      "isCurrent": false,
+      "school_id": "SCH001",
+      "updated_at": "2026-03-27T02:06:58.108Z",
+      "endDate": "2027-04-06",
+      "terms": [],
+      "org_id": "ORG001",
+      "name": "2026-2027",
+      "created_at": "2026-03-26T18:57:19.282Z",
+      "id": "XNWKGkkg2arwlZyaMuI5",
+      "startDate": "2026-06-15",
+      "status": "active"
+    },
+    "subcollections": []
+  },
+  "qWTehnCyVgAGtguikpSB": {
+    "data": {
+      "school_id": "SCH005",
+      "name": "2026-2027",
+      "startDate": "2026-06-01",
+      "endDate": "2027-04-05",
+      "isCurrent": false,
+      "status": "upcoming",
+      "terms": [],
+      "created_at": "2026-05-13T05:22:13.084Z",
+      "updated_at": "2026-05-13T05:22:13.084Z",
+      "id": "qWTehnCyVgAGtguikpSB"
+    },
+    "subcollections": []
+  }
+}

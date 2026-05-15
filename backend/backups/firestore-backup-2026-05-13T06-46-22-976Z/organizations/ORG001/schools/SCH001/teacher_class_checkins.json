@@ -1,0 +1,20 @@
+{
+  "pf7Ccwk8WnEp67fyaah1": {
+    "data": {
+      "teacherId": "teja@gmail.com",
+      "teacherName": "Teja",
+      "date": "2026-04-30",
+      "slotId": "S3CPTrLmV4SFx9KuMLmA",
+      "class": "Class 10",
+      "section": "A",
+      "subject": "Mathematics",
+      "startTime": "09:00",
+      "endTime": "10:00",
+      "markedAt": "2026-04-30T15:29:23.923Z",
+      "school_id": "SCH001",
+      "id": "pf7Ccwk8WnEp67fyaah1",
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}

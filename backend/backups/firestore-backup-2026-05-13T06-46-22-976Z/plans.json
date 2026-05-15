@@ -1,0 +1,120 @@
+{
+  "6RGpCMaSqvEpZuO6p6p9": {
+    "data": {
+      "name": "Enterprise",
+      "description": "For large institutions",
+      "price": 15000,
+      "maxStudents": 1000,
+      "maxTeachers": 100,
+      "storage": "100 GB",
+      "features": [
+        "Up to 1000 students",
+        "100 teachers",
+        "100 GB storage",
+        "All integrations",
+        "Dedicated support"
+      ],
+      "isActive": true,
+      "id": "6RGpCMaSqvEpZuO6p6p9"
+    },
+    "subcollections": []
+  },
+  "9KyIi50x4OVUDvKxUOoe": {
+    "data": {
+      "name": "Enterprise",
+      "description": "For large institutions",
+      "price": 15000,
+      "maxStudents": 1000,
+      "maxTeachers": 100,
+      "storage": "100 GB",
+      "features": [
+        "Up to 1000 students",
+        "100 teachers",
+        "100 GB storage",
+        "All integrations",
+        "Dedicated support"
+      ],
+      "isActive": true,
+      "id": "9KyIi50x4OVUDvKxUOoe"
+    },
+    "subcollections": []
+  },
+  "PTeiZfavnjpXWvSBwtWT": {
+    "data": {
+      "name": "Professional",
+      "description": "For growing schools",
+      "price": 8000,
+      "maxStudents": 500,
+      "maxTeachers": 50,
+      "storage": "50 GB",
+      "features": [
+        "Up to 500 students",
+        "50 teachers",
+        "50 GB storage",
+        "WhatsApp integration",
+        "Priority support"
+      ],
+      "isActive": true,
+      "id": "PTeiZfavnjpXWvSBwtWT"
+    },
+    "subcollections": []
+  },
+  "dfkuuOOxPISLPWmuMTDI": {
+    "data": {
+      "name": "Basic",
+      "description": "For small schools",
+      "price": 3000,
+      "maxStudents": 200,
+      "maxTeachers": 20,
+      "storage": "20 GB",
+      "features": [
+        "Up to 200 students",
+        "20 teachers",
+        "20 GB storage",
+        "Email support"
+      ],
+      "isActive": true,
+      "id": "dfkuuOOxPISLPWmuMTDI"
+    },
+    "subcollections": []
+  },
+  "iWzOvHATInJEJKBzcotx": {
+    "data": {
+      "name": "Basic",
+      "description": "For small schools",
+      "price": 3000,
+      "maxStudents": 200,
+      "maxTeachers": 20,
+      "storage": "20 GB",
+      "features": [
+        "Up to 200 students",
+        "20 teachers",
+        "20 GB storage",
+        "Email support"
+      ],
+      "isActive": true,
+      "id": "iWzOvHATInJEJKBzcotx"
+    },
+    "subcollections": []
+  },
+  "ukCOLWxj2yYsCNLAoMJb": {
+    "data": {
+      "name": "Professional",
+      "description": "For growing schools",
+      "price": 8000,
+      "maxStudents": 500,
+      "maxTeachers": 50,
+      "storage": "50 GB",
+      "features": [
+        "Up to 500 students",
+        "50 teachers",
+        "50 GB storage",
+        "WhatsApp integration",
+        "Priority support"
+      ],
+      "isActive": true,
+      "id": "ukCOLWxj2yYsCNLAoMJb"
+    },
+    "subcollections": []
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "gla2sVqIMJZeHwEDbnTw": {
+    "data": {
+      "school_id": "SCH001",
+      "academicYear": "2025-2026",
+      "timezone": "Asia/Kolkata",
+      "currency": "INR",
+      "attendanceRules": {},
+      "gradingRules": {
+        "gradeScale": [],
+        "passingPercentage": 40
+      },
+      "feeRules": {},
+      "notificationRules": {
+        "emailEnabled": true,
+        "smsEnabled": false,
+        "pushEnabled": false
+      },
+      "branding": {},
+      "created_at": "2026-04-08T12:50:50.018Z",
+      "id": "gla2sVqIMJZeHwEDbnTw",
+      "updated_at": "2026-04-08T12:51:22.385Z",
+      "periods": [
+        {
+          "id": "p1",
+          "label": "Period 1",
+          "startTime": "09:00",
+          "endTime": "10:00",
+          "type": "period"
+        },
+        {
+          "id": "p2",
+          "label": "Period 2",
+          "startTime": "10:00",
+          "endTime": "11:00",
+          "type": "period"
+        },
+        {
+          "id": "p3",
+          "label": "Period 3",
+          "startTime": "11:00",
+          "endTime": "12:00",
+          "type": "period"
+        },
+        {
+          "id": "break",
+          "label": "Break",
+          "startTime": "12:00",
+          "endTime": "13:00",
+          "type": "break"
+        },
+        {
+          "id": "p4",
+          "label": "Period 4",
+          "startTime": "13:00",
+          "endTime": "14:00",
+          "type": "period"
+        },
+        {
+          "id": "p-1775652666341",
+          "label": "New Period",
+          "startTime": "14:00",
+          "endTime": "15:00",
+          "type": "period"
+        }
+      ],
+      "org_id": "ORG001"
+    },
+    "subcollections": []
+  }
+}
