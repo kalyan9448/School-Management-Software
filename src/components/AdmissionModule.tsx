@@ -297,10 +297,21 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
 
             // Also ensure organization context is available for the API headers
             if (!sessionStorage.getItem('active_organization_id')) {
-              const school = await schoolService.getById(resolvedSchoolId);
-              const orgId = school?.organization_id || school?.organizationId;
-              if (orgId) {
-                sessionStorage.setItem('active_organization_id', orgId);
+              // First try to get org ID from the authenticated user profile (always available from login)
+              const orgIdFromUser = user?.organization_id;
+              if (orgIdFromUser) {
+                sessionStorage.setItem('active_organization_id', orgIdFromUser);
+              } else {
+                // Fallback: try to read from cached user profile in storage
+                try {
+                  const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
+                  if (cached) {
+                    const parsedUser = JSON.parse(cached);
+                    if (parsedUser?.organization_id) {
+                      sessionStorage.setItem('active_organization_id', parsedUser.organization_id);
+                    }
+                  }
+                } catch { /* ignore parse errors */ }
               }
             }
 
@@ -320,8 +331,12 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
               // Create new admission — try backend first (Admin SDK bypasses rules),
               // then fall back to direct Firestore client SDK.
               const admissionNo = studentData.admissionNo?.trim() || await generateAdmissionNumber();
+              const activeOrgId = sessionStorage.getItem('active_organization_id') || user?.organization_id;
+
               const admissionPayload = {
                 ...studentData,
+                school_id: resolvedSchoolId,
+                organization_id: activeOrgId,
                 admissionNo,
                 appliedDate: new Date().toISOString().split('T')[0],
                 status: studentData.status || 'enquiry',

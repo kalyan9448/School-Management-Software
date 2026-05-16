@@ -194,11 +194,39 @@ function getQueryKey(collectionName: string, constraints: QueryConstraint[]): st
 const GLOBAL_COLLECTIONS = new Set(['users', 'organizations', 'plans', 'support_tickets']);
 
 function getOrganizationId(): string {
-    return (sessionStorage.getItem('active_organization_id') || '').trim();
+    let oid = (sessionStorage.getItem('active_organization_id') || '').trim();
+    if (!oid) {
+        try {
+            const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
+            if (cached) {
+                const user = JSON.parse(cached);
+                if (user?.organization_id) {
+                    oid = user.organization_id;
+                    // Persist back to session storage for performance
+                    sessionStorage.setItem('active_organization_id', oid!);
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    return oid;
 }
 
 function getSchoolId(): string {
-    return (sessionStorage.getItem('active_school_id') || '').trim();
+    let sid = (sessionStorage.getItem('active_school_id') || '').trim();
+    if (!sid) {
+        try {
+            const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
+            if (cached) {
+                const user = JSON.parse(cached);
+                if (user?.school_id) {
+                    sid = user.school_id;
+                    // Persist back to session storage for performance
+                    sessionStorage.setItem('active_school_id', sid!);
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    return sid;
 }
 
 /** Returns true if the cached user profile has the 'superadmin' role. */
@@ -215,19 +243,7 @@ function isSuperAdmin(): boolean {
 
 /** Returns organization_id or throws if not set. */
 function requireOrganizationId(): string {
-    let oid = getOrganizationId();
-    if (!oid) {
-        try {
-            const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
-            if (cached) {
-                const user = JSON.parse(cached);
-                if (user?.organization_id) {
-                    oid = user.organization_id;
-                    sessionStorage.setItem('active_organization_id', oid!);
-                }
-            }
-        } catch { /* ignore */ }
-    }
+    const oid = getOrganizationId();
     if (!oid && !isSuperAdmin()) {
         throw new Error('No active organization selected.');
     }
@@ -236,22 +252,7 @@ function requireOrganizationId(): string {
 
 /** Returns school_id or throws if not set. Ensures multi-tenant queries are always scoped. */
 function requireSchoolId(): string {
-    let sid = getSchoolId();
-    // Fallback: try restoring from cached user profile (covers new-tab / sessionStorage miss)
-    if (!sid) {
-        try {
-            const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
-            if (cached) {
-                const user = JSON.parse(cached);
-                if (user?.school_id) {
-                    sid = user.school_id;
-                    sessionStorage.setItem('active_school_id', sid!);
-                } else if (user?.role === 'superadmin') {
-                    return '';
-                }
-            }
-        } catch { /* ignore */ }
-    }
+    const sid = getSchoolId();
     if (!sid && !isSuperAdmin()) {
         throw new Error('No active school selected. Please select a school first.');
     }
@@ -271,17 +272,20 @@ function getModuleCollection(name: string, overrideOrgId?: string, overrideSchoo
     if (name === 'schools') {
         const orgId = overrideOrgId || getOrganizationId();
         
-        // If orgId is missing and we're superadmin, we fallback to a root collection reference.
-        // This avoids the 'organizations//schools' (even segment count) error.
-        // fetchCollection will catch this and use collectionGroup for actual data fetching.
+        // If orgId is missing and we're superadmin with no school context, allow root fallback.
         if (!orgId && isSuperAdmin()) {
+            console.debug('[firestoreService] School fetch: no orgId, superadmin fallback to root schools');
             return collection(db, name); 
         }
         
-        // Ensure we have an orgId if not a global superadmin view
-        if (!orgId) throw new Error('Organization ID required for school-scoped operations');
+        if (!orgId) {
+            console.warn('[firestoreService] Missing organization_id for school fetch. Path construction will fail.');
+            throw new Error('Organization ID required for school-scoped operations');
+        }
         
-        return collection(db, 'organizations', orgId, 'schools');
+        const coll = collection(db, 'organizations', orgId, 'schools');
+        console.debug(`[firestoreService] School collection path: organizations/${orgId}/schools`);
+        return coll;
     }
 
     // For all other modules, it's /organizations/{orgId}/schools/{schoolId}/{module}
@@ -289,10 +293,14 @@ function getModuleCollection(name: string, overrideOrgId?: string, overrideSchoo
     const schoolId = overrideSchoolId || getSchoolId();
     
     if (!orgId || !schoolId) {
-        if (isSuperAdmin()) {
+        // Only fall back to root collection when BOTH are absent (superadmin global view).
+        // If schoolId is known but orgId is missing, we must NOT write to root — this would
+        // corrupt the multi-tenant hierarchy. Throw so the caller can recover org context first.
+        if (isSuperAdmin() && !orgId && !schoolId) {
+            console.warn(`[firestoreService] Superadmin global view: using root collection for '${name}'. This should only happen for reads.`);
             return collection(db, name); 
         }
-        throw new Error(`Path context missing for ${name}. Org: ${orgId}, School: ${schoolId}`);
+        throw new Error(`Path context missing for ${name}. Org: '${orgId}', School: '${schoolId}'. Ensure active_organization_id and active_school_id are set in sessionStorage.`);
     }
 
     return collection(db, 'organizations', orgId, 'schools', schoolId, name);
@@ -382,20 +390,25 @@ export async function createDoc<T extends { id: string }>(
 ): Promise<T> {
     const { id: _unused, ...rest } = data as any;
     const sid = requireSchoolId();
-    
-    // Explicitly reject empty school IDs for school-scoped collections to prevent rule violations
-    if (!GLOBAL_COLLECTIONS.has(collectionName) && !sid && !isSuperAdmin()) {
-        console.error(`[firestoreService] ERROR: Attempted to create doc in ${collectionName} with NO active school context.`);
-        throw new Error('School context missing. Please refresh and try again.');
-    }
+    const oid = getOrganizationId();
 
     const payload = GLOBAL_COLLECTIONS.has(collectionName)
         ? rest
-        : { ...rest, school_id: sid };
+        : { 
+            ...rest, 
+            school_id: sid,
+            organization_id: rest.organization_id || oid || '' 
+          };
+
+    // FAIL-SAFE: Verify we are writing to a nested path for multi-tenant data
+    const colRef = getModuleCollection(collectionName);
+    if (!GLOBAL_COLLECTIONS.has(collectionName) && colRef.path.split('/').length < 4) {
+        console.error(`[firestoreService] BLOCKED ROOT WRITE for ${collectionName}. Path: ${colRef.path}`);
+        throw new Error(`Data safety violation: Attempted to save ${collectionName} to global scope. Operation aborted.`);
+    }
 
     // Generate a new doc reference to get a unique ID
-    // Generate a new doc reference to get a unique ID
-    const ref = doc(getModuleCollection(collectionName));
+    const ref = doc(colRef);
     const fullPayload = stripUndefined({ ...payload, id: ref.id });
     
     console.log(`[firestoreService] Creating doc in ${collectionName}:`, ref.id, sid ? `(School: ${sid})` : '(Global)');
@@ -479,8 +492,12 @@ async function getDocById<T>(collectionName: string, id: string): Promise<T | nu
 
     const requestPromise = (async () => {
         try {
-            const snap = await getDoc(getDocRef(collectionName, id));
-            if (!snap.exists()) return null;
+            const docRef = getDocRef(collectionName, id);
+            const snap = await getDoc(docRef);
+            if (!snap.exists()) {
+                console.warn(`[firestoreService] Document NOT FOUND: ${collectionName}/${id}. Path: ${docRef.path}`);
+                return null;
+            }
             if (!GLOBAL_COLLECTIONS.has(collectionName)) {
                 const docSchoolId = (snap.data() as any).school_id;
                 const currentSchoolId = requireSchoolId();
@@ -899,7 +916,16 @@ export const admissionService = {
     },
 
     create: async (admission: Partial<Admission>): Promise<Admission> => {
+        // Ensure both school and organization context are resolved before writing.
+        // This prevents the superadmin fallback in getModuleCollection from writing
+        // to the root /admissions collection instead of the school's subcollection.
+        const schoolId = requireSchoolId();
+        // requireOrganizationId() will recover orgId from the cached user profile
+        // if active_organization_id is not yet in sessionStorage.
+        requireOrganizationId();
+
         const newAdmission: Omit<Admission, 'id'> & { id?: string } = {
+            school_id: admission.school_id || schoolId,
             admissionNo: admission.admissionNo || '',
             name: admission.name || '',
             dob: admission.dob || '',

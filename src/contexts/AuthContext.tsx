@@ -10,7 +10,7 @@ import {
     updatePassword,
     fetchSignInMethodsForEmail,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where, deleteDoc, collectionGroup } from 'firebase/firestore';
 
 // =============================================================================
 // AuthContext — Firebase Authentication + Firestore user profiles
@@ -376,16 +376,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     // 5.1 Resolve organization context (organization_id) if missing
                     if (!appUser!.organization_id) {
                         try {
-                            const schoolSnap = await getDoc(doc(db, 'schools', appUser!.school_id));
-                            if (schoolSnap.exists()) {
-                                const sd = schoolSnap.data();
-                                const oid = sd.organizationId || sd.organization_id;
+                            // Schools are stored at organizations/{orgId}/schools/{schoolId} — NOT at root /schools.
+                            // Use collectionGroup to find the school doc regardless of its org path.
+                            const schoolGroupSnap = await getDocs(
+                                query(collectionGroup(db, 'schools'), where('id', '==', appUser!.school_id))
+                            );
+                            if (!schoolGroupSnap.empty) {
+                                const schoolDoc = schoolGroupSnap.docs[0];
+                                const sd = schoolDoc.data();
+                                // Extract orgId from the document data, or from the path: organizations/{orgId}/schools/{schoolId}
+                                const pathSegments = schoolDoc.ref.path.split('/');
+                                const oid = sd.organizationId || sd.organization_id || pathSegments[1];
                                 if (oid) {
                                     appUser!.organization_id = oid;
                                     sessionStorage.setItem('active_organization_id', oid);
                                     await saveUserToFirestore(firebaseUser.uid, appUser!);
                                     console.log('[AuthContext] Resolved organization_id:', oid);
                                 }
+                            } else {
+                                console.warn('[AuthContext] School doc not found in collectionGroup for school_id:', appUser!.school_id);
                             }
                         } catch (err) {
                             console.warn('[AuthContext] organization_id resolution failed:', err);

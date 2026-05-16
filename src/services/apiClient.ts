@@ -30,9 +30,23 @@ apiClient.interceptors.request.use(
             }
         }
 
-        // Attach school_id and organization_id for multi-tenant backend filtering
-        const schoolId = sessionStorage.getItem('active_school_id');
-        const organizationId = sessionStorage.getItem('active_organization_id');
+        // Attach school_id and organization_id for multi-tenant backend filtering.
+        // Try sessionStorage first (most current), then fall back to cached user profile in localStorage.
+        let schoolId = sessionStorage.getItem('active_school_id');
+        let organizationId = sessionStorage.getItem('active_organization_id');
+        
+        if (!schoolId || !organizationId) {
+            const cached = localStorage.getItem('schoolUser');
+            if (cached) {
+                try {
+                    const user = JSON.parse(cached);
+                    if (!schoolId) schoolId = user.school_id;
+                    if (!organizationId) organizationId = user.organization_id || user.org_id;
+                } catch (e) {
+                    console.warn('[apiClient] Failed to parse cached user for header recovery');
+                }
+            }
+        }
         
         if (schoolId) {
             config.headers['x-school-id'] = schoolId;

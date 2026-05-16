@@ -394,7 +394,12 @@ export function TeachingFlowScreen({
         </div>
 
         <div className="p-8">
-          {!isAIEnabled ? (
+          {isAILoading ? (
+            <div className="text-center py-12">
+              <RefreshCw className="w-10 h-10 text-purple-600 animate-spin mx-auto mb-4" />
+              <p className="text-gray-500">Verifying AI permissions...</p>
+            </div>
+          ) : !isAIEnabled ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Lock className="w-8 h-8 text-gray-400" />

@@ -9,7 +9,51 @@ function db() {
 }
 
 function resolveSchoolId(req) {
-	return req.schoolId || req.firebaseUser?.school_id || null;
+    return req.schoolId || req.firebaseUser?.school_id || null;
+}
+
+function resolveOrganizationId(req) {
+    return req.organizationId || req.firebaseUser?.organization_id || null;
+}
+
+/**
+ * Resolves the Firestore CollectionReference for a module.
+ * Uses nested path: /organizations/{oid}/schools/{sid}/{module}
+ * Throws if the path cannot be fully resolved — NEVER writes to root.
+ */
+async function getModuleCollection(req, collectionName) {
+    let schoolId = resolveSchoolId(req);
+    let orgId = resolveOrganizationId(req);
+
+    // Robust fallback: If orgId is missing but schoolId is present,
+    // use a collectionGroup query to find the school doc across all organizations.
+    // (Schools are stored at /organizations/{orgId}/schools/{schoolId}, NOT at root /schools)
+    if (!orgId && schoolId) {
+        try {
+            const schoolSnaps = await db().collectionGroup('schools')
+                .where('id', '==', schoolId)
+                .limit(1)
+                .get();
+            if (!schoolSnaps.empty) {
+                const schoolDoc = schoolSnaps.docs[0];
+                const sd = schoolDoc.data();
+                // Extract orgId from the document path: organizations/{orgId}/schools/{schoolId}
+                const pathSegments = schoolDoc.ref.path.split('/');
+                orgId = sd.organization_id || sd.organizationId || pathSegments[1];
+                console.log(`[schoolAdmin] Resolved orgId '${orgId}' from collectionGroup for school '${schoolId}'`);
+            }
+        } catch (err) {
+            console.warn(`[schoolAdmin] Failed to resolve orgId fallback for ${schoolId}:`, err.message);
+        }
+    }
+
+    if (orgId && schoolId) {
+        return db().collection('organizations').doc(orgId).collection('schools').doc(schoolId).collection(collectionName);
+    }
+
+    // NEVER fall back to root — this causes data to be stored in the wrong location.
+    console.error(`[schoolAdmin] CRITICAL: Cannot resolve nested path for '${collectionName}'. Org: '${orgId}', School: '${schoolId}'`);
+    throw new Error(`Missing organization or school context for '${collectionName}'. Ensure x-organization-id and x-school-id headers are set.`);
 }
 
 // All routes scoped to req.schoolId (from x-school-id header)
@@ -22,8 +66,7 @@ router.get('/students', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Missing school context' });
 		}
 
-		const studentsSnap = await db
-			.collection('students')
+		const studentsSnap = await (await getModuleCollection(req, 'students'))
 			.where('school_id', '==', schoolId)
 			.get();
 
@@ -57,8 +100,7 @@ router.get('/admissions', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Missing school context' });
 		}
 
-		const admissionsSnap = await db
-			.collection('admissions')
+		const admissionsSnap = await (await getModuleCollection(req, 'admissions'))
 			.where('school_id', '==', schoolId)
 			.get();
 
@@ -82,7 +124,8 @@ router.post('/admissions', verifyFirebaseToken, async (req, res) => {
 			return res.status(400).json({ error: 'Admission data with at least a name is required' });
 		}
 
-		const admissionRef = db().collection('admissions').doc();
+		const admissionsColl = await getModuleCollection(req, 'admissions');
+		const admissionRef = admissionsColl.doc();
 		const payload = {
 			...data,
 			id: admissionRef.id,
