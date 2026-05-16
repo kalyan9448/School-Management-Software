@@ -1,10 +1,11 @@
 export interface AcademicYear {
     id: string;
+    school_id: string;
     name: string;
     startDate: string;
     endDate: string;
     status: 'active' | 'upcoming' | 'completed';
-    isCurrent?: boolean;
+    isCurrent: boolean;
 }
 
 export interface ClassSection {

@@ -7,7 +7,7 @@ interface Student {
   name: string;
   rollNo: string;
   admissionNo: string;
-  attendance: 'present' | 'absent' | 'late' | null;
+  attendance: 'present' | 'absent' | 'late' | 'half-day' | 'leave' | null;
 }
 
 interface AttendanceMarkingProps {
@@ -70,7 +70,7 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
           name: s.name,
           rollNo: s.rollNo || String(idx + 1).padStart(2, '0'),
           admissionNo: s.admissionNo || '-',
-          attendance: existing?.status || null,
+          attendance: (existing?.status as any) || null,
         };
       });
 
@@ -128,7 +128,7 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
           studentName: s.name,
           admissionNo: s.admissionNo,
           rollNo: s.rollNo,
-          status: s.attendance,
+          status: s.attendance as any,
           markedAt: new Date().toISOString(),
         }));
 

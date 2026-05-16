@@ -76,6 +76,7 @@ export function StudentInformation({
         if (firestoreYears.length > 0) {
           const years = firestoreYears.map((y: any) => ({
             id: y.id,
+            school_id: y.school_id,
             name: y.name,
             startDate: y.startDate,
             endDate: y.endDate,

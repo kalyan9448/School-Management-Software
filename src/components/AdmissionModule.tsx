@@ -124,6 +124,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
         if (firestoreYears.length > 0) {
           const mappedYears = firestoreYears.map(y => ({
             id: y.id,
+            school_id: y.school_id,
             name: y.name,
             startDate: y.startDate,
             endDate: y.endDate,
