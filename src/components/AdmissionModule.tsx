@@ -137,7 +137,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
           const yearOptions = [{ id: 'all', name: 'All Years' }, ...mappedYears];
           
           // Set default selected year
-          const activeYear = mappedYears.find(y => y.isCurrent);
+          const activeYear = academicYearService.getActiveYear(mappedYears);
           if (activeYear && !selectedYear) {
             setSelectedYear(activeYear.name);
           } else if (!selectedYear) {

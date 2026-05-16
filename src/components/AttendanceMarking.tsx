@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Save, CheckCircle, XCircle, AlertCircle, Calendar, Users, Filter, Loader2 } from 'lucide-react';
-import { studentService, attendanceService } from '../utils/centralDataService';
+import { studentService, attendanceService, academicYearService } from '../utils/centralDataService';
 
 interface Student {
   id: string;
@@ -28,21 +28,32 @@ export function AttendanceMarking({ classInfo, onBack }: AttendanceMarkingProps)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const [students, setStudents] = useState<Student[]>([]);
+  const [activeYear, setActiveYear] = useState<string>('');
 
   // Load real students for this class/section, and pre-fill any existing attendance for the selected date
   const loadStudentsForDate = async (date: string) => {
     setLoading(true);
     try {
-      // 1. Load students for this class/section from Firestore
-      let sourceStudents = await studentService.getByClass(classInfo.class, classInfo.section);
+      // 0. Load active academic year if not already loaded
+      let currentYear = activeYear;
+      if (!currentYear) {
+        const years = await academicYearService.getAll();
+        const active = academicYearService.getActiveYear(years);
+        currentYear = active?.name || '';
+        setActiveYear(currentYear);
+      }
 
-      // Fallback: if no students found by class filter, load all and filter
+      // 1. Load students for this class/section/year from Firestore
+      let sourceStudents = await studentService.getByClass(classInfo.class, classInfo.section, currentYear);
+
+      // Fallback: if no students found by class filter, load all and filter by class and year
       if (sourceStudents.length === 0) {
         const allStudents = await studentService.getAll();
         sourceStudents = allStudents.filter(
           (s: any) =>
             s.class?.toString().trim() === classInfo.class.trim() &&
-            s.section?.toString().trim() === classInfo.section.trim()
+            s.section?.toString().trim() === classInfo.section.trim() &&
+            (currentYear === '' || s.academicYear === currentYear)
         );
       }
 

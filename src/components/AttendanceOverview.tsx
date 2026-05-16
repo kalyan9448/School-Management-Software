@@ -12,7 +12,7 @@ import {
   Loader2,
   TrendingUp
 } from 'lucide-react';
-import { studentService, attendanceService } from '../utils/centralDataService';
+import { studentService, attendanceService, academicYearService } from '../utils/centralDataService';
 import { 
   format, 
   startOfWeek, 
@@ -43,12 +43,22 @@ export function AttendanceOverview({ classInfo, onMarkAttendance, onBack }: Atte
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<any[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [activeYear, setActiveYear] = useState<string>('');
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load students
-      const classStudents = await studentService.getByClass(classInfo.class, classInfo.section);
+      // 0. Load active academic year if not already loaded
+      let currentYear = activeYear;
+      if (!currentYear) {
+        const years = await academicYearService.getAll();
+        const active = academicYearService.getActiveYear(years);
+        currentYear = active?.name || '';
+        setActiveYear(currentYear);
+      }
+
+      // 1. Load students for this class/section/year
+      const classStudents = await studentService.getByClass(classInfo.class, classInfo.section, currentYear);
       setStudents(classStudents);
 
       // Load attendance records based on view type

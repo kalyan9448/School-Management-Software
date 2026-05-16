@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Download, Search, IndianRupee, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
-import { notificationService, feeService, studentService } from '../utils/centralDataService';
+import { notificationService, feeService, studentService, academicYearService } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 // --- Feature 3: CSV Export Utility ---
@@ -58,6 +58,7 @@ interface Payment {
   lateFee: number;
   totalAmount: number;
   status: 'paid' | 'partial' | 'pending';
+  academicYear?: string;
 }
 
 interface StudentLedger {
@@ -82,6 +83,8 @@ export function FeeModule() {
   // Edit/Delete State
   const [editingStructure, setEditingStructure] = useState<FeeStructure | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('');
 
   // Fee Structure State
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
@@ -153,15 +156,39 @@ export function FeeModule() {
       }
     };
     loadData();
+
+    const loadYears = async () => {
+      try {
+        const firestoreYears = await academicYearService.getAll();
+        const years = firestoreYears.map((y: any) => ({
+          id: y.id,
+          name: y.name,
+          isCurrent: y.isCurrent
+        }));
+        setAcademicYears(years);
+        if (!selectedAcademicYear) {
+          const active = academicYearService.getActiveYear(firestoreYears);
+          setSelectedAcademicYear(active?.name || (years.length > 0 ? years[0].name : ''));
+        }
+      } catch (err) {
+        console.error('Failed to load academic years in FeeModule:', err);
+      }
+    };
+    loadYears();
   }, []);
 
   // Dynamically calculate Student Ledgers
   useEffect(() => {
     if (studentsData.length === 0) return;
 
-    const ledgers: StudentLedger[] = studentsData.map((s: any) => {
+    const filteredStudents = selectedAcademicYear === 'all' || !selectedAcademicYear
+      ? studentsData 
+      : studentsData.filter(s => s.academicYear === selectedAcademicYear);
+
+    const ledgers: StudentLedger[] = filteredStudents.map((s: any) => {
       const studentPayments = payments.filter(
-        (p: any) => p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase() || p.studentId === s.id
+        (p: any) => (p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase() || p.studentId === s.id) &&
+                    (selectedAcademicYear === 'all' || !selectedAcademicYear || p.academicYear === selectedAcademicYear)
       );
       const paidAmount = studentPayments.reduce((sum: number, p: any) => sum + (parseFloat(p.totalAmount) || parseFloat(p.amount) || 0), 0);
 
@@ -194,7 +221,7 @@ export function FeeModule() {
       };
     });
     setStudentLedgers(ledgers);
-  }, [studentsData, payments, feeStructures]);
+  }, [studentsData, payments, feeStructures, selectedAcademicYear]);
 
   // Generate Receipt Number
   const generateReceiptNo = () => {
@@ -234,8 +261,9 @@ export function FeeModule() {
       const matchesSection = !studentSearchSection || student.section === studentSearchSection;
 
       return matchesQuery && matchesClass && matchesSection;
-    }).slice(0, 8); // Display top 8 results rapidly
-  }, [studentsData, studentSearchQuery, studentSearchClass, studentSearchSection]);
+    }).filter(s => selectedAcademicYear === 'all' || !selectedAcademicYear || s.academicYear === selectedAcademicYear)
+    .slice(0, 8); // Display top 8 results rapidly
+  }, [studentsData, studentSearchQuery, studentSearchClass, studentSearchSection, selectedAcademicYear]);
 
   const handleSelectStudentForFee = (student: any) => {
     setSelectedStudentForFee(student);
@@ -527,6 +555,7 @@ export function FeeModule() {
       lateFee: parseFloat(collectionForm.lateFee) || 0,
       totalAmount: paidAmount, // `totalAmount` tracks what was actually paid
       status: balance > 0 ? 'partial' : 'paid',
+      academicYear: selectedAcademicYear || undefined,
     };
 
     await feeService.createPayment(newPayment as any);
@@ -670,6 +699,29 @@ export function FeeModule() {
           >
             <Download className="w-4 h-4" /> Export Dues CSV
           </button>
+        </div>
+      </div>
+
+      {/* Academic Year Filter */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center gap-4">
+        <div className="flex items-center gap-2 text-gray-700 font-medium">
+          <Calendar className="w-5 h-5 text-blue-600" />
+          Academic Year:
+        </div>
+        <select
+          value={selectedAcademicYear}
+          onChange={(e) => setSelectedAcademicYear(e.target.value)}
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 font-semibold"
+        >
+          <option value="all">All Academic Years</option>
+          {academicYears.map(year => (
+            <option key={year.id} value={year.name}>
+              {year.name} {year.isCurrent ? '(Active)' : ''}
+            </option>
+          ))}
+        </select>
+        <div className="text-sm text-gray-500 italic">
+          * Filters all ledgers and searches to the selected year
         </div>
       </div>
 

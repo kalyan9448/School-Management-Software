@@ -85,8 +85,8 @@ export function StudentInformation({
           setAcademicYears(years);
 
           if (!selectedAcademicYear) {
-            const active = years.find((y: any) => y.status === 'active')?.name || years[0]?.name || '';
-            setSelectedAcademicYear(active);
+            const activeYear = academicYearService.getActiveYear(years);
+            setSelectedAcademicYear(activeYear?.name || years[0]?.name || '');
           }
         }
       } catch (error) {

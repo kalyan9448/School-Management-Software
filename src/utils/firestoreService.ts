@@ -709,12 +709,17 @@ export const studentService = {
         return getDocById<Student>('students', id);
     },
 
-    getByClass: async (className: string, section: string): Promise<Student[]> => {
-        return fetchCollection<Student>(
-            'students',
+    getByClass: async (className: string, section: string, academicYear?: string): Promise<Student[]> => {
+        const queryParams = [
             where('class', '==', className),
             where('section', '==', section),
-        );
+        ];
+        
+        if (academicYear && academicYear !== 'all' && academicYear !== 'All Years') {
+            queryParams.push(where('academicYear', '==', academicYear));
+        }
+
+        return fetchCollection<Student>('students', ...queryParams);
     },
 
     getByParentId: async (parentId: string): Promise<Student[]> => {
@@ -768,12 +773,7 @@ export const studentService = {
     },
 
     getNextRollNumber: async (className: string, section: string, academicYear: string): Promise<string> => {
-        const students = await fetchCollection<Student>(
-            'students',
-            where('class', '==', className),
-            where('section', '==', section),
-        );
-        const classStudents = students.filter(s => s.academicYear === academicYear);
+        const classStudents = await studentService.getByClass(className, section, academicYear);
         if (classStudents.length === 0) return '001';
         const rollNumbers = classStudents.map(s => parseInt(s.rollNo)).filter(n => !isNaN(n));
         if (rollNumbers.length === 0) return '001';
@@ -787,10 +787,9 @@ export const studentService = {
         academicYear: string,
         excludeIdentifier?: string,
     ): Promise<boolean> => {
-        const students = await studentService.getByClass(className, section);
+        const students = await studentService.getByClass(className, section, academicYear);
         return !students.find(
             s => s.rollNo === rollNo && 
-                 s.academicYear === academicYear && 
                  s.id !== excludeIdentifier && 
                  s.admissionNo !== excludeIdentifier,
         );
@@ -2601,6 +2600,30 @@ export const academicYearService = {
 
     delete: async (id: string): Promise<void> => {
         await deleteDocById('academic_years', id);
+    },
+
+    getActiveYear: (years: AcademicYear[]): AcademicYear | null => {
+        if (!years || years.length === 0) return null;
+        
+        // 1. Check for isCurrent
+        const current = years.find(y => y.isCurrent);
+        if (current) return current;
+        
+        // 2. Check for 'active' status
+        const active = years.find(y => y.status === 'active');
+        if (active) return active;
+        
+        // 3. Check by date (if current date is within startDate and endDate)
+        const now = new Date();
+        const ongoing = years.find(y => {
+            const start = new Date(y.startDate);
+            const end = new Date(y.endDate);
+            return now >= start && now <= end;
+        });
+        if (ongoing) return ongoing;
+        
+        // 4. Default to the latest year by name (e.g. "2024-2025" > "2023-2024")
+        return [...years].sort((a, b) => b.name.localeCompare(a.name))[0];
     },
 };
 
