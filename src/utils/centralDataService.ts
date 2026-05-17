@@ -48,6 +48,7 @@ export interface Student {
   admissionDate: string;
   academicYear?: string;
   selectedFees?: string[];
+  totalFeeSnapshot?: number;
   status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted' | 'active' | 'inactive' | 'transferred';
   photo?: string;
   bloodGroup?: string;

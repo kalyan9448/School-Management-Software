@@ -655,6 +655,8 @@ export function FeeModule() {
       discount: '',
       lateFee: '',
       notes: '',
+      alreadyPaid: '0',
+      balanceDue: '0',
     });
     setShowCollectionForm(false);
   };
