@@ -82,6 +82,7 @@ export type {
     ScheduledReport,
 };
 import { getActiveAcademicYearId } from './classUtils';
+import { apiClient } from '../services/apiClient';
 
 export interface StudentNote {
   id: string;
@@ -820,6 +821,36 @@ export const studentService = {
             }
         }
 
+        // Calculate totalFeeSnapshot
+        let totalFeeSnapshot = undefined;
+        try {
+            const structures = await fetchCollection<FeeStructure>('fee_structures');
+            const studentClass = (student.class || '').replace(/^Class\s+/i, '');
+            const targetYear = student.academicYear || getActiveAcademicYearId();
+            const classStructure = structures.find(s => 
+                s.class?.replace(/^Class\s+/i, '') === studentClass && 
+                s.academicYear === targetYear
+            ) || structures.find(s => s.class?.replace(/^Class\s+/i, '') === studentClass);
+
+            if (classStructure) {
+                const selectedFees = student.selectedFees;
+                const useSelectedOnly = Array.isArray(selectedFees);
+                const legacyFees = ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'];
+                const hasFee = (feeName: string) => useSelectedOnly ? selectedFees.includes(feeName) : legacyFees.includes(feeName);
+
+                totalFeeSnapshot = 
+                    (hasFee('Admission Fee') ? (parseFloat((classStructure as any).admissionFee) || 0) : 0) +
+                    (hasFee('Annual Fee') ? (parseFloat((classStructure as any).annualFee) || 0) : 0) +
+                    (hasFee('Monthly Fee') ? ((parseFloat((classStructure as any).monthlyFee) || 0) * 12) : 0) +
+                    (hasFee('Quarterly Fee') ? ((parseFloat((classStructure as any).quarterlyFee) || 0) * 4) : 0) +
+                    (hasFee('Transport Fee') ? ((parseFloat((classStructure as any).transportFee) || 0) * 12) : 0) +
+                    (hasFee('Daycare Fee') ? ((parseFloat((classStructure as any).daycareFee) || 0) * 12) : 0) +
+                    (hasFee('Activity Fee') ? ((parseFloat((classStructure as any).activityFee) || 0) * 12) : 0);
+            }
+        } catch (err) {
+            console.error('[studentService] Failed to calculate totalFeeSnapshot:', err);
+        }
+
         const newStudent: Omit<Student, 'id'> & { id?: string } = {
             admissionNo: student.admissionNo || `KVS${new Date().getFullYear()}${String(allStudents.length + 1).padStart(3, '0')}`,
             name: student.name || '',
@@ -837,6 +868,8 @@ export const studentService = {
             address: student.address || '',
             admissionDate: student.admissionDate || new Date().toISOString().split('T')[0],
             academicYear: student.academicYear || getActiveAcademicYearId(),
+            selectedFees: student.selectedFees,
+            totalFeeSnapshot,
             status: student.status || 'active',
             photo: student.photo || '',
             bloodGroup: student.bloodGroup || '',
@@ -879,6 +912,39 @@ export const studentService = {
     },
 
     update: async (id: string, updates: Partial<Student>): Promise<Student | null> => {
+        // If updating fees or class without explicitly providing a snapshot, recalculate it
+        if ((updates.selectedFees !== undefined || updates.class !== undefined) && updates.totalFeeSnapshot === undefined) {
+            try {
+                const currentStudent = await getDocById<Student>('students', id);
+                if (currentStudent) {
+                    const studentClass = (updates.class || currentStudent.class || '').replace(/^Class\s+/i, '');
+                    const targetYear = updates.academicYear || currentStudent.academicYear || getActiveAcademicYearId();
+                    const structures = await fetchCollection<FeeStructure>('fee_structures');
+                    const classStructure = structures.find(s => 
+                        s.class?.replace(/^Class\s+/i, '') === studentClass && 
+                        s.academicYear === targetYear
+                    ) || structures.find(s => s.class?.replace(/^Class\s+/i, '') === studentClass);
+
+                    if (classStructure) {
+                        const selectedFees = updates.selectedFees !== undefined ? updates.selectedFees : currentStudent.selectedFees;
+                        const useSelectedOnly = Array.isArray(selectedFees);
+                        const legacyFees = ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'];
+                        const hasFee = (feeName: string) => useSelectedOnly ? selectedFees!.includes(feeName) : legacyFees.includes(feeName);
+
+                        updates.totalFeeSnapshot = 
+                            (hasFee('Admission Fee') ? (parseFloat((classStructure as any).admissionFee) || 0) : 0) +
+                            (hasFee('Annual Fee') ? (parseFloat((classStructure as any).annualFee) || 0) : 0) +
+                            (hasFee('Monthly Fee') ? ((parseFloat((classStructure as any).monthlyFee) || 0) * 12) : 0) +
+                            (hasFee('Quarterly Fee') ? ((parseFloat((classStructure as any).quarterlyFee) || 0) * 4) : 0) +
+                            (hasFee('Transport Fee') ? ((parseFloat((classStructure as any).transportFee) || 0) * 12) : 0) +
+                            (hasFee('Daycare Fee') ? ((parseFloat((classStructure as any).daycareFee) || 0) * 12) : 0) +
+                            (hasFee('Activity Fee') ? ((parseFloat((classStructure as any).activityFee) || 0) * 12) : 0);
+                    }
+                }
+            } catch (err) {
+                console.error('[studentService] Failed to calculate totalFeeSnapshot on update:', err);
+            }
+        }
         await updateDocById('students', id, updates);
         return getDocById<Student>('students', id);
     },
@@ -1791,6 +1857,14 @@ export const feeService = {
     },
 
     getAllStructures: async (): Promise<FeeStructure[]> => {
+        try {
+            const response = await apiClient.get('/api/school-admin/fees/structures');
+            if (response.data && Array.isArray(response.data.feeStructures)) {
+                return response.data.feeStructures;
+            }
+        } catch (err) {
+            console.warn('[feeService] GET /fees/structures failed, falling back to Firestore client read:', err);
+        }
         return fetchCollection<FeeStructure>('fee_structures');
     },
 
@@ -1807,47 +1881,41 @@ export const feeService = {
     },
 
     createStructure: async (structure: any): Promise<any> => {
-        return createDoc<any>('fee_structures', structure);
+        try {
+            const response = await apiClient.post('/api/school-admin/fees/structures', structure);
+            return response.data.feeStructure;
+        } catch (err: any) {
+            console.error('[feeService] Failed to create fee structure via API:', err);
+            throw new Error(err.response?.data?.error || 'Failed to create fee structure via API');
+        }
     },
 
     updateStructure: async (id: string, updates: any): Promise<void> => {
-        await updateDocById('fee_structures', id, updates);
+        try {
+            await apiClient.put(`/api/school-admin/fees/structures/${id}`, updates);
+        } catch (err: any) {
+            console.error('[feeService] Failed to update fee structure via API:', err);
+            throw new Error(err.response?.data?.error || 'Failed to update fee structure via API');
+        }
     },
 
     deleteStructure: async (id: string): Promise<void> => {
-        await deleteDocById('fee_structures', id);
+        try {
+            await apiClient.delete(`/api/school-admin/fees/structures/${id}`);
+        } catch (err: any) {
+            console.error('[feeService] Failed to delete fee structure via API:', err);
+            throw new Error(err.response?.data?.error || 'Failed to delete fee structure via API');
+        }
     },
 
     createPayment: async (payment: Partial<FeePayment>): Promise<FeePayment> => {
-        const allPayments = await feeService.getAllPayments();
-        const newPayment = await createDoc<FeePayment>('fee_payments', {
-            studentId: payment.studentId || '',
-            studentName: payment.studentName || '',
-            admissionNo: payment.admissionNo || '',
-            class: payment.class || '',
-            receiptNo: payment.receiptNo || `REC${new Date().getFullYear()}${String(allPayments.length + 1).padStart(4, '0')}`,
-            amount: payment.amount || 0,
-            paymentDate: payment.paymentDate || new Date().toISOString().split('T')[0],
-            paymentMode: payment.paymentMode || 'cash',
-            transactionId: payment.transactionId,
-            collectedBy: payment.collectedBy || '',
-            components: payment.components || [],
-            academicYear: payment.academicYear || getActiveAcademicYearId(),
-        });
-
-        // Notify parent
-        const student = await studentService.getById(newPayment.studentId);
-        if (student?.parentId) {
-            await notificationService.create({
-                userId: student.parentId,
-                type: 'fee',
-                title: 'Fee Payment Received',
-                message: `Payment of ₹${newPayment.amount} received. Receipt No: ${newPayment.receiptNo}`,
-                date: newPayment.paymentDate,
-            });
+        try {
+            const response = await apiClient.post('/api/school-admin/fees/payments', payment);
+            return response.data.payment;
+        } catch (err: any) {
+            console.error('[feeService] Failed to process payment via secure API:', err);
+            throw new Error(err.response?.data?.error || 'Failed to process payment via secure API');
         }
-
-        return newPayment;
     },
 };
 

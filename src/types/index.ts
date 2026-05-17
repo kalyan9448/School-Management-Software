@@ -114,6 +114,8 @@ export interface Student {
     address: string;
     admissionDate: string;
     academicYear?: string;
+    selectedFees?: string[];
+    totalFeeSnapshot?: number;
     status: 'enquiry' | 'in-process' | 'confirmed' | 'admitted' | 'active' | 'inactive' | 'transferred' | 'graduated';
     photo?: string;
     bloodGroup?: string;

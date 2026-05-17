@@ -41,9 +41,10 @@ export function AdmissionForm({ student, onBack, onSave }: AdmissionFormProps) {
     status: student?.status || (student ? 'admitted' : 'enquiry'),
     admissionDate: student?.admissionDate || new Date().toISOString().split('T')[0],
     academicYear: student?.academicYear || '',
-    selectedFees: student?.selectedFees || ['Admission Fee', 'Annual Fee', 'Monthly Fee'], // Default common fees
+    selectedFees: student 
+      ? (student.selectedFees || ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee']) 
+      : [], // New admissions default to no fees, existing students default to their saved fees or all fees
   });
-
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [selectedFeeStructure, setSelectedFeeStructure] = useState<any>(null);

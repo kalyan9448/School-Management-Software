@@ -59,6 +59,7 @@ interface Payment {
   totalAmount: number;
   status: 'paid' | 'partial' | 'pending';
   academicYear?: string;
+  notes?: string;
 }
 
 interface StudentLedger {
@@ -121,6 +122,8 @@ export function FeeModule() {
     discount: '',
     lateFee: '',
     notes: '',
+    alreadyPaid: '0',
+    balanceDue: '0',
   });
 
   // Smart Search State
@@ -196,15 +199,25 @@ export function FeeModule() {
       const studentClass = s.class?.replace(/^Class\s+/i, '') || '';
       const classStructure = feeStructures.find((str: any) => str.class?.replace(/^Class\s+/i, '') === studentClass);
 
-      const calculatedTotalFee = classStructure
-        ? (parseFloat(classStructure.admissionFee as any) || 0) +
-        (parseFloat(classStructure.annualFee as any) || 0) +
-        ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) +
-        ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) +
-        ((parseFloat(classStructure.transportFee as any) || 0) * 12) +
-        ((parseFloat(classStructure.daycareFee as any) || 0) * 12) +
-        ((parseFloat(classStructure.activityFee as any) || 0) * 12)
-        : (parseFloat(s.totalFee as any) || 0);
+      let calculatedTotalFee = parseFloat(s.totalFee as any) || 0;
+      if (s.totalFeeSnapshot !== undefined && s.totalFeeSnapshot !== null) {
+        calculatedTotalFee = parseFloat(s.totalFeeSnapshot as any) || 0;
+      } else if (classStructure) {
+        // If student has explicit selectedFees, calculate based on that.
+        // Otherwise, fallback to full fee structure for backward compatibility.
+        const useSelectedOnly = Array.isArray(s.selectedFees);
+        const legacyFees = ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'];
+        const hasFee = (feeName: string) => useSelectedOnly ? s.selectedFees.includes(feeName) : legacyFees.includes(feeName);
+
+        calculatedTotalFee = 
+          (hasFee('Admission Fee') ? (parseFloat(classStructure.admissionFee as any) || 0) : 0) +
+          (hasFee('Annual Fee') ? (parseFloat(classStructure.annualFee as any) || 0) : 0) +
+          (hasFee('Monthly Fee') ? ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) : 0) +
+          (hasFee('Quarterly Fee') ? ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) : 0) +
+          (hasFee('Transport Fee') ? ((parseFloat(classStructure.transportFee as any) || 0) * 12) : 0) +
+          (hasFee('Daycare Fee') ? ((parseFloat(classStructure.daycareFee as any) || 0) * 12) : 0) +
+          (hasFee('Activity Fee') ? ((parseFloat(classStructure.activityFee as any) || 0) * 12) : 0);
+      }
 
       return {
         studentName: s.name || s.studentName || '',
@@ -239,8 +252,9 @@ export function FeeModule() {
 
   const calculateBalance = () => {
     const net = calculateNetPayable();
-    const paid = parseFloat(collectionForm.paidAmount) || 0;
-    return Math.max(0, net - paid);
+    const paidNow = parseFloat(collectionForm.paidAmount) || 0;
+    const previouslyPaid = parseFloat(collectionForm.alreadyPaid) || 0;
+    return Math.max(0, net - (previouslyPaid + paidNow));
   };
 
   // Smart Search Logic
@@ -300,7 +314,6 @@ export function FeeModule() {
       amount: '',
     }));
   };
-
   const handleFeeTypeChange = (feeType: string) => {
     let amount = 0;
     if (selectedStudentForFee) {
@@ -318,11 +331,27 @@ export function FeeModule() {
         }
       }
     }
+
+    // Calculate already paid for this specific fee type
+    let alreadyPaid = 0;
+    if (selectedStudentForFee && feeType) {
+      const studentPayments = payments.filter(
+        p => (p.admissionNo?.toLowerCase() === selectedStudentForFee.admissionNo?.toLowerCase() || p.studentId === selectedStudentForFee.id) &&
+             p.feeType === feeType &&
+             (selectedAcademicYear === 'all' || !selectedAcademicYear || p.academicYear === selectedAcademicYear)
+      );
+      alreadyPaid = studentPayments.reduce((sum, p) => sum + (parseFloat(p.totalAmount as any) || parseFloat(p.amount as any) || 0), 0);
+    }
+
+    const balanceDue = Math.max(0, amount - alreadyPaid);
+
     setCollectionForm(prev => ({
       ...prev,
       feeType,
       amount: amount.toString(),
-      paidAmount: amount.toString() // auto-fill paidAmount with full amount by default
+      alreadyPaid: alreadyPaid.toString(),
+      balanceDue: balanceDue.toString(),
+      paidAmount: balanceDue.toString() // Default to remaining balance
     }));
   };
 
@@ -556,6 +585,7 @@ export function FeeModule() {
       totalAmount: paidAmount, // `totalAmount` tracks what was actually paid
       status: balance > 0 ? 'partial' : 'paid',
       academicYear: selectedAcademicYear || undefined,
+      notes: collectionForm.notes,
     };
 
     await feeService.createPayment(newPayment as any);
@@ -1095,13 +1125,13 @@ export function FeeModule() {
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="">Select Fee Type</option>
-                        <option value="Admission Fee">Admission Fee</option>
-                        <option value="Annual Fee">Annual Fee</option>
-                        <option value="Monthly Fee">Monthly Fee</option>
-                        <option value="Quarterly Fee">Quarterly Fee</option>
-                        <option value="Transport Fee">Transport Fee</option>
-                        <option value="Daycare Fee">Daycare Fee</option>
-                        <option value="Activity Fee">Activity Fee</option>
+                        {['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'].map(fee => {
+                          const legacyFees = ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'];
+                          const isApplicable = Array.isArray(selectedStudentForFee?.selectedFees) 
+                            ? selectedStudentForFee.selectedFees.includes(fee) 
+                            : legacyFees.includes(fee);
+                          return isApplicable ? <option key={fee} value={fee}>{fee}</option> : null;
+                        })}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">Select a fee type to auto-fill the base amount.</p>
                     </div>
@@ -1116,6 +1146,20 @@ export function FeeModule() {
                         className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-600 cursor-not-allowed"
                         placeholder="Auto-calculated"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 mb-2 font-medium text-green-700 italic">Already Paid for this Type (₹)</label>
+                      <div className="w-full px-4 py-2 bg-green-50 border border-green-200 rounded-lg text-green-800 font-semibold">
+                        ₹{(parseFloat(collectionForm.alreadyPaid) || 0).toLocaleString()}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 mb-2 font-medium text-orange-700 italic">Balance Due for this Type (₹)</label>
+                      <div className="w-full px-4 py-2 bg-orange-50 border border-orange-200 rounded-lg text-orange-800 font-bold">
+                        ₹{(parseFloat(collectionForm.balanceDue) || 0).toLocaleString()}
+                      </div>
                     </div>
 
                     <div>

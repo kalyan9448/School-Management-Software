@@ -345,13 +345,18 @@ export interface FeePayment {
   admissionNo: string;
   class: string;
   receiptNo: string;
-  amount: number;
+  amount: number; // Base amount
   paymentDate: string;
-  paymentMode: 'cash' | 'card' | 'upi' | 'cheque' | 'online';
+  paymentMode: 'cash' | 'card' | 'upi' | 'cheque' | 'online' | 'bank-transfer';
   transactionId?: string;
   collectedBy: string;
-  components: { name: string; amount: number }[];
+  feeType?: string;
+  discount?: number;
+  lateFee?: number;
+  totalAmount: number; // Actual paid amount
+  status?: 'paid' | 'partial' | 'pending';
   academicYear: string;
+  notes?: string;
 }
 
 export interface Announcement {
