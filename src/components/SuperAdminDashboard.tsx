@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { INDIAN_STATES, STATE_CITY_MAPPING } from '../data/locationData';
-import { schoolService, organizationService, announcementService, statisticsService, planService, ticketService, type SubscriptionPlan, type SupportTicket, type TicketResponse } from '../utils/centralDataService';
+import { schoolService, organizationService, announcementService, statisticsService, planService, ticketService, clearFirestoreCache, type SubscriptionPlan, type SupportTicket, type TicketResponse } from '../utils/centralDataService';
 import {
   Building2,
   Building,
@@ -198,12 +198,24 @@ export function SuperAdminDashboard() {
   const { user, logout } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
 
-  // Sync view state to URL
+  // ── Bidirectional URL ↔ View sync ─────────────────────────────────────────
+  // 1. When currentView changes (e.g. nav button clicked), push the new view
+  //    into the URL so the browser history stays accurate.
   useEffect(() => {
-    if (searchParams.get('view') !== currentView) {
-      setSearchParams({ view: currentView });
+    const urlView = searchParams.get('view');
+    if (urlView !== currentView) {
+      setSearchParams({ view: currentView }, { replace: false });
     }
-  }, [currentView, searchParams, setSearchParams]);
+  }, [currentView]); // intentionally omit searchParams to avoid infinite loop
+
+  // 2. When the URL changes externally (page refresh, browser back/forward),
+  //    update the React view state to match so the correct page is rendered.
+  useEffect(() => {
+    const urlView = (searchParams.get('view') as ViewType) || 'dashboard';
+    if (urlView !== currentView) {
+      setCurrentView(urlView);
+    }
+  }, [searchParams]); // intentionally omit currentView to avoid infinite loop
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
@@ -400,7 +412,13 @@ export function SuperAdminDashboard() {
     if (!user) return;
 
     const loadData = async () => {
-      setDataLoading(true);
+      // Only show loading spinner on first load; subsequent re-fetches (e.g.
+      // triggered by auth token refresh) should update silently so the
+      // already-visible list doesn't flash away.
+      if (schools.length === 0) {
+        clearFirestoreCache();
+        setDataLoading(true);
+      }
       const errors: string[] = [];
 
       // ── Step 1: Ensure Firebase Auth is ready ────────────────────────────
@@ -583,7 +601,19 @@ export function SuperAdminDashboard() {
         return org;
       });
 
-      setSchools(reconciledSchools as any);
+      // ── Deduplicate schools by id ────────────────────────────────────────
+      // collectionGroup (used for superadmin global view) can return the same
+      // school from multiple Firestore paths (nested org path + legacy root path).
+      // The service layer already deduplicates, but we guard here too so the UI
+      // never renders duplicate cards regardless of data-layer edge cases.
+      const seenIds = new Set<string>();
+      const uniqueSchools = reconciledSchools.filter((s: any) => {
+        if (seenIds.has(s.id)) return false;
+        seenIds.add(s.id);
+        return true;
+      });
+
+      setSchools(uniqueSchools as any);
       setOrganizations(repairedOrganizations as any);
       if (firestoreAnnouncements.length > 0) {
         setAnnouncements(firestoreAnnouncements as any);
@@ -6522,7 +6552,7 @@ export function SuperAdminDashboard() {
 
       {/* Main Content */}
       <div className="flex-1 ml-64 overflow-auto">
-        <div className="p-8">{renderContent()}</div>
+        <div key={currentView} className="p-8">{renderContent()}</div>
         {renderSchedulePickerModal()}
         {renderAnnouncementDetailsModal()}
 

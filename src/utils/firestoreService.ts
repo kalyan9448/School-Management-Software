@@ -350,7 +350,17 @@ async function fetchCollection<T>(
                     : collectionGroup(db, collectionName);
                     
                 const snap = await getDocs(q);
-                const data = snap.docs.map(d => ({ id: d.id, ...d.data() }) as T);
+
+                // collectionGroup returns documents from EVERY subcollection named
+                // `collectionName` across the whole database. If a record exists at
+                // both the legacy root path AND the nested org path it will appear
+                // twice. Deduplicate by document id, preferring the nested-path doc
+                // (which Firestore returns last when paths are deeper).
+                const seen = new Map<string, T>();
+                for (const d of snap.docs) {
+                    seen.set(d.id, { id: d.id, ...d.data() } as T);
+                }
+                const data = Array.from(seen.values());
                 
                 queryCache.set(cacheKey, { data, timestamp: Date.now() });
                 return data;

@@ -519,6 +519,7 @@ import {
   StudentNote,
   type SubscriptionPlan as SubscriptionPlanType,
   type TeacherClassCheckin,
+  clearFirestoreCache,
 } from './firestoreService';
 
 export {
@@ -557,6 +558,7 @@ export {
   planService,
   ticketService,
   teacherCheckinService,
+  clearFirestoreCache,
 };
 
 export type { TeacherClassCheckin };
