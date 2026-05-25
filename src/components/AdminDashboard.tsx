@@ -44,12 +44,22 @@ export function AdminDashboard() {
   const [schoolError, setSchoolError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
 
-  // Sync view state to URL
+  // ── Bidirectional URL ↔ View sync ─────────────────────────────────────────
+  // 1. When activeView changes (nav click), push new history entry so
+  //    browser back/forward buttons and swipe gestures work correctly.
   useEffect(() => {
     if (searchParams.get('view') !== activeView) {
-      setSearchParams({ view: activeView });
+      setSearchParams({ view: activeView }, { replace: false });
     }
-  }, [activeView, searchParams, setSearchParams]);
+  }, [activeView]); // intentionally omit searchParams to avoid infinite loop
+
+  // 2. When URL changes externally (browser back/forward), sync view state.
+  useEffect(() => {
+    const urlView = (searchParams.get('view') as ViewType) || 'dashboard';
+    if (urlView !== activeView) {
+      setActiveView(urlView);
+    }
+  }, [searchParams]); // intentionally omit activeView to avoid infinite loop
 
 
   // ── Ensure school_id is in sessionStorage before any module loads ──
@@ -212,7 +222,7 @@ export function AdminDashboard() {
         setStudentViewOptions(options);
       }
       setActiveView(view as ViewType);
-      setSearchParams({ view });
+      // setActiveView triggers the Effect 1 above which pushes to history
     }
   };
 

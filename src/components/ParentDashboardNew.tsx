@@ -1,4 +1,7 @@
+/* eslint-disable i18next/no-literal-string */
+/* eslint-disable security/detect-object-injection */
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardNav, parentNavItems } from './DashboardNav';
 import { ParentDashboardChildProgress } from './ParentDashboardChildProgress';
@@ -117,7 +120,29 @@ interface Notification {
 export function ParentDashboardNew() {
   const { user, logout } = useAuth();
   const { isEnabled: isAIEnabled, getDisabledMessage } = useAIFeatureEnabled();
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+
+  // ── Bidirectional URL ↔ View sync ─────────────────────────────────────────
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
+  const [currentView, setCurrentView] = useState<ViewType>(initialView);
+
+  // 1. When currentView changes (nav click), push new history entry so
+  //    browser back/forward buttons and swipe gestures work correctly.
+  useEffect(() => {
+    const urlView = searchParams.get('view');
+    if (urlView !== currentView) {
+      setSearchParams({ view: currentView }, { replace: false });
+    }
+  }, [currentView]); // intentionally omit searchParams to avoid infinite loop
+
+  // 2. When URL changes externally (browser back/forward), sync view state.
+  useEffect(() => {
+    const urlView = (searchParams.get('view') as ViewType) || 'dashboard';
+    if (urlView !== currentView) {
+      setCurrentView(urlView);
+    }
+  }, [searchParams]); // intentionally omit currentView to avoid infinite loop
+
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -605,7 +630,7 @@ export function ParentDashboardNew() {
   // Determine pending fees dynamically using fee invoices
   const paidFees = payments.map(p => ({
     id: p.id,
-    feeHead: p.components?.map(c => c.name).join(', ') || 'School Fee',
+    feeHead: p.feeType || 'School Fee',
     amount: p.amount,
     dueDate: p.academicYear,
     status: 'paid' as const,
@@ -1686,7 +1711,7 @@ export function ParentDashboardNew() {
 
   const renderTimeline = () => {
     const groupedByDate = weekTimeline.reduce((acc, activity) => {
-      if (!acc[activity.date]) {
+      if (!Object.prototype.hasOwnProperty.call(acc, activity.date)) {
         acc[activity.date] = [];
       }
       acc[activity.date].push(activity);

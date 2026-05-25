@@ -163,11 +163,11 @@ export function SubjectDetailPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/")}
+            onClick={() => navigate(-1)}
             className="text-white hover:bg-white/10 mb-4 -ml-2 rounded-lg"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Back
           </Button>
 
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">

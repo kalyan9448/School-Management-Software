@@ -192,11 +192,11 @@ export function TopicDetailPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/homework")}
+            onClick={() => navigate(-1)}
             className="text-white hover:bg-white/10 mb-4 md:mb-6 -ml-2 rounded-lg"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Homework
+            Back
           </Button>
 
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 relative">

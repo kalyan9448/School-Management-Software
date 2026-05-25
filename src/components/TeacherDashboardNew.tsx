@@ -168,12 +168,22 @@ export function TeacherDashboardNew() {
     return `${year}-${month}-${day}`;
   };
 
-  // Sync view state to URL
+  // ── Bidirectional URL ↔ View sync ─────────────────────────────────────────
+  // 1. When currentView changes (nav click), push new history entry so
+  //    browser back/forward buttons and swipe gestures work correctly.
   useEffect(() => {
     if (searchParams.get('view') !== currentView) {
-      setSearchParams({ view: currentView });
+      setSearchParams({ view: currentView }, { replace: false });
     }
-  }, [currentView, searchParams, setSearchParams]);
+  }, [currentView]); // intentionally omit searchParams to avoid infinite loop
+
+  // 2. When URL changes externally (browser back/forward), sync view state.
+  useEffect(() => {
+    const urlView = (searchParams.get('view') as ViewType) || 'dashboard';
+    if (urlView !== currentView) {
+      setCurrentView(urlView);
+    }
+  }, [searchParams]); // intentionally omit currentView to avoid infinite loop
 
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [attendanceDate, setAttendanceDate] = useState(

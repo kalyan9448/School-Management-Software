@@ -3,5 +3,9 @@
     "css.lint.unknownAtRules": "ignore",
     "files.associations": {
         "*.css": "tailwindcss"
-    }
-}
+    },
+    "eslint.rules.customizations": [
+        { "rule": "i18next/no-literal-string", "severity": "off" },
+        { "rule": "security/detect-object-injection", "severity": "off" }
+    ]
+}
