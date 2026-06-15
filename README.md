@@ -165,11 +165,7 @@ VITE_FIREBASE_PROJECT_ID=school-management-82b09
 VITE_FIREBASE_STORAGE_BUCKET=school-management-82b09.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=848954319432
 VITE_FIREBASE_APP_ID=1:848954319432:web:cb27a99dd0200cf8622e7d
-VITE_FIREBASE_MEASUREMENT_ID=G-1NW48Z2NT8
-
-# Role Access Lists & API Targets
-VITE_SUPERADMIN_EMAILS=superadmin@platform.com,superadmin@gmail.com
-VITE_API_BASE_URL=http://localhost:3001
+VITE_FIREBASE_MEASUREMENT_ID=G-1NW48Z2NT
 ```
 
 #### Local Backend Configuration (`backend/.env`)
