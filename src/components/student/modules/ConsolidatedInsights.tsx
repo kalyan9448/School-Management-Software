@@ -14,8 +14,10 @@ import { Card } from "@/components/student/ui/card";
 import { Progress } from "@/components/student/ui/progress";
 import { Badge } from "@/components/student/ui/badge";
 import { DashboardService } from "@/services/student/studentDataService";
+import { useNavigate } from "react-router";
 
 export function ConsolidatedInsights() {
+  const navigate = useNavigate();
   const [insights, setInsights] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,7 +55,8 @@ export function ConsolidatedInsights() {
       color: "text-amber-500",
       bg: "bg-amber-50",
       trend: "Overall Performance",
-      progress: insights.academicRating
+      progress: insights.academicRating,
+      path: "/analytics"
     },
     {
       label: "Quiz Mastery",
@@ -62,7 +65,8 @@ export function ConsolidatedInsights() {
       color: "text-indigo-500",
       bg: "bg-indigo-50",
       trend: "Quiz Accuracy",
-      progress: insights.quizMastery
+      progress: insights.quizMastery,
+      path: "/student/quizzes"
     },
     {
       label: "Attendance",
@@ -71,7 +75,8 @@ export function ConsolidatedInsights() {
       color: "text-emerald-500",
       bg: "bg-emerald-50",
       trend: "Class Presence",
-      progress: insights.attendance
+      progress: insights.attendance,
+      path: "/analytics"
     },
     {
       label: "HW Completion",
@@ -80,7 +85,8 @@ export function ConsolidatedInsights() {
       color: "text-blue-500",
       bg: "bg-blue-50",
       trend: "Task Progress",
-      progress: insights.homeworkCompletion
+      progress: insights.homeworkCompletion,
+      path: "/homework"
     }
   ];
 
@@ -102,7 +108,10 @@ export function ConsolidatedInsights() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
             >
-              <Card className="p-5 border-none shadow-sm bg-white hover:shadow-md transition-all group overflow-hidden relative">
+              <Card 
+                className="p-5 border-none shadow-sm bg-white hover:shadow-md transition-all group overflow-hidden relative cursor-pointer"
+                onClick={() => navigate(card.path)}
+              >
                 {/* Background glow */}
                 <div className={`absolute -right-4 -top-4 w-16 h-16 ${card.bg} rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity`} />
                 

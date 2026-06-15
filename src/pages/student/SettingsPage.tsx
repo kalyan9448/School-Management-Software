@@ -24,7 +24,7 @@ import { SettingsService } from "@/services/student/studentDataService";
 type SettingItem = 
   | { id: string; label: string; description: string; type: "toggle"; value: boolean; onChange: () => void; icon?: LucideIcon }
   | { id: string; label: string; description: string; type: "select"; value: string; options: { value: string; label: string; icon?: LucideIcon }[]; onChange: (val: string) => void; icon?: LucideIcon }
-  | { id: string; label: string; description: string; type: "action"; icon: LucideIcon };
+  | { id: string; label: string; description: string; type: "action"; icon: LucideIcon; onClick?: () => void };
 
 interface SettingsSection {
   title: string;
@@ -34,6 +34,7 @@ interface SettingsSection {
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const [activeModal, setActiveModal] = useState<"2fa" | "password" | "privacy" | "delete" | "terms" | "privacyPolicy" | null>(null);
   const [settings, setSettings] = useState<any>({
     notifications: { quizReminders: true, assignmentDue: true, weeklyReport: false },
     theme: "light",
@@ -44,6 +45,19 @@ export function SettingsPage() {
   useEffect(() => {
     SettingsService.get().then(setSettings);
   }, []);
+
+  const handleDownloadData = () => {
+    const dataStr = JSON.stringify(settings, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "student_data.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const updateSettings = async (updates: any) => {
     const updated = await SettingsService.update(updates);
@@ -112,9 +126,15 @@ export function SettingsPage() {
           options: [
             { value: "light", label: "Light", icon: Sun },
             { value: "dark", label: "Dark", icon: Moon },
-            { value: "system", label: "System", icon: Monitor },
           ],
-          onChange: (val: string) => updateSettings({ theme: val }),
+          onChange: (val: string) => {
+            updateSettings({ theme: val });
+            if (val === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          },
         },
       ],
     },
@@ -130,9 +150,6 @@ export function SettingsPage() {
           value: settings.language,
           options: [
             { value: "en", label: "English" },
-            { value: "es", label: "Español" },
-            { value: "fr", label: "Français" },
-            { value: "de", label: "Deutsch" },
           ],
           onChange: (val: string) => updateSettings({ language: val }),
         },
@@ -148,6 +165,7 @@ export function SettingsPage() {
           description: "Update your account password",
           type: "action",
           icon: Lock,
+          onClick: () => setActiveModal("password"),
         },
         {
           id: "privacySettings",
@@ -155,6 +173,7 @@ export function SettingsPage() {
           description: "Manage who can see your profile",
           type: "action",
           icon: Eye,
+          onClick: () => setActiveModal("privacy"),
         },
       ],
     },
@@ -237,8 +256,9 @@ export function SettingsPage() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: sectionIndex * 0.1 + itemIndex * 0.05 }}
-                      className="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors"
+                      className={`flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors ${item.type === 'action' ? 'cursor-pointer' : ''}`}
                       style={{ border: '1px solid #E6ECF5' }}
+                      onClick={item.type === "action" ? (item as any).onClick : undefined}
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -293,6 +313,7 @@ export function SettingsPage() {
                             variant="outline"
                             size="sm"
                             style={{ borderColor: '#1F6FEB', color: '#1F6FEB' }}
+                            onClick={item.onClick}
                           >
                             Manage
                           </Button>
@@ -321,6 +342,7 @@ export function SettingsPage() {
                 variant="outline"
                 className="w-full justify-start"
                 style={{ borderColor: '#E6ECF5' }}
+                onClick={handleDownloadData}
               >
                 <Shield className="w-4 h-4 mr-2" style={{ color: '#1F6FEB' }} />
                 Download My Data
@@ -329,6 +351,7 @@ export function SettingsPage() {
                 variant="outline"
                 className="w-full justify-start"
                 style={{ borderColor: '#E6ECF5' }}
+                onClick={() => setActiveModal("2fa")}
               >
                 <Lock className="w-4 h-4 mr-2" style={{ color: '#1F6FEB' }} />
                 Two-Factor Authentication
@@ -336,6 +359,7 @@ export function SettingsPage() {
               <Button
                 variant="outline"
                 className="w-full justify-start text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => setActiveModal("delete")}
               >
                 <span className="mr-2">⚠️</span>
                 Delete Account
@@ -356,17 +380,111 @@ export function SettingsPage() {
               © 2024 Student Portal. All rights reserved.
             </p>
             <div className="flex justify-center gap-4 mt-4">
-              <button className="text-sm" style={{ color: '#1F6FEB' }}>
+              <button className="text-sm" style={{ color: '#1F6FEB' }} onClick={() => setActiveModal("terms")}>
                 Terms of Service
               </button>
               <span style={{ color: '#E6ECF5' }}>|</span>
-              <button className="text-sm" style={{ color: '#1F6FEB' }}>
+              <button className="text-sm" style={{ color: '#1F6FEB' }} onClick={() => setActiveModal("privacyPolicy")}>
                 Privacy Policy
               </button>
             </div>
           </Card>
         </motion.div>
       </div>
+
+      {/* Modals */}
+      {activeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+          >
+            <div className="p-6">
+              {activeModal === "2fa" && (
+                <>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1A1A1A' }}>Two-Factor Authentication</h2>
+                  <p className="text-gray-600 mb-6 text-sm">Scan the QR code with your authenticator app to enable 2FA.</p>
+                  <div className="bg-gray-100 h-40 w-40 mx-auto rounded-lg mb-6 flex items-center justify-center border-2 border-dashed border-gray-300">
+                    <span className="text-gray-400 text-sm">QR Code</span>
+                  </div>
+                  <Button className="w-full" onClick={() => setActiveModal(null)}>Close</Button>
+                </>
+              )}
+              {activeModal === "password" && (
+                <>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1A1A1A' }}>Change Password</h2>
+                  <div className="space-y-4 mb-6">
+                    <input type="password" placeholder="Current Password" className="w-full p-3 border rounded-xl text-sm" style={{ borderColor: '#E6ECF5' }} />
+                    <input type="password" placeholder="New Password" className="w-full p-3 border rounded-xl text-sm" style={{ borderColor: '#E6ECF5' }} />
+                    <input type="password" placeholder="Confirm New Password" className="w-full p-3 border rounded-xl text-sm" style={{ borderColor: '#E6ECF5' }} />
+                  </div>
+                  <div className="flex gap-3">
+                    <Button className="flex-1" onClick={() => setActiveModal(null)}>Save Changes</Button>
+                    <Button variant="outline" className="flex-1" onClick={() => setActiveModal(null)}>Cancel</Button>
+                  </div>
+                </>
+              )}
+              {activeModal === "privacy" && (
+                <>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1A1A1A' }}>Privacy Settings</h2>
+                  <div className="space-y-6 mb-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Profile Visibility</span>
+                      <select className="p-2 border rounded-lg text-sm outline-none" style={{ borderColor: '#E6ECF5' }}>
+                        <option>Public</option>
+                        <option>School Only</option>
+                        <option>Private</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Show Activity Status</span>
+                      <ToggleSwitch checked={true} onChange={() => {}} />
+                    </div>
+                  </div>
+                  <Button className="w-full" onClick={() => setActiveModal(null)}>Done</Button>
+                </>
+              )}
+              {activeModal === "delete" && (
+                <>
+                  <h2 className="text-xl font-bold mb-4 text-red-600">Delete Account</h2>
+                  <p className="text-gray-600 mb-6 text-sm">Are you sure you want to delete your account? This action cannot be undone and you will lose all your data.</p>
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="flex-1 bg-red-600 text-white hover:bg-red-700 border-red-600" onClick={() => setActiveModal(null)}>Confirm Delete</Button>
+                    <Button variant="outline" className="flex-1" onClick={() => setActiveModal(null)}>Cancel</Button>
+                  </div>
+                </>
+              )}
+              {activeModal === "terms" && (
+                <>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1A1A1A' }}>Terms of Service</h2>
+                  <div className="text-sm text-gray-600 mb-6 max-h-60 overflow-y-auto space-y-3 pr-2">
+                    <p>Welcome to the Student Dashboard. By accessing or using our platform, you agree to comply with and be bound by the following terms.</p>
+                    <p><strong>1. Use of Service:</strong> You must use the service responsibly for educational purposes only. Do not share your account credentials with anyone.</p>
+                    <p><strong>2. User Content:</strong> Any materials uploaded must be your own work. Plagiarism or uploading copyrighted materials without permission is strictly prohibited.</p>
+                    <p><strong>3. Termination:</strong> We reserve the right to suspend or terminate accounts that violate these terms or engage in disruptive behavior.</p>
+                    <p>If you have any questions about these terms, please contact the administration.</p>
+                  </div>
+                  <Button className="w-full" onClick={() => setActiveModal(null)}>I Understand</Button>
+                </>
+              )}
+              {activeModal === "privacyPolicy" && (
+                <>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1A1A1A' }}>Privacy Policy</h2>
+                  <div className="text-sm text-gray-600 mb-6 max-h-60 overflow-y-auto space-y-3 pr-2">
+                    <p>Your privacy is important to us. This policy explains how we collect, use, and protect your personal data.</p>
+                    <p><strong>1. Data Collection:</strong> We collect information you provide directly to us, such as when you create an account, update your profile, or submit assignments.</p>
+                    <p><strong>2. Data Usage:</strong> Your data is used exclusively to provide and improve the educational platform, personalize your learning experience, and communicate important updates.</p>
+                    <p><strong>3. Data Protection:</strong> We implement robust security measures to protect your information from unauthorized access or disclosure.</p>
+                    <p><strong>4. Third Parties:</strong> We do not sell your personal data. Data is only shared with trusted third-party services that are essential for platform operations.</p>
+                  </div>
+                  <Button className="w-full" onClick={() => setActiveModal(null)}>Close</Button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

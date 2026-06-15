@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { BottomNav } from "@/components/student/BottomNav";
 import { Home, BookOpen, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
 import logoImage from '../assets/logo.jpeg';
+import { SettingsService } from '@/services/student/studentDataService';
 
 const sidebarNavItems = [
     { path: "/student/dashboard", icon: Home, label: "Dashboard" },
@@ -15,6 +16,18 @@ const sidebarNavItems = [
 
 const DashboardLayout: React.FC = () => {
     const location = useLocation();
+    const [showSupportModal, setShowSupportModal] = useState(false);
+
+    useEffect(() => {
+        SettingsService.get().then(settings => {
+            if (settings?.theme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+    }, []);
+
     const isDashboard = location.pathname.includes('dashboard') || location.pathname === '/';
 
     const pageTitle = isDashboard ? 'Main Dashboard'
@@ -90,6 +103,7 @@ const DashboardLayout: React.FC = () => {
                         <button 
                           className="w-full py-2.5 rounded-xl text-[10px] font-bold transition-colors border border-white/10 text-white"
                           style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }}
+                          onClick={() => setShowSupportModal(true)}
                         >
                             Get Help
                         </button>
@@ -123,6 +137,87 @@ const DashboardLayout: React.FC = () => {
             <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-50">
                 <BottomNav />
             </div>
+
+            {/* ─── Support Modal ─── */}
+            {showSupportModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
+                    >
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-blue-600 text-white">
+                            <div>
+                                <h2 className="text-2xl font-bold">IT Support Desk</h2>
+                                <p className="text-sm opacity-90 mt-1">We're here to help you succeed.</p>
+                            </div>
+                            <button onClick={() => setShowSupportModal(false)} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                                ✕
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 flex-1 overflow-y-auto">
+                            {/* Ticket Form */}
+                            <div className="h-fit">
+                                <h3 className="font-bold text-gray-900 text-base mb-1">Submit a Support Ticket</h3>
+                                <p className="text-xs text-gray-500 mb-4">Our team typically responds within 2-4 hours.</p>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Issue Category</label>
+                                        <select className="w-full border border-gray-200 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white">
+                                            <option>Account Access & Login</option>
+                                            <option>Homework & Assignments</option>
+                                            <option>Schedule & Classes</option>
+                                            <option>Technical / Bug Report</option>
+                                            <option>Other Inquiry</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Urgency</label>
+                                        <div className="flex gap-2">
+                                            <label className="flex-1 text-center border border-gray-200 rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50">
+                                                <input type="radio" name="urgency" className="mr-1" /> Low
+                                            </label>
+                                            <label className="flex-1 text-center border border-gray-200 rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50">
+                                                <input type="radio" name="urgency" className="mr-1" defaultChecked /> Normal
+                                            </label>
+                                            <label className="flex-1 text-center border border-red-200 text-red-700 rounded-lg p-2 text-xs cursor-pointer hover:bg-red-50">
+                                                <input type="radio" name="urgency" className="mr-1" /> High
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
+                                        <textarea 
+                                            className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
+                                            placeholder="Please provide as much detail as possible to help us resolve the issue quickly..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+                            <button 
+                                className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                onClick={() => setShowSupportModal(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                                onClick={() => {
+                                    alert("Support ticket created successfully! Ticket ID: #IT-" + Math.floor(Math.random() * 90000 + 10000) + ". Our team will contact you shortly.");
+                                    setShowSupportModal(false);
+                                }}
+                            >
+                                Submit Ticket
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 };

@@ -3657,6 +3657,16 @@
   --sidebar-ring: oklch(.439 0 0);
 }
 
+html.dark {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html.dark img,
+html.dark video,
+html.dark [style*="background-image"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 html {
   font-size: var(--font-size);
 }

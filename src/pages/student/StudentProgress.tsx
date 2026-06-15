@@ -16,6 +16,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useNavigate } from "react-router";
 import { Card } from "@/components/student/ui/card";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
@@ -99,6 +100,7 @@ const iconMap: Record<string, any> = {
 };
 
 export function ProgressPage() {
+  const navigate = useNavigate();
   const [selectedSubject, setSelectedSubject] = React.useState<string | null>(null);
   const [trendRef, trendDims] = useChartDimensions();
   const [quizRef, quizDims] = useChartDimensions();
@@ -207,7 +209,12 @@ export function ProgressPage() {
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="p-4 bg-white/15 backdrop-blur-md border border-white/20 shadow-xl">
+            <Card 
+              className="p-4 bg-white/15 backdrop-blur-md border border-white/20 shadow-xl cursor-pointer hover:bg-white/20 transition-colors"
+              onClick={() => {
+                document.getElementById('performance-trend')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
               <p className="text-xs text-white/70 font-medium uppercase tracking-wider mb-1">Current Average</p>
               <p className="text-2xl md:text-3xl font-bold">{currentAverage}%</p>
               <div className="flex items-center gap-1 mt-1 font-medium">
@@ -216,7 +223,10 @@ export function ProgressPage() {
               </div>
             </Card>
 
-            <Card className="p-4 bg-white/15 backdrop-blur-md border border-white/20 shadow-xl">
+            <Card 
+              className="p-4 bg-white/15 backdrop-blur-md border border-white/20 shadow-xl cursor-pointer hover:bg-white/20 transition-colors"
+              onClick={() => navigate('/timeline')}
+            >
               <p className="text-xs text-white/70 font-medium uppercase tracking-wider mb-1">Attendance</p>
               <p className="text-2xl md:text-3xl font-bold">{attendanceData.percentage}%</p>
               <div className="flex items-center gap-1 mt-1 font-medium">
@@ -239,7 +249,7 @@ export function ProgressPage() {
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             {/* Performance Trend */}
-            <Card className="p-5 md:p-8 relative">
+            <Card id="performance-trend" className="p-5 md:p-8 relative">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Performance Trend</h3>
               {performanceData.length === 0 && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-3xl">

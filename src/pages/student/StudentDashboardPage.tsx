@@ -210,16 +210,22 @@ export function Dashboard() {
         <div className="md:grid md:grid-cols-2 md:gap-3 space-y-3 md:space-y-0">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
-              <div className="flex items-center justify-between mb-6">
+              <div 
+                className="flex items-center justify-between mb-6 cursor-pointer group"
+                onClick={() => navigate('/schedule')}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-50 rounded-xl">
+                  <div className="p-2 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition-colors">
                     <Calendar className="w-5 h-5 text-blue-600" />
                   </div>
-                  <h2 className="text-xl font-bold text-gray-900">Today's Classes</h2>
+                  <h2 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Today's Classes</h2>
                 </div>
-                <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 px-3 py-1 font-medium">
-                  {allClasses.length}
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 px-3 py-1 font-medium">
+                    {allClasses.length}
+                  </Badge>
+                  <ChevronRight className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
 
               <div className={`flex-1 ${(!allClasses || allClasses.length === 0) ? "flex items-center justify-center py-6" : ""}`}>
@@ -277,16 +283,22 @@ export function Dashboard() {
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
-              <div className="flex items-center justify-between mb-6">
+              <div 
+                className="flex items-center justify-between mb-6 cursor-pointer group"
+                onClick={() => navigate('/homework')}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-50 rounded-xl">
+                  <div className="p-2 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors">
                     <BookOpen className="w-5 h-5 text-indigo-600" />
                   </div>
-                  <h2 className="text-xl font-bold text-gray-900">Homework</h2>
+                  <h2 className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">Homework</h2>
                 </div>
-                <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 px-3 py-1 font-medium">
-                  {hwTopics.length}
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 px-3 py-1 font-medium">
+                    {hwTopics.length}
+                  </Badge>
+                  <ChevronRight className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
 
               <div className={`flex-1 ${(!hwTopics || hwTopics.length === 0) ? "flex items-center justify-center py-6" : ""}`}>
@@ -398,11 +410,15 @@ export function Dashboard() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="p-6 border-none shadow-sm bg-white/80 backdrop-blur-sm h-full flex flex-col">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-50 rounded-xl">
+                <div 
+                  className="flex items-center gap-3 cursor-pointer group"
+                  onClick={() => navigate('/schedule')}
+                >
+                  <div className="p-2 bg-amber-50 rounded-xl group-hover:bg-amber-100 transition-colors">
                     <CheckCircle2 className="w-5 h-5 text-amber-600" />
                   </div>
-                  <h2 className="text-xl font-bold text-gray-900">Pending Tasks</h2>
+                  <h2 className="text-xl font-bold text-gray-900 group-hover:text-amber-600 transition-colors">Pending Tasks</h2>
+                  <ChevronRight className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg">
                   <button

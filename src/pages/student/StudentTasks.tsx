@@ -326,12 +326,16 @@ export function SchedulePage() {
           {/* Quick stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
             {[
-              { label: "Classes", value: weekStats.classes, icon: BookOpen, color: "bg-blue-500/20" },
-              { label: "Homework", value: weekStats.assignments, icon: BookMarked, color: "bg-purple-500/20" },
-              { label: "Exams", value: weekStats.exams, icon: GraduationCap, color: "bg-red-500/20" },
-              { label: "Events", value: weekStats.events, icon: CalendarIcon, color: "bg-violet-500/20" },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className={`${color} rounded-2xl p-4 text-center backdrop-blur-sm border border-white/10`}>
+              { label: "Classes", value: weekStats.classes, icon: BookOpen, color: "bg-blue-500/20", filterValue: "class" as EventTypeFilter },
+              { label: "Homework", value: weekStats.assignments, icon: BookMarked, color: "bg-purple-500/20", filterValue: "homework" as EventTypeFilter },
+              { label: "Exams", value: weekStats.exams, icon: GraduationCap, color: "bg-red-500/20", filterValue: "exam" as EventTypeFilter },
+              { label: "Events", value: weekStats.events, icon: CalendarIcon, color: "bg-violet-500/20", filterValue: "event" as EventTypeFilter },
+            ].map(({ label, value, icon: Icon, color, filterValue }) => (
+              <div 
+                key={label} 
+                className={`${color} rounded-2xl p-4 text-center backdrop-blur-sm transition-all cursor-pointer ${activeFilter === filterValue ? "ring-2 ring-white/50 bg-white/20" : "border border-white/10 hover:bg-white/10"}`}
+                onClick={() => setActiveFilter(activeFilter === filterValue ? "all" : filterValue)}
+              >
                 <Icon className="w-4 h-4 mx-auto mb-1 text-white/80" />
                 <div className="text-xl font-black text-white">{value}</div>
                 <div className="text-[10px] uppercase font-bold tracking-wider text-white/70">{label}</div>

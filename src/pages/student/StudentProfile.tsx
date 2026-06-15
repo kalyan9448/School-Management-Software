@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import {
   User,
@@ -37,6 +37,24 @@ export function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [showAddSkill, setShowAddSkill] = useState(false);
   const [newSkill, setNewSkill] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+        setStudentData({ ...studentData, avatar: base64String });
+        try {
+          await StudentProfile.update({ avatar: base64String });
+        } catch (err) {
+          console.error("Failed to update avatar:", err);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Load skills from Firestore
   const [skills, setSkills] = useState<string[]>(["Mathematics", "Physics"]);
@@ -208,50 +226,7 @@ export function ProfilePage() {
 
   const specializedClasses = getSpecializedClasses();
 
-  // AI Recommendations based on skills and performance
-  const getAIRecommendations = () => {
-    const recommendations = [];
 
-    if (skills.includes("Computer Science")) {
-      recommendations.push({
-        type: "Course",
-        title: "Advanced Algorithms & Competitive Programming",
-        reason: "Based on your strong performance in Computer Science",
-        icon: "🎯",
-      });
-    }
-
-    if (skills.includes("Mathematics") && skills.includes("Computer Science")) {
-      recommendations.push({
-        type: "Skill Path",
-        title: "Data Science Career Track",
-        reason: "Perfect combination of Math and CS skills",
-        icon: "📊",
-      });
-    }
-
-    if (skills.includes("Artificial Intelligence")) {
-      recommendations.push({
-        type: "Project",
-        title: "Build Your Own AI Chatbot",
-        reason: "Hands-on AI project matching your interests",
-        icon: "🤖",
-      });
-    }
-
-    if (skills.length >= 3) {
-      recommendations.push({
-        type: "Challenge",
-        title: "Interdisciplinary Research Project",
-        reason: "Combine multiple skills in a real-world application",
-        icon: "🔬",
-      });
-    }
-
-    return recommendations;
-  };
-
-  const aiRecommendations = getAIRecommendations();
 
   const profileStats = [
     { label: "Courses Enrolled", value: studentData.enrolledCoursesCount || 0, icon: BookOpen, color: "#1F6FEB" },
@@ -259,11 +234,11 @@ export function ProfilePage() {
 
 
   const personalInfo = [
-    { label: "Full Name", value: studentData.name || user?.name || "Not Provided", icon: User },
-    { label: "Email", value: studentData.email || user?.email || "Not Provided", icon: Mail },
-    { label: "Phone", value: studentData.phone || "Not Provided", icon: Phone },
-    { label: "Location", value: studentData.address || "Not Provided", icon: MapPin },
-    { label: "Joined", value: studentData.joinedDate || "Not Provided", icon: Calendar },
+    { id: "name", label: "Full Name", value: studentData.name || user?.name || "", icon: User, editable: true },
+    { id: "email", label: "Email", value: studentData.email || user?.email || "", icon: Mail, editable: true },
+    { id: "phone", label: "Phone", value: studentData.phone || "", icon: Phone, editable: true },
+    { id: "address", label: "Location", value: studentData.address || "", icon: MapPin, editable: true },
+    { id: "joinedDate", label: "Joined", value: studentData.joinedDate || "Not Provided", icon: Calendar, editable: false },
   ];
 
 
@@ -314,22 +289,63 @@ export function ProfilePage() {
                     </AvatarFallback>
                   </Avatar>
                   <button
-                    className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg border-2"
+                    className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg border-2 cursor-pointer"
                     style={{ borderColor: '#1F6FEB', color: '#1F6FEB' }}
+                    onClick={() => fileInputRef.current?.click()}
                   >
                     <Camera className="w-4 h-4" />
                   </button>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={fileInputRef} 
+                    onChange={handleImageUpload} 
+                  />
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  style={{ borderColor: '#1F6FEB', color: '#1F6FEB' }}
-                  onClick={() => setIsEditing(!isEditing)}
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  {isEditing ? "Cancel" : "Edit Profile"}
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  {isEditing ? (
+                    <>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        style={{ background: '#1F6FEB', color: '#fff' }}
+                        onClick={async () => {
+                          setIsSavingProfile(true);
+                          try {
+                            await StudentProfile.update(studentData);
+                            setIsEditing(false);
+                          } catch (err) {
+                            console.error("Failed to save profile:", err);
+                          } finally {
+                            setIsSavingProfile(false);
+                          }
+                        }}
+                        disabled={isSavingProfile}
+                      >
+                        {isSavingProfile ? "Saving..." : "Save"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        style={{ borderColor: '#1F6FEB', color: '#1F6FEB' }}
+                        onClick={() => setIsEditing(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      style={{ borderColor: '#1F6FEB', color: '#1F6FEB' }}
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Profile
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Profile Info */}
@@ -385,13 +401,18 @@ export function ProfilePage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-xs" style={{ color: '#7A869A' }}>{info.label}</p>
-                      <p className="font-medium" style={{ color: '#1A1A1A' }}>{info.value}</p>
+                      {isEditing && info.editable ? (
+                        <input
+                          type="text"
+                          value={info.value}
+                          onChange={(e) => setStudentData({ ...studentData, [info.id]: e.target.value })}
+                          className="w-full mt-1 p-2 text-sm border rounded outline-none focus:border-blue-500"
+                          style={{ borderColor: '#E6ECF5' }}
+                        />
+                      ) : (
+                        <p className="font-medium" style={{ color: '#1A1A1A' }}>{info.value || "Not Provided"}</p>
+                      )}
                     </div>
-                    {isEditing && (
-                      <Button variant="ghost" size="sm">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    )}
                   </div>
                 );
               })}
@@ -672,70 +693,7 @@ export function ProfilePage() {
           </Card>
         </motion.div>
 
-        {/* AI Recommendations Section */}
-        {aiRecommendations.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <Card className="p-6 bg-gradient-to-br from-blue-50 to-white border-blue-100">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-500 rounded-lg">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold" style={{ color: '#1A1A1A' }}>
-                    AI-Powered Recommendations
-                  </h3>
-                  <p className="text-sm" style={{ color: '#7A869A' }}>
-                    Personalized content based on your skills and performance
-                  </p>
-                </div>
-              </div>
 
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {aiRecommendations.map((rec, index) => (
-                  <motion.div
-                    key={rec.title}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.6 + index * 0.1 }}
-                    className="p-4 bg-white rounded-lg border hover:shadow-md transition-all cursor-pointer"
-                    style={{ borderColor: '#E6ECF5' }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="text-3xl">{rec.icon}</div>
-                      <div className="flex-1">
-                        <Badge
-                          className="mb-2 text-xs"
-                          style={{ background: '#CFE8FF', color: '#1F6FEB' }}
-                        >
-                          {rec.type}
-                        </Badge>
-                        <h4 className="font-bold text-sm mb-2" style={{ color: '#1A1A1A' }}>
-                          {rec.title}
-                        </h4>
-                        <p className="text-xs" style={{ color: '#7A869A' }}>
-                          {rec.reason}
-                        </p>
-                        <Button
-                          size="sm"
-                          className="mt-3 text-xs"
-                          variant="outline"
-                          style={{ borderColor: '#1F6FEB', color: '#1F6FEB' }}
-                        >
-                          <Lightbulb className="w-3 h-3 mr-2" />
-                          Explore
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </Card>
-          </motion.div>
-        )}
 
         {/* Specialized Classes Section */}
         {specializedClasses.length > 0 && (

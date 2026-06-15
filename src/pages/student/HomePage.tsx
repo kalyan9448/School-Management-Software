@@ -47,6 +47,7 @@ const statusConfig = {
 export function HomePage() {
   const navigate = useNavigate();
   const [topics, setTopics] = useState<HomeworkTopic[]>([]);
+  const [filterStatus, setFilterStatus] = useState<"all" | "completed" | "in-progress" | "pending">("all");
 
   useEffect(() => {
     HomeworkService.getAll().then(setTopics);
@@ -75,21 +76,30 @@ export function HomePage() {
 
           {/* Stats Summary */}
           <div className="grid grid-cols-3 gap-3 mt-6">
-            <Card className="p-4 bg-white/10 backdrop-blur-sm border-white/20">
+            <Card 
+              className={`p-4 bg-white/10 backdrop-blur-sm cursor-pointer transition-all ${filterStatus === "completed" ? "border-yellow-300 ring-2 ring-yellow-300/50" : "border-white/20 hover:bg-white/20"}`}
+              onClick={() => setFilterStatus(filterStatus === "completed" ? "all" : "completed")}
+            >
               <div className="flex flex-col items-center">
                 <CheckCircle2 className="w-6 h-6 text-yellow-300 mb-1" />
                 <p className="text-2xl font-bold">{topics.filter(t => t.status === "completed").length}</p>
                 <p className="text-xs text-white/80">Completed</p>
               </div>
             </Card>
-            <Card className="p-4 bg-white/10 backdrop-blur-sm border-white/20">
+            <Card 
+              className={`p-4 bg-white/10 backdrop-blur-sm cursor-pointer transition-all ${filterStatus === "in-progress" ? "border-blue-300 ring-2 ring-blue-300/50" : "border-white/20 hover:bg-white/20"}`}
+              onClick={() => setFilterStatus(filterStatus === "in-progress" ? "all" : "in-progress")}
+            >
               <div className="flex flex-col items-center">
                 <Clock className="w-6 h-6 text-blue-300 mb-1" />
                 <p className="text-2xl font-bold">{topics.filter(t => t.status === "in-progress").length}</p>
                 <p className="text-xs text-white/80">In Progress</p>
               </div>
             </Card>
-            <Card className="p-4 bg-white/10 backdrop-blur-sm border-white/20">
+            <Card 
+              className={`p-4 bg-white/10 backdrop-blur-sm cursor-pointer transition-all ${filterStatus === "pending" ? "border-green-300 ring-2 ring-green-300/50" : "border-white/20 hover:bg-white/20"}`}
+              onClick={() => setFilterStatus(filterStatus === "pending" ? "all" : "pending")}
+            >
               <div className="flex flex-col items-center">
                 <Target className="w-6 h-6 text-green-300 mb-1" />
                 <p className="text-2xl font-bold">{topics.filter(t => t.status === "pending").length}</p>
@@ -102,23 +112,32 @@ export function HomePage() {
 
       {/* Topic Cards */}
       <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6">
-        {topics.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center py-20 text-center"
-          >
-            <div className="bg-[#EEF4FF] p-6 rounded-full mb-5">
-              <BookOpen className="w-12 h-12 text-[#1F6FEB]" />
-            </div>
-            <h2 className="text-xl font-bold text-[#1A1A1A] mb-2">No homeworks today</h2>
-            <p className="text-[#7A869A] text-sm max-w-xs">
-              You're all caught up! Check back later for new assignments from your teachers.
-            </p>
-          </motion.div>
-        ) : (
-        <div className="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 md:gap-4 md:space-y-0">
-          {topics.map((topic, index) => {
+        {(() => {
+          const filteredTopics = filterStatus === "all" ? topics : topics.filter(t => t.status === filterStatus);
+          
+          if (filteredTopics.length === 0) {
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center py-20 text-center"
+              >
+                <div className="bg-[#EEF4FF] p-6 rounded-full mb-5">
+                  <BookOpen className="w-12 h-12 text-[#1F6FEB]" />
+                </div>
+                <h2 className="text-xl font-bold text-[#1A1A1A] mb-2">
+                  {filterStatus === "all" ? "No homeworks today" : `No ${filterStatus.replace("-", " ")} homeworks`}
+                </h2>
+                <p className="text-[#7A869A] text-sm max-w-xs">
+                  {filterStatus === "all" ? "You're all caught up! Check back later for new assignments from your teachers." : "Try changing the filter to see other assignments."}
+                </p>
+              </motion.div>
+            );
+          }
+
+          return (
+            <div className="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 md:gap-4 md:space-y-0">
+              {filteredTopics.map((topic, index) => {
             const Icon = iconMap[topic.icon];
             const statusInfo = statusConfig[topic.status];
             const StatusIcon = statusInfo.icon;
@@ -238,7 +257,8 @@ export function HomePage() {
             );
           })}
         </div>
-        )}
+      );
+    })()}
       </div>
     </div>
   );
