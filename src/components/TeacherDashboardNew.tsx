@@ -84,7 +84,10 @@ type ViewType =
   | 'marks-upload'
   | 'notifications'
   | 'calendar'
-  | 'chat';
+  | 'chat'
+  | 'learning-objectives'
+  | 'student-achievements';
+
 
 interface ClassInfo {
   id: string;
@@ -234,6 +237,17 @@ export function TeacherDashboardNew() {
   const [noteContent, setNoteContent] = useState<string>('');
   const [recentNotes, setRecentNotes] = useState<StudentNote[]>([]);
   const [isSavingNote, setIsSavingNote] = useState(false);
+
+  // Student Achievements state
+  const [selectedAchievementStudentId, setSelectedAchievementStudentId] = useState<string>('');
+  const [achievementTitle, setAchievementTitle] = useState<string>('Star Performer');
+  const [achievementNoteContent, setAchievementNoteContent] = useState<string>('');
+  const [isSavingAchievement, setIsSavingAchievement] = useState(false);
+
+  // Learning Objectives state
+  const [objectiveClassFilter, setObjectiveClassFilter] = useState<string>('');
+  const [objectiveSubjectFilter, setObjectiveSubjectFilter] = useState<string>('');
+
   const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
   const [isHolidayToday, setIsHolidayToday] = useState(false);
   const [holidayInfo, setHolidayInfo] = useState<CalendarEvent | null>(null);
@@ -1290,14 +1304,33 @@ export function TeacherDashboardNew() {
                         <BarChart3 className="w-5 h-5 text-green-600" />
                         <span className="text-gray-700">View Performance</span>
                     </button>
-                    <button className="flex items-center gap-3 p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200">
-                        <Target className="w-5 h-5 text-purple-600" />
-                        <span className="text-gray-700">Learning Objectives</span>
+                    <button 
+                        onClick={() => {
+                          // Default filter values if not set yet
+                          if (!objectiveClassFilter && myClasses.length > 0) {
+                            setObjectiveClassFilter(`${myClasses[0].class}-${myClasses[0].section}`);
+                            setObjectiveSubjectFilter(myClasses[0].subject);
+                          }
+                          setCurrentView('learning-objectives');
+                        }}
+                        className="flex items-center gap-3 p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200 text-left w-full"
+                    >
+                        <Target className="w-5 h-5 text-purple-600 shrink-0" />
+                        <span className="text-gray-700 font-bold">Learning Objectives</span>
                     </button>
-                    <button className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200">
-                        <Award className="w-5 h-5 text-blue-600" />
-                        <span className="text-gray-700">Student Achievements</span>
+                    <button 
+                        onClick={() => {
+                          if (!selectedAchievementStudentId && allStudents.length > 0) {
+                            setSelectedAchievementStudentId(allStudents[0].id);
+                          }
+                          setCurrentView('student-achievements');
+                        }}
+                        className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 text-left w-full"
+                    >
+                        <Award className="w-5 h-5 text-blue-600 shrink-0" />
+                        <span className="text-gray-700 font-bold">Student Achievements</span>
                     </button>
+
                 </div>
             </div>
           </div>
@@ -2306,7 +2339,7 @@ export function TeacherDashboardNew() {
               Select the learning objectives covered in this lesson
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {getActiveObjectives().map((objective, index) => {
+              {Array.from(new Set([...getActiveObjectives(), ...lessonForm.objectives])).map((objective, index) => {
                 const isRecommended = lessonForm.topic && objective.toLowerCase().includes(lessonForm.topic.toLowerCase().split(' ')[0]);
                 return (
                   <label
@@ -2960,7 +2993,475 @@ export function TeacherDashboardNew() {
     );
   };
 
+  const renderStudentAchievements = () => {
+    // 1. Get filtered students
+    const filteredStudents = allStudents.filter(s => {
+      if (!objectiveClassFilter) return true;
+      const [cls, sec] = objectiveClassFilter.split('-');
+      return s.class === cls && s.section === sec;
+    });
+
+    // 2. Filter achievements for the selected student
+    const selectedStudent = allStudents.find(s => s.id === selectedAchievementStudentId);
+    const studentAchievements = recentNotes.filter(
+      note => note.studentId === selectedAchievementStudentId && note.type === 'Achievement'
+    );
+
+    const predefinedBadges = [
+      { title: 'Star Performer', desc: 'Consistently displays excellence and dedication in all class activities.', icon: Award, color: 'from-amber-500 to-yellow-600' },
+      { title: 'Math Whiz', desc: 'Demonstrates exceptional problem-solving and logical reasoning skills in Mathematics.', icon: Target, color: 'from-blue-500 to-indigo-600' },
+      { title: 'Creative Thinker', desc: 'Brings innovative ideas, imaginative writing, or artistic brilliance to projects.', icon: Sparkles, color: 'from-purple-500 to-pink-600' },
+      { title: 'Helping Hand', desc: 'Shows kindness, empathy, and is always ready to support peers in need.', icon: Users, color: 'from-emerald-500 to-teal-600' },
+      { title: 'Most Improved', desc: 'Exhibits significant progress, growth mindset, and determination to learn.', icon: TrendingUp, color: 'from-orange-500 to-red-600' },
+    ];
+
+    const handleSaveAchievement = async () => {
+      if (!selectedAchievementStudentId || !achievementNoteContent || !achievementTitle) {
+        alert('Please fill in all fields.');
+        return;
+      }
+
+      setIsSavingAchievement(true);
+      try {
+        const student = allStudents.find(s => s.id === selectedAchievementStudentId);
+        if (!student) throw new Error('Student not found');
+
+        const contentString = `${achievementTitle}: ${achievementNoteContent}`;
+        const newNote = await studentNoteService.create({
+          studentId: selectedAchievementStudentId,
+          studentName: student.name,
+          teacherId: user?.email || '',
+          teacherName: user?.name || '',
+          type: 'Achievement',
+          content: contentString,
+          date: new Date().toISOString(),
+        });
+
+        // Send notification to parent
+        const parentUser = await studentService.getParentByStudentId(selectedAchievementStudentId);
+        if (parentUser && parentUser.email) {
+          await notificationService.create({
+            userId: parentUser.email,
+            type: 'announcement',
+            title: `🏆 Achievement Awarded: ${achievementTitle} for ${student.name}`,
+            message: `${user?.name} has awarded the "${achievementTitle}" achievement to ${student.name}: ${achievementNoteContent}`,
+            date: new Date().toISOString(),
+            read: false,
+          });
+        }
+
+        setRecentNotes(prev => [newNote, ...prev]);
+        setAchievementNoteContent('');
+        alert('🏆 Achievement awarded and parent notified!');
+      } catch (error) {
+        console.error('Error saving achievement:', error);
+        alert('❌ Failed to award achievement.');
+      } finally {
+        setIsSavingAchievement(false);
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-gray-900 mb-1">🏆 Student Achievements Board</h2>
+            <p className="text-gray-600">Award badges and celebrate student accomplishments.</p>
+          </div>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-bold text-sm"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Panel: Class & Student Selector */}
+          <div className="bg-white rounded-xl shadow-md p-6 space-y-4">
+            <h3 className="text-gray-900 text-lg font-bold">Select Student</h3>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Class</label>
+              <select
+                value={objectiveClassFilter}
+                onChange={(e) => {
+                  setObjectiveClassFilter(e.target.value);
+                  const filtered = allStudents.filter(s => {
+                    const [cls, sec] = e.target.value.split('-');
+                    return s.class === cls && s.section === sec;
+                  });
+                  if (filtered.length > 0) {
+                    setSelectedAchievementStudentId(filtered[0].id);
+                  } else {
+                    setSelectedAchievementStudentId('');
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">All Classes</option>
+                {getAvailableClasses().map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-[350px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              {filteredStudents.sort((a,b) => a.name.localeCompare(b.name)).map(student => (
+                <button
+                  key={student.id}
+                  onClick={() => setSelectedAchievementStudentId(student.id)}
+                  className={`w-full text-left p-3 rounded-lg border-2 transition-all flex items-center justify-between ${
+                    selectedAchievementStudentId === student.id
+                      ? 'border-purple-600 bg-purple-50 text-purple-900 font-bold'
+                      : 'border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 text-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${
+                      selectedAchievementStudentId === student.id ? 'bg-purple-600' : 'bg-gray-400'
+                    }`}>
+                      {student.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm leading-tight font-semibold">{student.name}</p>
+                      <p className="text-[10px] text-gray-500 font-medium">Roll No: {student.rollNo}</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-purple-500" />
+                </button>
+              ))}
+              {filteredStudents.length === 0 && (
+                <p className="text-center py-8 text-gray-400 text-sm">No students found.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Middle/Right Panels */}
+          <div className="lg:col-span-2 space-y-6">
+            {selectedStudent ? (
+              <>
+                {/* Achievements List */}
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h3 className="text-gray-900 mb-4 flex items-center gap-2">
+                    🏆 Achievements for <span className="text-purple-600 font-bold">{selectedStudent.name}</span>
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {studentAchievements.length > 0 ? (
+                      studentAchievements.map((ach) => {
+                        // Attempt to extract title and body
+                        const match = ach.content.match(/^([^:]+):\s*(.*)$/);
+                        const title = match ? match[1] : 'Achievement';
+                        const desc = match ? match[2] : ach.content;
+                        const badgeInfo = predefinedBadges.find(b => b.title === title) || predefinedBadges[0];
+                        const BadgeIcon = badgeInfo.icon;
+
+                        return (
+                          <div key={ach.id} className="p-4 bg-gradient-to-br from-amber-50/50 to-orange-50/30 rounded-xl border border-amber-200/60 shadow-sm flex gap-4 transition-all hover:shadow-md">
+                            <div className={`w-12 h-12 rounded-xl bg-gradient-to-tr ${badgeInfo.color} flex items-center justify-center flex-shrink-0 text-white shadow-md`}>
+                              <BadgeIcon className="w-6 h-6" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-gray-900 truncate">{title}</h4>
+                              <p className="text-sm text-gray-700 leading-normal mt-1 line-clamp-3 font-medium">{desc}</p>
+                              <div className="flex items-center justify-between text-[10px] text-gray-500 mt-3 pt-2 border-t border-amber-100/50 font-semibold">
+                                <span>{new Date(ach.date).toLocaleDateString()}</span>
+                                <span>By {ach.teacherName}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-full py-12 text-center bg-gray-50/50 rounded-xl border-2 border-dashed border-gray-200">
+                        <Award className="w-12 h-12 mx-auto text-gray-300 mb-2" />
+                        <h4 className="font-bold text-gray-900 mb-1">No Achievements Yet</h4>
+                        <p className="text-gray-500 text-sm max-w-xs mx-auto">This student hasn't been awarded any achievements. Use the form below to reward their performance!</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Award Achievement Form */}
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h3 className="text-gray-900 mb-4 font-bold">Award a New Achievement</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Select Badge Type</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                        {predefinedBadges.map((badge) => {
+                          const IconComponent = badge.icon;
+                          return (
+                            <button
+                              key={badge.title}
+                              type="button"
+                              onClick={() => setAchievementTitle(badge.title)}
+                              className={`p-3 rounded-xl border-2 flex flex-col items-center text-center transition-all gap-1.5 ${
+                                achievementTitle === badge.title
+                                  ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200'
+                                  : 'border-gray-100 hover:border-amber-200 hover:bg-amber-50/10'
+                              }`}
+                            >
+                              <div className={`w-10 h-10 rounded-lg bg-gradient-to-tr ${badge.color} flex items-center justify-center text-white`}>
+                                <IconComponent className="w-5 h-5" />
+                              </div>
+                              <span className="text-[10px] font-bold text-gray-700 leading-tight">{badge.title}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description / Achievement Note *</label>
+                      <textarea
+                        rows={3}
+                        value={achievementNoteContent}
+                        onChange={(e) => setAchievementNoteContent(e.target.value)}
+                        placeholder={`Describe why ${selectedStudent.name} is earning the ${achievementTitle} badge...`}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm bg-white"
+                      ></textarea>
+                    </div>
+
+                    <button
+                      onClick={handleSaveAchievement}
+                      disabled={isSavingAchievement || !achievementNoteContent}
+                      className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-white rounded-xl font-bold flex items-center gap-2 shadow-lg disabled:opacity-50 transition-all active:scale-95 text-sm"
+                    >
+                      {isSavingAchievement ? (
+                        <>
+                          <Clock className="w-4 h-4 animate-spin" />
+                          Awarding...
+                        </>
+                      ) : (
+                        <>
+                          <Award className="w-5 h-5" />
+                          Award Badge & Notify Parent
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-xl shadow-md p-12 text-center">
+                <Award className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                <h3 className="text-gray-900 font-bold mb-2">No Student Selected</h3>
+                <p className="text-gray-500 text-sm">Please select a student from the list to manage and view their achievements.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderLearningObjectives = () => {
+    // 1. Resolve selected class/section details
+    const activeClass = myClasses.find(c => `${c.class}-${c.section}` === objectiveClassFilter) || myClasses[0];
+    const subjectsForClass = myClasses
+      .filter(c => `${c.class}-${c.section}` === objectiveClassFilter)
+      .map(c => c.subject);
+    const uniqueSubjects = [...new Set(subjectsForClass)];
+
+    // If active subject filter doesn't apply to active class, reset it
+    const activeSubject = uniqueSubjects.includes(objectiveSubjectFilter)
+      ? objectiveSubjectFilter
+      : uniqueSubjects[0] || '';
+
+    // Get predefined objectives for the subject
+    const predefinedList = subjectSpecificObjectives[activeSubject] || subjectSpecificObjectives['Default'];
+
+    // Get lessons logged for this class and subject
+    const classLessons = lessonLogs.filter(l => {
+      if (!activeClass) return false;
+      return l.class === activeClass.class && 
+             l.section === activeClass.section && 
+             l.subject === activeSubject;
+    });
+
+    // Extract custom objectives logged in those lessons that are not predefined
+    const customList = [...new Set(classLessons.flatMap(l => l.objectives || []))]
+      .filter(obj => !predefinedList.includes(obj));
+
+    const allObjectives = [...predefinedList, ...customList];
+
+    // Compute stats
+    const coveredObjectives = allObjectives.filter(obj => 
+      classLessons.some(l => l.objectives?.includes(obj))
+    );
+    const pendingObjectives = allObjectives.filter(obj => !coveredObjectives.includes(obj));
+
+    const totalCount = allObjectives.length;
+    const coveredCount = coveredObjectives.length;
+    const progressPercentage = totalCount > 0 ? Math.round((coveredCount / totalCount) * 100) : 0;
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-gray-900 mb-1">🎯 Learning Objectives Tracker</h2>
+            <p className="text-gray-600">Track and manage curricular objectives coverage for your classes.</p>
+          </div>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-bold text-sm"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+
+        {/* Dropdowns */}
+        <div className="bg-white rounded-xl shadow-md p-6 flex flex-wrap gap-4 items-end">
+          <div className="w-full md:w-auto md:flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Class & Section</label>
+            <select
+              value={objectiveClassFilter}
+              onChange={(e) => {
+                setObjectiveClassFilter(e.target.value);
+                // Auto-select first subject of the new class
+                const subjs = myClasses.filter(c => `${c.class}-${c.section}` === e.target.value).map(c => c.subject);
+                if (subjs.length > 0) setObjectiveSubjectFilter(subjs[0]);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500"
+            >
+              {myClasses.map(c => (
+                <option key={c.id} value={`${c.class}-${c.section}`}>
+                  {c.class} - Section {c.section}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-full md:w-auto md:flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+            <select
+              value={objectiveSubjectFilter}
+              onChange={(e) => setObjectiveSubjectFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500"
+            >
+              {uniqueSubjects.map(sub => (
+                <option key={sub} value={sub}>{sub}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {activeClass ? (
+          <>
+            {/* Progress Metrics */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-gray-900 mb-4 font-bold">Curriculum Coverage Progress</h3>
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
+                <div className="flex-1">
+                  <div className="flex justify-between text-sm font-semibold text-gray-600 mb-2">
+                    <span>{coveredCount} of {totalCount} Objectives Covered</span>
+                    <span className="text-purple-600 font-bold">{progressPercentage}% Complete</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden border border-gray-200">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 to-indigo-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${progressPercentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-100 min-w-[120px]">
+                    <span className="text-2xl font-black text-purple-700">{coveredCount}</span>
+                    <p className="text-[10px] text-purple-500 font-bold uppercase tracking-wider mt-1">Completed</p>
+                  </div>
+                  <div className="p-3 bg-orange-50 rounded-lg border border-orange-100 min-w-[120px]">
+                    <span className="text-2xl font-black text-orange-700">{totalCount - coveredCount}</span>
+                    <p className="text-[10px] text-orange-500 font-bold uppercase tracking-wider mt-1">Remaining</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* List of Objectives */}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-gray-900 font-bold">Curriculum Objectives List ({allObjectives.length})</h3>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {allObjectives.map((objective, index) => {
+                  // Check if covered
+                  const coveringLessons = classLessons.filter(l => l.objectives?.includes(objective));
+                  const isCovered = coveringLessons.length > 0;
+
+                  return (
+                    <div key={index} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50/55 transition-colors">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className={`p-1.5 rounded-lg mt-0.5 ${isCovered ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                          <Target className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className={`font-semibold text-sm ${isCovered ? 'text-gray-900' : 'text-gray-500 font-medium'}`}>{objective}</p>
+                          {isCovered ? (
+                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500 items-center">
+                              <span className="px-2 py-0.5 bg-green-50 text-green-700 font-bold rounded-md border border-green-200/50">Covered</span>
+                              {coveringLessons.map(l => (
+                                <span key={l.id}>
+                                  in <span className="font-bold text-gray-700">"{l.topic}"</span> on {new Date(l.date).toLocaleDateString()}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex gap-2 text-xs text-gray-400 items-center">
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 font-medium rounded-md">Pending</span>
+                              <span>Not logged in any lesson logs yet</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {!isCovered && (
+                        <button
+                          onClick={() => {
+                            setSelectedLessonClass(activeClass);
+                            setSelectedSubject(activeSubject);
+                            setLessonForm({
+                              topic: objective.replace(/^(Solve|Understand|Apply|Analyze|Calculate|Differentiate|Describe|Identify|Explain|Write|Create|Implement|Compare|Summarize|Develop|Evaluate|Comprehend)\s+/i, ''),
+                              objectives: [objective],
+                              studentsNeedingAttention: [],
+                              notes: '',
+                              teachingDepth: 'Moderate',
+                              aiSuggestions: [],
+                              time: '09:00',
+                              curriculumTag: undefined,
+                              aiPlan: undefined
+                            });
+                            setShowLessonForm(true);
+                            setCurrentView('lesson-log');
+                          }}
+                          className="self-start md:self-auto px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-xs font-bold whitespace-nowrap shadow-sm"
+                        >
+                          Log Lesson to Cover
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="bg-white rounded-xl shadow-md p-12 text-center">
+            <Target className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+            <h3 className="text-gray-900 font-bold mb-2">No Classes Found</h3>
+            <p className="text-gray-500 text-sm">Ensure your profile is set up with classes in the database first.</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderContent = () => {
+
     switch (currentView) {
       case 'dashboard':
         return renderDashboard();
@@ -2991,6 +3492,10 @@ export function TeacherDashboardNew() {
             teacherName={user?.name || 'Teacher'}
           />
         );
+      case 'learning-objectives':
+        return renderLearningObjectives();
+      case 'student-achievements':
+        return renderStudentAchievements();
       default:
         return renderDashboard();
     }

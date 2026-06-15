@@ -85,25 +85,71 @@ export function TeacherMarksUpload() {
         .sort();
 
       setSections(availableSections);
-      setSelectedSection('');
+      
+      // Reset selected section if it's no longer valid for the selected class
+      if (selectedSection && !availableSections.includes(selectedSection)) {
+        setSelectedSection('');
+      }
     } else {
-      setSections([]);
-      setSelectedSection('');
+      // Load all available unique sections when no class is selected
+      const uniqueSections = Array.from(new Set(allClassesData.map(c => c.section))).sort();
+      setSections(uniqueSections);
     }
-  }, [selectedClass, allClassesData]);
+  }, [selectedClass, allClassesData, selectedSection]);
 
   // Load subjects
   useEffect(() => {
     const loadSubjects = async () => {
+      const DEFAULT_SUBJECTS = [
+        { id: 'English', name: 'English' },
+        { id: 'Mathematics', name: 'Mathematics' },
+        { id: 'Science', name: 'Science' },
+        { id: 'Social Studies', name: 'Social Studies' },
+        { id: 'Hindi', name: 'Hindi' },
+        { id: 'Art & Craft', name: 'Art & Craft' },
+        { id: 'Physical Education', name: 'Physical Education' },
+        { id: 'Music', name: 'Music' },
+        { id: 'Computer', name: 'Computer' },
+      ];
+
       try {
         const allSubjects = await subjectService.getAll();
-        setSubjects(allSubjects.map(s => ({ id: s.id, name: s.name || 'Unnamed' })));
+        const dbSubjects = allSubjects.map(s => ({ id: s.id || s.name, name: s.name || 'Unnamed' }));
+        
+        // Extract subjects taught by this teacher from user object
+        const teacherSubjects: Array<{ id: string; name: string }> = [];
+        if (user && user.classes) {
+          user.classes.forEach((c: any) => {
+            if (c && typeof c === 'object' && c.subject) {
+              const subName = c.subject;
+              if (!teacherSubjects.some(s => s.name.toLowerCase() === subName.toLowerCase())) {
+                teacherSubjects.push({ id: subName, name: subName });
+              }
+            }
+          });
+        }
+
+        // Combine and deduplicate
+        const combined = [...dbSubjects];
+        teacherSubjects.forEach(ts => {
+          if (!combined.some(s => s.name.toLowerCase() === ts.name.toLowerCase())) {
+            combined.push(ts);
+          }
+        });
+
+        // If still empty, use defaults
+        if (combined.length === 0) {
+          setSubjects(DEFAULT_SUBJECTS);
+        } else {
+          setSubjects(combined);
+        }
       } catch (error) {
         console.error('Error loading subjects:', error);
+        setSubjects(DEFAULT_SUBJECTS);
       }
     };
     loadSubjects();
-  }, []);
+  }, [user]);
 
   // Load students when class and section are selected
   useEffect(() => {
@@ -249,6 +295,17 @@ export function TeacherMarksUpload() {
     setMarksData(updated);
   };
 
+  const getFilteredClasses = () => {
+    if (selectedSection && !selectedClass) {
+      return Array.from(new Set(
+        allClassesData
+          .filter(c => c.section === selectedSection)
+          .map(c => c.className)
+      )).sort();
+    }
+    return classes;
+  };
+
   const isFormValid = selectedClass && selectedSection && selectedSubject && marksData.length > 0;
   const filledCount = marksData.filter(
     row => row.marksObtained !== '' && row.totalMarks !== ''
@@ -295,10 +352,10 @@ export function TeacherMarksUpload() {
           <select
             value={selectedClass}
             onChange={e => setSelectedClass(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
           >
             <option value="">Select Class</option>
-            {classes.map(cls => (
+            {getFilteredClasses().map(cls => (
               <option key={cls} value={cls}>
                 {cls}
               </option>
@@ -314,8 +371,7 @@ export function TeacherMarksUpload() {
           <select
             value={selectedSection}
             onChange={e => setSelectedSection(e.target.value)}
-            disabled={!selectedClass}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
           >
             <option value="">Select Section</option>
             {sections.map(section => (
