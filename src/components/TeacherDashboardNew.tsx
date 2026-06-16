@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -247,6 +247,7 @@ export function TeacherDashboardNew() {
   // Learning Objectives state
   const [objectiveClassFilter, setObjectiveClassFilter] = useState<string>('');
   const [objectiveSubjectFilter, setObjectiveSubjectFilter] = useState<string>('');
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<'present' | 'absent' | 'late' | 'not-marked' | null>(null);
 
   const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
   const [isHolidayToday, setIsHolidayToday] = useState(false);
@@ -255,6 +256,19 @@ export function TeacherDashboardNew() {
   // Teacher class check-in state
   const [checkedInSlots, setCheckedInSlots] = useState<Set<string>>(new Set());
   const [isCheckingIn, setIsCheckingIn] = useState<string>(''); // slotId being checked in
+
+  const navCountRef = useRef(0);
+  useEffect(() => {
+    navCountRef.current += 1;
+  }, [currentView]);
+
+  const handleBack = () => {
+    if (navCountRef.current > 1) {
+      window.history.back();
+    } else {
+      setCurrentView('dashboard');
+    }
+  };
 
   // Update currentTime every minute for period highlighting
   useEffect(() => {
@@ -682,6 +696,8 @@ export function TeacherDashboardNew() {
     curriculumTag: undefined as CurriculumTag | undefined,
     aiPlan: undefined as AILessonPlan | undefined,
   });
+
+  const [customObjective, setCustomObjective] = useState('');
 
   // Effect to load curriculum tags when class/subject changes
   useEffect(() => {
@@ -1397,16 +1413,37 @@ export function TeacherDashboardNew() {
   };
 
 
+  const filterAttendanceAndScroll = (status: 'present' | 'absent' | 'late' | 'not-marked') => {
+    setAttendanceStatusFilter(prev => prev === status ? null : status);
+    setTimeout(() => {
+      const element = document.getElementById('attendance-student-list');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   // Update students list when filters change
   const getFilteredStudents = () => {
     if (!attendanceClassFilter || !attendanceSectionFilter) {
       return [];
     }
-    return allStudents.filter(
+    const classFiltered = allStudents.filter(
       student =>
         student.class === attendanceClassFilter &&
         student.section === attendanceSectionFilter
     );
+
+    if (!attendanceStatusFilter) {
+      return classFiltered;
+    }
+
+    return classFiltered.filter(student => {
+      if (attendanceStatusFilter === 'not-marked') {
+        return student.attendance === null;
+      }
+      return student.attendance === attendanceStatusFilter;
+    });
   };
 
   const renderAttendance = () => {
@@ -1455,11 +1492,11 @@ export function TeacherDashboardNew() {
                   setAttendanceClassFilter('');
                   setAttendanceSectionFilter('');
                   setAttendanceSubjectFilter('');
-                  setCurrentView('dashboard');
+                  handleBack();
                 }}
                 className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
               >
-                Back to Dashboard
+                Back
               </button>
             </div>
           </div>
@@ -1553,10 +1590,10 @@ export function TeacherDashboardNew() {
               )}
             </div>
             <button
-              onClick={() => setCurrentView('dashboard')}
+              onClick={handleBack}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
             >
-              Back to Dashboard
+              Back
             </button>
           </div>
         )}
@@ -1587,21 +1624,53 @@ export function TeacherDashboardNew() {
         {/* Stats - Only show when class and section are selected */}
         {attendanceClassFilter && attendanceSectionFilter && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-green-600">
-              <p className="text-gray-600 mb-1">Present</p>
-              <p className="text-2xl text-gray-900">{presentCount}</p>
+            <div 
+              onClick={() => filterAttendanceAndScroll('present')}
+              className={`p-4 border-l-4 border-green-600 rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 ${
+                attendanceStatusFilter === 'present' ? 'bg-green-50/60 border-y border-r border-green-500' : 'bg-white'
+              }`}
+            >
+              <p className="text-gray-600 mb-1 font-semibold flex items-center justify-between">
+                <span>Present</span>
+                {attendanceStatusFilter === 'present' && <span className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full uppercase scale-90">Filtered</span>}
+              </p>
+              <p className="text-2xl font-bold text-gray-900">{presentCount}</p>
             </div>
-            <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-red-600">
-              <p className="text-gray-600 mb-1">Absent</p>
-              <p className="text-2xl text-gray-900">{absentCount}</p>
+            <div 
+              onClick={() => filterAttendanceAndScroll('absent')}
+              className={`p-4 border-l-4 border-red-600 rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 ${
+                attendanceStatusFilter === 'absent' ? 'bg-red-50/60 border-y border-r border-red-500' : 'bg-white'
+              }`}
+            >
+              <p className="text-gray-600 mb-1 font-semibold flex items-center justify-between">
+                <span>Absent</span>
+                {attendanceStatusFilter === 'absent' && <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full uppercase scale-90">Filtered</span>}
+              </p>
+              <p className="text-2xl font-bold text-gray-900">{absentCount}</p>
             </div>
-            <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-orange-600">
-              <p className="text-gray-600 mb-1">Late</p>
-              <p className="text-2xl text-gray-900">{lateCount}</p>
+            <div 
+              onClick={() => filterAttendanceAndScroll('late')}
+              className={`p-4 border-l-4 border-orange-600 rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 ${
+                attendanceStatusFilter === 'late' ? 'bg-orange-50/60 border-y border-r border-orange-500' : 'bg-white'
+              }`}
+            >
+              <p className="text-gray-600 mb-1 font-semibold flex items-center justify-between">
+                <span>Late</span>
+                {attendanceStatusFilter === 'late' && <span className="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded-full uppercase scale-90">Filtered</span>}
+              </p>
+              <p className="text-2xl font-bold text-gray-900">{lateCount}</p>
             </div>
-            <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-gray-600">
-              <p className="text-gray-600 mb-1">Not Marked</p>
-              <p className="text-2xl text-gray-900">{notMarkedCount}</p>
+            <div 
+              onClick={() => filterAttendanceAndScroll('not-marked')}
+              className={`p-4 border-l-4 border-gray-600 rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 ${
+                attendanceStatusFilter === 'not-marked' ? 'bg-gray-50 border-y border-r border-gray-500' : 'bg-white'
+              }`}
+            >
+              <p className="text-gray-600 mb-1 font-semibold flex items-center justify-between">
+                <span>Not Marked</span>
+                {attendanceStatusFilter === 'not-marked' && <span className="text-[10px] bg-gray-600 text-white px-2 py-0.5 rounded-full uppercase scale-90">Filtered</span>}
+              </p>
+              <p className="text-2xl font-bold text-gray-900">{notMarkedCount}</p>
             </div>
           </div>
         )}
@@ -1621,10 +1690,28 @@ export function TeacherDashboardNew() {
         ) : null}
 
         {/* Student List */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div id="attendance-student-list" className="bg-white rounded-xl shadow-md overflow-hidden scroll-mt-24">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h3 className="text-gray-900">Students ({filteredStudents.length})</h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <h3 className="text-gray-900">
+                  Students ({filteredStudents.length})
+                  {attendanceStatusFilter && (
+                    <span className="ml-2 text-sm text-purple-600 font-normal">
+                      (Filtered by {attendanceStatusFilter === 'not-marked' ? 'not marked' : attendanceStatusFilter})
+                    </span>
+                  )}
+                </h3>
+                {attendanceStatusFilter && (
+                  <button
+                    onClick={() => setAttendanceStatusFilter(null)}
+                    className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold hover:bg-purple-100 transition-colors flex items-center gap-1"
+                  >
+                    Clear Filter
+                    <XCircle className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               {attendanceClassFilter && attendanceSectionFilter && filteredStudents.length > 0 && (
                 <button
                   onClick={() => {
@@ -1723,7 +1810,7 @@ export function TeacherDashboardNew() {
               setAttendanceClassFilter('');
               setAttendanceSectionFilter('');
               setAttendanceSubjectFilter('');
-              setCurrentView('dashboard');
+              handleBack();
             }}
             className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
           >
@@ -1941,10 +2028,10 @@ export function TeacherDashboardNew() {
                 Log New Lesson
               </button>
               <button
-                onClick={() => setCurrentView('dashboard')}
+                onClick={handleBack}
                 className="px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
               >
-                Dashboard
+                Back
               </button>
             </div>
           </div>
@@ -1983,16 +2070,24 @@ export function TeacherDashboardNew() {
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative group">
-                <input
-                  type="date"
-                  onChange={(e) => jumpToDate(e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                />
-                <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg border border-gray-200 hover:bg-white hover:border-purple-300 transition-all">
+               <div className="relative group">
+                <button 
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg border border-gray-200 group-hover:bg-white group-hover:border-purple-300 transition-all"
+                >
                   <Calendar className="w-4 h-4 text-purple-600" />
                   <span className="text-sm font-medium">Select Week</span>
                 </button>
+                <input
+                  type="date"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      jumpToDate(e.target.value);
+                      e.target.value = ''; // Reset to allow re-selection
+                    }
+                  }}
+                  className="full-click-date-picker"
+                />
               </div>
               
               <select
@@ -2390,21 +2485,21 @@ export function TeacherDashboardNew() {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    id="custom-objective-input"
+                    value={customObjective}
+                    onChange={(e) => setCustomObjective(e.target.value)}
                     placeholder="Add a custom learning objective..."
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        const input = e.currentTarget;
-                        const val = input.value.trim();
+                        const val = customObjective.trim();
                         if (val && !lessonForm.objectives.includes(val)) {
                           setLessonForm({
                             ...lessonForm,
                             objectives: [...lessonForm.objectives, val],
                             aiPlan: undefined,
                           });
-                          input.value = '';
+                          setCustomObjective('');
                         }
                       }
                     }}
@@ -2412,15 +2507,14 @@ export function TeacherDashboardNew() {
                   <button
                     type="button"
                     onClick={() => {
-                      const input = document.getElementById('custom-objective-input') as HTMLInputElement;
-                      const val = input.value.trim();
+                      const val = customObjective.trim();
                       if (val && !lessonForm.objectives.includes(val)) {
                         setLessonForm({
                           ...lessonForm,
                           objectives: [...lessonForm.objectives, val],
                           aiPlan: undefined,
                         });
-                        input.value = '';
+                        setCustomObjective('');
                       }
                     }}
                     className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-sm font-medium"
@@ -2541,7 +2635,7 @@ export function TeacherDashboardNew() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-900">Upload Exam Scores</h2>
           <button
-            onClick={() => setCurrentView('dashboard')}
+            onClick={handleBack}
             className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-bold"
           >
             <ChevronLeft className="w-4 h-4 inline mr-1" />
@@ -2560,10 +2654,10 @@ export function TeacherDashboardNew() {
         <div className="flex items-center justify-between">
           <h2 className="text-gray-900">Student Notes & Observations</h2>
           <button
-            onClick={() => setCurrentView('dashboard')}
+            onClick={handleBack}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
           >
-            Back to Dashboard
+            Back
           </button>
         </div>
 
@@ -2729,11 +2823,11 @@ export function TeacherDashboardNew() {
             </p>
           </div>
           <button
-            onClick={() => setCurrentView('dashboard')}
+            onClick={handleBack}
             className="group flex items-center justify-center gap-2 px-6 py-3.5 bg-white text-gray-700 rounded-2xl hover:bg-gray-50 transition-all font-bold border-2 border-gray-100 shadow-sm hover:shadow-md active:scale-95 shrink-0"
           >
             <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-            Back to Dashboard
+            Back
           </button>
         </div>
         
@@ -2751,7 +2845,7 @@ export function TeacherDashboardNew() {
         lesson={selectedLesson}
         onBack={() => {
           setSelectedLesson(null);
-          setCurrentView('lesson-log');
+          handleBack();
         }}
         onMarkAttendance={() => {
           // Set attendance filters from the lesson data
@@ -2779,10 +2873,10 @@ export function TeacherDashboardNew() {
               </p>
             </div>
             <button
-              onClick={() => setCurrentView('dashboard')}
+              onClick={handleBack}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
             >
-              Back to Dashboard
+              Back
             </button>
           </div>
         </div>
@@ -2898,7 +2992,7 @@ export function TeacherDashboardNew() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setCurrentView('dashboard')}
+              onClick={handleBack}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ArrowLeft className="w-6 h-6 text-gray-600" />
@@ -3070,10 +3164,10 @@ export function TeacherDashboardNew() {
             <p className="text-gray-600">Award badges and celebrate student accomplishments.</p>
           </div>
           <button
-            onClick={() => setCurrentView('dashboard')}
+            onClick={handleBack}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-bold text-sm"
           >
-            Back to Dashboard
+            Back
           </button>
         </div>
 
@@ -3307,10 +3401,10 @@ export function TeacherDashboardNew() {
             <p className="text-gray-600">Track and manage curricular objectives coverage for your classes.</p>
           </div>
           <button
-            onClick={() => setCurrentView('dashboard')}
+            onClick={handleBack}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-bold text-sm"
           >
-            Back to Dashboard
+            Back
           </button>
         </div>
 
@@ -3490,6 +3584,7 @@ export function TeacherDashboardNew() {
           <TeacherChatView
             teacherId={user?.id || ''}
             teacherName={user?.name || 'Teacher'}
+            onBack={handleBack}
           />
         );
       case 'learning-objectives':
@@ -3509,7 +3604,7 @@ export function TeacherDashboardNew() {
           section: attendanceSectionFilter,
           subject: attendanceSubjectFilter
         }}
-        onBack={() => setCurrentView('my-classes')}
+        onBack={handleBack}
         onMarkAttendance={(date) => {
           if (date) {
             setAttendanceDate(date);
@@ -3528,11 +3623,11 @@ export function TeacherDashboardNew() {
         <div className="flex items-center justify-between">
           <h2 className="text-gray-900">Academic Calendar</h2>
           <button
-            onClick={() => setCurrentView('dashboard')}
+            onClick={handleBack}
             className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-bold text-sm"
           >
             <ChevronLeft className="w-4 h-4 inline mr-1" />
-            Back to Dashboard
+            Back
           </button>
         </div>
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 min-h-[600px]">

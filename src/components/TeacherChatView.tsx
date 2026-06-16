@@ -67,11 +67,12 @@ function formatMessageDate(isoString: string): string {
 interface Props {
   teacherId: string;
   teacherName: string;
+  onBack?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function TeacherChatView({ teacherId, teacherName }: Props) {
+export function TeacherChatView({ teacherId, teacherName, onBack }: Props) {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -426,10 +427,21 @@ export function TeacherChatView({ teacherId, teacherName }: Props) {
   return (
     <div className="flex flex-col gap-3 h-full">
       {/* Page Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-gray-900">Parent Messages</h2>
-          <p className="text-gray-500 font-medium mt-0.5 text-xs sm:text-sm">Real-time conversations with parents about their children</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="w-6 h-6 text-gray-600" />
+            </button>
+          )}
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black text-gray-900">Parent Messages</h2>
+            <p className="text-gray-500 font-medium mt-0.5 text-xs sm:text-sm">Real-time conversations with parents about their children</p>
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {totalUnread > 0 && (

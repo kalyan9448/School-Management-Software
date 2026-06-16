@@ -49,6 +49,16 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
   const [selectedClass, setSelectedClass] = useState<any>(initialClass);
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
 
+  const navigateToSection = (tab: 'class' | 'students' | 'leaderboard', elementId: string) => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   useEffect(() => {
     const loadClasses = async () => {
       const classes = await quizService.getTeacherClasses(teacherEmail);
@@ -293,45 +303,57 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
         <div className="space-y-6">
           {/* Hero Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white p-6 rounded-xl border border-purple-100 shadow-sm">
+            <div 
+              onClick={() => navigateToSection('class', 'score-distribution')}
+              className="bg-white p-6 rounded-xl border border-purple-100 shadow-sm hover:shadow-md hover:border-purple-300 transition-all cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-2">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
+                <BarChart3 className="w-5 h-5 text-purple-600 transition-transform group-hover:scale-110" />
                 <span className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
                   <TrendingUp className="w-3 h-3 mr-1" /> +5%
                 </span>
               </div>
-              <p className="text-gray-500 text-sm">Class Average</p>
-              <h3 className="text-2xl font-bold text-gray-900">{stats.averageScore}%</h3>
+              <p className="text-gray-500 text-sm font-medium">Class Average</p>
+              <h3 className="text-2xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors">{stats.averageScore}%</h3>
             </div>
-            <div className="bg-white p-6 rounded-xl border border-blue-100 shadow-sm">
+            <div 
+              onClick={() => navigateToSection('students', 'student-tracking')}
+              className="bg-white p-6 rounded-xl border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-2">
-                <CheckCircle className="w-5 h-5 text-blue-600" />
+                <CheckCircle className="w-5 h-5 text-blue-600 transition-transform group-hover:scale-110" />
                 <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
                   Target: 85%
                 </span>
               </div>
-              <p className="text-gray-500 text-sm">Completion Rate</p>
-              <h3 className="text-2xl font-bold text-gray-900">{stats.completionRate}%</h3>
+              <p className="text-gray-500 text-sm font-medium">Completion Rate</p>
+              <h3 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.completionRate}%</h3>
             </div>
-            <div className="bg-white p-6 rounded-xl border border-green-100 shadow-sm">
+            <div 
+              onClick={() => navigateToSection('students', 'student-tracking')}
+              className="bg-white p-6 rounded-xl border border-green-100 shadow-sm hover:shadow-md hover:border-green-300 transition-all cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-2">
-                <Users className="w-5 h-5 text-green-600" />
+                <Users className="w-5 h-5 text-green-600 transition-transform group-hover:scale-110" />
               </div>
-              <p className="text-gray-500 text-sm">Total Students</p>
-              <h3 className="text-2xl font-bold text-gray-900">{performanceData.length}</h3>
+              <p className="text-gray-500 text-sm font-medium">Total Students</p>
+              <h3 className="text-2xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">{performanceData.length}</h3>
             </div>
-            <div className="bg-white p-6 rounded-xl border border-orange-100 shadow-sm">
+            <div 
+              onClick={() => navigateToSection('students', 'student-tracking')}
+              className="bg-white p-6 rounded-xl border border-orange-100 shadow-sm hover:shadow-md hover:border-orange-300 transition-all cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-2">
-                <Target className="w-5 h-5 text-orange-600" />
+                <Target className="w-5 h-5 text-orange-600 transition-transform group-hover:scale-110" />
               </div>
-              <p className="text-gray-500 text-sm">Quizzes Completed</p>
-              <h3 className="text-2xl font-bold text-gray-900">{stats.totalAssessments}</h3>
+              <p className="text-gray-500 text-sm font-medium">Quizzes Completed</p>
+              <h3 className="text-2xl font-bold text-gray-900 group-hover:text-orange-600 transition-colors">{stats.totalAssessments}</h3>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Score Distribution */}
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+            <div id="score-distribution" className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm scroll-mt-24">
               <h3 className="text-lg font-bold text-gray-900 mb-6">Class score distribution</h3>
               <div className="w-full overflow-hidden flex flex-col items-center">
                 {performanceData.length > 0 ? (
@@ -412,7 +434,7 @@ export function TeacherPerformanceAnalytics({ teacherEmail, selectedClass: initi
       )}
 
       {activeTab === 'students' && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div id="student-tracking" className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden scroll-mt-24">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead className="bg-gray-50 border-b border-gray-100">
