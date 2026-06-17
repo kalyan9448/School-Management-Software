@@ -17,8 +17,19 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
   const [showReminders, setShowReminders] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'contacted' | 'converted'>('all');
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleCardClick = (filter: 'all' | 'new' | 'contacted' | 'converted') => {
+    setStatusFilter(filter);
+    setTimeout(() => {
+      const element = document.getElementById('enquiries-list-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
 
   // Load enquiries from backend
   useEffect(() => {
@@ -196,11 +207,14 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
     }
   };
 
-  const filteredEnquiries = enquiries.filter(enquiry =>
-    enquiry.parentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    enquiry.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    enquiry.phone.includes(searchTerm)
-  );
+  const filteredEnquiries = enquiries.filter(enquiry => {
+    const matchesSearch = enquiry.parentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (enquiry.studentName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ((enquiry as any).childName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      enquiry.phone.includes(searchTerm);
+    const matchesStatus = statusFilter === 'all' || enquiry.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="p-8 bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 min-h-screen">
@@ -397,28 +411,40 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-purple-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
+        <div 
+          onClick={() => handleCardClick('all')}
+          className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-purple-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer"
+        >
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-200 to-purple-300 rounded-bl-full opacity-50"></div>
           <div className="relative">
             <p className="text-gray-600 mb-1">Total Enquiries</p>
             <p className="text-gray-900">{enquiries.length}</p>
           </div>
         </div>
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-yellow-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
+        <div 
+          onClick={() => handleCardClick('new')}
+          className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-yellow-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer"
+        >
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-yellow-200 to-yellow-300 rounded-bl-full opacity-50"></div>
           <div className="relative">
             <p className="text-yellow-700 mb-1">New Enquiries</p>
             <p className="text-yellow-900">{enquiries.filter(e => e.status === 'new').length}</p>
           </div>
         </div>
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-indigo-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
+        <div 
+          onClick={() => handleCardClick('contacted')}
+          className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-indigo-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer"
+        >
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-indigo-200 to-indigo-300 rounded-bl-full opacity-50"></div>
           <div className="relative">
             <p className="text-indigo-700 mb-1">Contacted</p>
             <p className="text-indigo-900">{enquiries.filter(e => e.status === 'contacted').length}</p>
           </div>
         </div>
-        <div className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-green-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1">
+        <div 
+          onClick={() => handleCardClick('converted')}
+          className="relative overflow-hidden bg-white rounded-3xl shadow-lg border-4 border-green-200 p-5 hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer"
+        >
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-200 to-green-300 rounded-bl-full opacity-50"></div>
           <div className="relative">
             <p className="text-green-700 mb-1">Converted</p>
@@ -614,7 +640,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
       )}
 
       {/* Search */}
-      <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-4 mb-6">
+      <div id="enquiries-list-container" className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-4 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input

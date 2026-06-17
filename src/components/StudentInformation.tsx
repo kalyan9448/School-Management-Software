@@ -184,6 +184,7 @@ export function StudentInformation({
   const [selectedSection, setSelectedSection] = useState(initialSection);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'absent'>('all');
 
   // Pagination state for attendance table
   const [currentPage, setCurrentPage] = useState(0);
@@ -192,6 +193,12 @@ export function StudentInformation({
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [monthlyRecords, setMonthlyRecords] = useState<AttendanceRecord[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+
+  // Reset filter and page when active class, section, or date changes
+  useEffect(() => {
+    setAttendanceFilter('all');
+    setCurrentPage(0);
+  }, [selectedClass, selectedSection, selectedDate]);
 
   // Update attendance list when class/section/date changes (Daily Attendance)
   useEffect(() => {
@@ -220,7 +227,7 @@ export function StudentInformation({
             parentPhone: s.phone || '', // Need parent phone for alerts
             status: (existing?.status as any) || 'present',
             date: selectedDate,
-            className: selectedClass,
+            class: selectedClass,
             section: selectedSection,
             markedBy: existing?.markedBy || 'Teacher',
             time: existing?.time || ''
@@ -323,7 +330,7 @@ export function StudentInformation({
     try {
       const recordsToSave = attendance.map(r => ({
         ...r,
-        className: selectedClass,
+        class: selectedClass,
         section: selectedSection,
         date: selectedDate,
         markedBy: 'School Admin',
@@ -394,7 +401,28 @@ export function StudentInformation({
     total: attendance.length,
   };
 
-  const attendancePercentage = ((stats.present + stats.late) / stats.total * 100).toFixed(1);
+  const attendancePercentage = stats.total > 0 ? ((stats.present + stats.late) / stats.total * 100).toFixed(1) : '0.0';
+
+  const filteredAttendance = useMemo(() => {
+    if (attendanceFilter === 'present') {
+      return attendance.filter(r => r.status === 'present');
+    }
+    if (attendanceFilter === 'absent') {
+      return attendance.filter(r => r.status === 'absent');
+    }
+    return attendance;
+  }, [attendance, attendanceFilter]);
+
+  const handleAttendanceCardClick = (filter: 'all' | 'present' | 'absent') => {
+    setAttendanceFilter(filter);
+    setCurrentPage(0);
+    setTimeout(() => {
+      const element = document.getElementById('attendance-table-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
 
   // Helper function to download CSV
   const downloadCSV = (data: any[], filename: string) => {
@@ -1064,7 +1092,10 @@ export function StudentInformation({
 
               {/* Statistics */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+                <div
+                  onClick={() => handleAttendanceCardClick('all')}
+                  className="cursor-pointer bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-blue-100">Total Students</p>
                     <Users className="w-6 h-6 text-blue-100" />
@@ -1072,7 +1103,10 @@ export function StudentInformation({
                   <p className="text-white">{stats.total}</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+                <div
+                  onClick={() => handleAttendanceCardClick('present')}
+                  className="cursor-pointer bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-green-100">Present</p>
                     <Check className="w-6 h-6 text-green-100" />
@@ -1080,7 +1114,10 @@ export function StudentInformation({
                   <p className="text-white">{stats.present}</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+                <div
+                  onClick={() => handleAttendanceCardClick('absent')}
+                  className="cursor-pointer bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-red-100">Absent</p>
                     <X className="w-6 h-6 text-red-100" />
@@ -1088,7 +1125,10 @@ export function StudentInformation({
                   <p className="text-white">{stats.absent}</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+                <div
+                  onClick={() => handleAttendanceCardClick('all')}
+                  className="cursor-pointer bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-purple-100">Attendance %</p>
                     <TrendingUp className="w-6 h-6 text-purple-100" />
@@ -1098,12 +1138,24 @@ export function StudentInformation({
               </div>
 
               {/* Attendance Table */}
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mb-6">
+              <div id="attendance-table-container" className="scroll-mt-6 bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mb-6">
                 {/* Navigation Controls */}
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
                   <div className="flex items-center gap-2">
+                    {attendanceFilter !== 'all' && (
+                      <span className={`flex items-center gap-2 px-2.5 py-1 text-xs font-bold rounded-lg uppercase tracking-wider ${attendanceFilter === 'present' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {attendanceFilter} only
+                        <button
+                          onClick={() => setAttendanceFilter('all')}
+                          className="hover:opacity-70 font-black"
+                          title="Clear Filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
                     <span className="text-gray-700">
-                      Showing students {currentPage * studentsPerPage + 1} - {Math.min((currentPage + 1) * studentsPerPage, attendance.length)} of {attendance.length}
+                      Showing students {currentPage * studentsPerPage + 1} - {Math.min((currentPage + 1) * studentsPerPage, filteredAttendance.length)} of {filteredAttendance.length}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1119,12 +1171,12 @@ export function StudentInformation({
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                     <span className="px-4 py-2 text-gray-700 font-medium">
-                      Page {currentPage + 1} of {Math.ceil(attendance.length / studentsPerPage)}
+                      Page {currentPage + 1} of {Math.max(1, Math.ceil(filteredAttendance.length / studentsPerPage))}
                     </span>
                     <button
-                      onClick={() => setCurrentPage(Math.min(Math.ceil(attendance.length / studentsPerPage) - 1, currentPage + 1))}
-                      disabled={currentPage >= Math.ceil(attendance.length / studentsPerPage) - 1}
-                      className={`p-2 rounded-lg border transition-colors ${currentPage >= Math.ceil(attendance.length / studentsPerPage) - 1
+                      onClick={() => setCurrentPage(Math.min(Math.ceil(filteredAttendance.length / studentsPerPage) - 1, currentPage + 1))}
+                      disabled={currentPage >= Math.ceil(filteredAttendance.length / studentsPerPage) - 1}
+                      className={`p-2 rounded-lg border transition-colors ${currentPage >= Math.ceil(filteredAttendance.length / studentsPerPage) - 1
                         ? 'border-gray-200 text-gray-300 cursor-not-allowed'
                         : 'border-gray-300 text-gray-700 hover:bg-gray-100'
                         }`}
@@ -1147,7 +1199,7 @@ export function StudentInformation({
                       </tr>
                     </thead>
                     <tbody>
-                      {attendance
+                      {filteredAttendance
                         .slice(currentPage * studentsPerPage, (currentPage + 1) * studentsPerPage)
                         .map((record) => (
                           <tr key={record.studentId} className="border-b border-gray-100 hover:bg-gray-50">

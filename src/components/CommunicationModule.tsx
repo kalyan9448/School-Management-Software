@@ -16,6 +16,7 @@ export function CommunicationModule() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   // Load announcements on mount
   useEffect(() => {
@@ -33,6 +34,17 @@ export function CommunicationModule() {
     };
     loadData();
   }, []);
+
+  const handleCardClick = (filter: string) => {
+    setTypeFilter(filter);
+    setActiveTab('messages');
+    setTimeout(() => {
+      const element = document.getElementById('messages-list-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
 
   const initialFormState = {
     title: '',
@@ -215,19 +227,31 @@ export function CommunicationModule() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+        <div 
+          onClick={() => handleCardClick('all')}
+          className="bg-white rounded-lg shadow-md border border-gray-200 p-4 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-gray-600 mb-1">Total Messages</p>
           <p className="text-gray-900 font-bold text-2xl">{announcements.length}</p>
         </div>
-        <div className="bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4">
+        <div 
+          onClick={() => handleCardClick('announcement')}
+          className="bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-blue-700 mb-1">Announcements</p>
           <p className="text-blue-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'general' || a.type === 'urgent').length}</p>
         </div>
-        <div className="bg-yellow-50 rounded-lg shadow-md border border-yellow-200 p-4">
+        <div 
+          onClick={() => handleCardClick('reminder')}
+          className="bg-yellow-50 rounded-lg shadow-md border border-yellow-200 p-4 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-yellow-700 mb-1">Reminders</p>
           <p className="text-yellow-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'urgent').length}</p>
         </div>
-        <div className="bg-purple-50 rounded-lg shadow-md border border-purple-200 p-4">
+        <div 
+          onClick={() => handleCardClick('event')}
+          className="bg-purple-50 rounded-lg shadow-md border border-purple-200 p-4 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-purple-700 mb-1">Events / Holidays</p>
           <p className="text-purple-900 font-bold text-2xl">{announcements.filter((a: Announcement) => a.type === 'event' || a.type === 'holiday' || a.type === 'exam').length}</p>
         </div>
@@ -342,8 +366,14 @@ export function CommunicationModule() {
       {/* MESSAGES TAB */}
       {activeTab === 'messages' && (
         <>
-          <div className="space-y-4">
-            {announcements.map((announcement: Announcement) => (
+          <div id="messages-list-container" className="space-y-4">
+            {announcements.filter(a => {
+              if (typeFilter === 'all') return true;
+              if (typeFilter === 'announcement') return a.type === 'general' || a.type === 'urgent';
+              if (typeFilter === 'reminder') return a.type === 'urgent';
+              if (typeFilter === 'event') return a.type === 'event' || a.type === 'holiday' || a.type === 'exam';
+              return true;
+            }).map((announcement: Announcement) => (
               <div key={announcement.id} className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow">
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${getTypeStyle(announcement.type)}`}>
@@ -372,10 +402,16 @@ export function CommunicationModule() {
               </div>
             ))}
           </div>
-          {announcements.length === 0 && (
+          {announcements.filter(a => {
+            if (typeFilter === 'all') return true;
+            if (typeFilter === 'announcement') return a.type === 'general' || a.type === 'urgent';
+            if (typeFilter === 'reminder') return a.type === 'urgent';
+            if (typeFilter === 'event') return a.type === 'event' || a.type === 'holiday' || a.type === 'exam';
+            return true;
+          }).length === 0 && (
             <div className="text-center py-12 bg-white rounded-xl shadow-md border border-gray-200">
               <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">No messages sent yet</p>
+              <p className="text-gray-500">No messages match the selected filter</p>
             </div>
           )}
         </>

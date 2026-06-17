@@ -1,10 +1,10 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, Clock, Bell, Send, Target, TrendingUp, Plus, X } from 'lucide-react';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
-import { attendanceService, feeService, studentService, reportsService } from '../utils/centralDataService';
+import { attendanceService, feeService, studentService, reportsService, examScoreService } from '../utils/centralDataService';
 import type { GeneratedReport, ScheduledReport } from '../utils/centralDataService';
 
 export function ReportsApprovalView() {
@@ -21,6 +21,7 @@ export function ReportsApprovalView() {
     endDate: new Date().toISOString().split('T')[0],
     format: 'PDF'
   });
+  const [recentReportFilter, setRecentReportFilter] = useState<string>('all');
 
   // Load reports from Firestore
   useEffect(() => {
@@ -100,6 +101,19 @@ export function ReportsApprovalView() {
     }
   };
 
+  const handleScheduledReportClick = (type: string) => {
+    // Standardize 'Fee Collection' to 'Fees' to match report config types if necessary, or keep as is.
+    // The mocked recent reports use 'Attendance' and 'Fees' or 'Fee Collection'.
+    const normalizedType = type === 'Fee Collection' ? 'Fees' : type;
+    setRecentReportFilter(normalizedType);
+    setTimeout(() => {
+      const element = document.getElementById('recent-reports-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   const handleGenerateReport = () => {
     setIsGenerating(true);
     setTimeout(async () => {
@@ -133,12 +147,97 @@ export function ReportsApprovalView() {
     }, 2000);
   };
 
+  const downloadReportAsCSV = (reportName: string, headers: string[], rows: any[][]) => {
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${reportName.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleDownloadRecentReport = async (report: any) => {
     try {
       const activeSchoolId = sessionStorage.getItem('active_school_id');
       if (!activeSchoolId) {
         alert("School context synchronized. Please refresh the page and try again.");
         return;
+      }
+
+      let headers: string[] = [];
+      let tableRows: any[][] = [];
+
+      if (report.type === 'Attendance') {
+        const attendanceData = await attendanceService.getAll();
+        const students = await studentService.getAll();
+        headers = ['Date', 'Student Name', 'Class', 'Section', 'Status', 'Marked By'];
+        tableRows = attendanceData.slice(0, 50).map((record: any) => {
+          const student = students.find((s: any) => s.id === record.studentId);
+          return [
+            record.date || 'N/A',
+            student?.name || record.studentName || 'N/A',
+            record.class || 'N/A',
+            record.section || 'N/A',
+            (record.status || 'N/A').toUpperCase(),
+            record.markedBy || 'N/A'
+          ];
+        });
+      } else if (report.type === 'Fee Collection' || report.type === 'Fees') {
+        const feePayments = await feeService.getAllPayments();
+        headers = ['Date', 'Student Name', 'Receipt #', 'Mode', 'Amount', 'Status'];
+        tableRows = feePayments.slice(0, 50).map((payment: any) => [
+          payment.paymentDate || 'N/A',
+          payment.studentName || 'N/A',
+          payment.receiptNo || 'N/A',
+          payment.paymentMode?.toUpperCase() || 'N/A',
+          `₹ ${payment.amount?.toLocaleString() || 0}`,
+          payment.status?.toUpperCase() || 'PAID'
+        ]);
+      } else if (report.type === 'Academic') {
+        const examScores = await examScoreService.getAll();
+        const students = await studentService.getAll();
+        headers = ['Student Name', 'Class ID', 'Section ID', 'Subject ID', 'Exam Type', 'Marks Obtained', 'Total Marks', 'Grade'];
+        tableRows = examScores.slice(0, 50).map((score: any) => {
+          const student = students.find((s: any) => s.id === score.studentId);
+          return [
+            student?.name || 'Unknown',
+            score.classId || 'N/A',
+            score.sectionId || 'N/A',
+            score.subjectId || 'N/A',
+            score.examType || 'N/A',
+            score.marksObtained || 0,
+            score.totalMarks || 100,
+            score.grade || 'N/A'
+          ];
+        });
+      } else if (report.type === 'Admissions') {
+        const students = await studentService.getAll();
+        const admissionStatuses = ['enquiry', 'in-process', 'confirmed', 'admitted'];
+        const admissionStudents = students.filter((s: any) => admissionStatuses.includes(s.status));
+        headers = ['Student Name', 'Parent Name', 'Email', 'Phone', 'Class', 'Status', 'Admission Date'];
+        tableRows = admissionStudents.slice(0, 50).map((s: any) => [
+          s.name || 'N/A',
+          s.fatherName || s.guardianName || 'N/A',
+          s.parentEmail || 'N/A',
+          s.parentPhone || 'N/A',
+          s.class || 'N/A',
+          (s.status || 'N/A').toUpperCase(),
+          s.admissionDate || 'N/A'
+        ]);
+      }
+
+      // Divert to CSV export if requested format is CSV or Excel
+      if (report.format === 'CSV' || report.format === 'Excel') {
+        if (headers.length > 0) {
+          downloadReportAsCSV(report.name, headers, tableRows);
+          return;
+        } else {
+          alert('Generating/formatting CSV is being initialized for this report type.');
+          return;
+        }
       }
 
       const doc = createTemplatedDoc() as any;
@@ -158,47 +257,11 @@ export function ReportsApprovalView() {
       doc.setDrawColor(229, 231, 235);
       doc.line(20, topY + 14, 190, topY + 14);
 
-      if (report.type === 'Attendance') {
-        const attendanceData = await attendanceService.getAll();
-        const students = await studentService.getAll();
-        
-        // Use real-time data for the report
-        const tableRows = attendanceData.slice(0, 40).map((record: any) => {
-          const student = students.find((s: any) => s.id === record.studentId);
-          return [
-            record.date || 'N/A',
-            student?.name || record.studentName || 'N/A',
-            record.class || 'N/A',
-            record.section || 'N/A',
-            (record.status || 'N/A').toUpperCase(),
-            record.markedBy || 'N/A'
-          ];
-        });
-
+      if (headers.length > 0) {
         autoTable(doc, {
           startY: topY + 22,
-          head: [['Date', 'Student Name', 'Class', 'Section', 'Status']],
+          head: [headers],
           body: tableRows.length > 0 ? tableRows : [['-', 'No Records Found', '-', '-', '-']],
-          headStyles: { fillColor: [126, 34, 206] },
-          theme: 'grid',
-          styles: { fontSize: 9 }
-        });
-      } else if (report.type === 'Fee Collection' || report.type === 'Fees') {
-        const feePayments = await feeService.getAllPayments();
-        
-        const tableRows = feePayments.slice(0, 40).map((payment: any) => [
-          payment.paymentDate || 'N/A',
-          payment.studentName || 'N/A',
-          payment.receiptNo || 'N/A',
-          payment.paymentMode?.toUpperCase() || 'N/A',
-          `₹ ${payment.amount?.toLocaleString() || 0}`,
-          'PAID'
-        ]);
-
-        autoTable(doc, {
-          startY: topY + 22,
-          head: [['Date', 'Student Name', 'Receipt #', 'Mode', 'Amount', 'Status']],
-          body: tableRows.length > 0 ? tableRows : [['-', 'No Payments Found', '-', '-', '-', '-']],
           headStyles: { fillColor: [126, 34, 206] },
           theme: 'grid',
           styles: { fontSize: 9 }
@@ -248,13 +311,20 @@ export function ReportsApprovalView() {
         </div>
         <div className="divide-y divide-gray-200">
           {scheduledReports.map((report) => (
-            <div key={report.id} className="p-6 hover:bg-gray-50">
+            <div 
+              key={report.id} 
+              onClick={() => handleScheduledReportClick(report.type)}
+              className="p-6 hover:bg-gray-50 cursor-pointer hover:shadow-md transition-all relative group"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h4 className="text-gray-900">{report.name}</h4>
+                    <h4 className="text-gray-900 group-hover:text-purple-600 transition-colors">{report.name}</h4>
                     <button
-                      onClick={() => toggleReportStatus(report.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleReportStatus(report.id);
+                      }}
                       className={`px-2 py-1 rounded-full text-xs font-medium transition-colors ${report.status === 'active'
                           ? 'bg-green-100 text-green-700 hover:bg-green-200'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -288,18 +358,31 @@ export function ReportsApprovalView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      <div id="recent-reports-container" className="grid grid-cols-1 gap-6">
         {/* Recent Reports */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200 flex items-center justify-between">
             <div>
-              <h3 className="text-gray-900">Recent Reports</h3>
+              <h3 className="text-gray-900">Recent Reports {recentReportFilter !== 'all' && `(${recentReportFilter})`}</h3>
               <p className="text-gray-600 text-sm">Recently generated school reports</p>
             </div>
+            {recentReportFilter !== 'all' && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRecentReportFilter('all');
+                }}
+                className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+              >
+                Clear Filter
+              </button>
+            )}
           </div>
           <div className="divide-y divide-gray-200 max-h-[400px] overflow-y-auto">
-            {recentReports.length > 0 ? (
-              recentReports.map((report) => (
+            {recentReports.filter(r => recentReportFilter === 'all' || r.type === recentReportFilter || (recentReportFilter === 'Fees' && r.type === 'Fee Collection')).length > 0 ? (
+              recentReports
+                .filter(r => recentReportFilter === 'all' || r.type === recentReportFilter || (recentReportFilter === 'Fees' && r.type === 'Fee Collection'))
+                .map((report) => (
                 <div key={report.id} className="p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

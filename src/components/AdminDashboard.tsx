@@ -40,6 +40,7 @@ export function AdminDashboard() {
   const [admissionInitialView, setAdmissionInitialView] = useState<'list' | 'form'>('list');
   const [admissionInitialData, setAdmissionInitialData] = useState<any>(null);
   const [studentViewOptions, setStudentViewOptions] = useState<any>({});
+  const [teacherViewOptions, setTeacherViewOptions] = useState<any>({});
   const [schoolReady, setSchoolReady] = useState(false);
   const [schoolError, setSchoolError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
@@ -221,6 +222,9 @@ export function AdminDashboard() {
       if (view === 'students' && options) {
         setStudentViewOptions(options);
       }
+      if (view === 'teachers') {
+        setTeacherViewOptions(options || {});
+      }
       setActiveView(view as ViewType);
       // setActiveView triggers the Effect 1 above which pushes to history
     }
@@ -313,7 +317,12 @@ export function AdminDashboard() {
             key={`students-${JSON.stringify(studentViewOptions)}`}
           />
         )}
-        {activeView === 'teachers' && <TeachersModule />}
+        {activeView === 'teachers' && (
+          <TeachersModule
+            initialSearchQuery={teacherViewOptions.searchQuery}
+            key={`teachers-${JSON.stringify(teacherViewOptions)}`}
+          />
+        )}
         {activeView === 'communication' && <CommunicationModule />}
         {activeView === 'academic-structure' && <AcademicStructureView />}
         {activeView === 'monitoring' && (
