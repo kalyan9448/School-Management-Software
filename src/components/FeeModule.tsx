@@ -81,6 +81,36 @@ export function FeeModule() {
   const [showCollectionForm, setShowCollectionForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
 
+  const handleCardClick = (tab: Tab, elementId: string) => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const handleClassCardClick = (classNameKey: string) => {
+    const normalizedKey = classNameKey.toLowerCase().trim();
+    const matchedClass = uniqueClasses.find(
+      cls => cls.replace(/^Class\s+/i, '').toLowerCase().trim() === normalizedKey
+    );
+
+    if (matchedClass) {
+      setSelectedClass(matchedClass);
+    } else if (classNameKey.toLowerCase() === 'general') {
+      setSelectedClass('all');
+    } else {
+      setSelectedClass(classNameKey);
+    }
+
+    const element = document.getElementById('student-ledgers-section');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   // Edit/Delete State
   const [editingStructure, setEditingStructure] = useState<FeeStructure | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -314,6 +344,23 @@ export function FeeModule() {
       amount: '',
     }));
   };
+
+  const handleStudentRowClick = (ledger: StudentLedger) => {
+    const student = studentsData.find(
+      s => s.admissionNo?.toLowerCase() === ledger.admissionNo?.toLowerCase()
+    );
+    if (student) {
+      handleSelectStudentForFee(student);
+    }
+    setActiveTab('collection');
+    setShowCollectionForm(true);
+    setTimeout(() => {
+      const element = document.getElementById('collection-form-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
   const handleFeeTypeChange = (feeType: string) => {
     let amount = 0;
     if (selectedStudentForFee) {
@@ -356,93 +403,112 @@ export function FeeModule() {
   };
 
   const downloadReceiptPDF = (payment: Payment) => {
-    const doc = createTemplatedDoc();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    // Start below the template header
-    const startY = TEMPLATE_MARGINS.top;
+    try {
+      const doc = createTemplatedDoc();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      // Start below the template header
+      const startY = TEMPLATE_MARGINS.top;
 
-    // Helper for centering text
-    const centerText = (text: string, y: number) => {
-      const textWidth = doc.getTextWidth(text);
-      doc.text(text, (pageWidth - textWidth) / 2, y);
-    };
+      // Helper for centering text
+      const centerText = (text: string, y: number) => {
+        const textWidth = doc.getTextWidth(text);
+        doc.text(text, (pageWidth - textWidth) / 2, y);
+      };
 
-    // Title
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    centerText('FEE PAYMENT RECEIPT', startY);
+      // Title
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      centerText('FEE PAYMENT RECEIPT', startY);
 
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', startY + 8);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 8);
 
-    // Basic Info
-    doc.setFontSize(11);
-    doc.text(`Receipt No : ${payment.receiptNo}`, 20, startY + 16);
-    doc.text(`Date       : ${new Date(payment.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 20, startY + 23);
-    doc.text(`Payment Mode: ${payment.paymentMode.toUpperCase()}`, 20, startY + 30);
+      // Basic Info
+      doc.setFontSize(11);
+      doc.text(`Receipt No : ${payment.receiptNo || 'N/A'}`, 20, startY + 16);
+      
+      let formattedDate = 'N/A';
+      try {
+        if (payment.paymentDate) {
+          formattedDate = new Date(payment.paymentDate).toLocaleDateString('en-GB', { 
+            day: '2-digit', 
+            month: 'long', 
+            year: 'numeric' 
+          });
+        }
+      } catch (e) {
+        console.warn('Invalid date format:', e);
+      }
+      doc.text(`Date       : ${formattedDate}`, 20, startY + 23);
+      doc.text(`Payment Mode: ${(payment.paymentMode || 'cash').toUpperCase()}`, 20, startY + 30);
 
-    centerText('---------------------------------------------------------', startY + 37);
+      centerText('---------------------------------------------------------', startY + 37);
 
-    // Student Details Section
-    doc.setFont('helvetica', 'bold');
-    doc.text('Student Details', 20, startY + 44);
-    doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', startY + 49);
+      // Student Details Section
+      doc.setFont('helvetica', 'bold');
+      doc.text('Student Details', 20, startY + 44);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 49);
 
-    doc.text(`Student Name   : ${payment.studentName}`, 20, startY + 56);
-    doc.text(`Admission No   : ${payment.admissionNo}`, 20, startY + 63);
-    doc.text(`Class          : ${payment.class}`, 20, startY + 70);
+      doc.text(`Student Name   : ${payment.studentName || 'N/A'}`, 20, startY + 56);
+      doc.text(`Admission No   : ${payment.admissionNo || 'N/A'}`, 20, startY + 63);
+      doc.text(`Class          : ${payment.class || 'N/A'}`, 20, startY + 70);
 
-    centerText('---------------------------------------------------------', startY + 77);
+      centerText('---------------------------------------------------------', startY + 77);
 
-    // Fee Details Section
-    doc.setFont('helvetica', 'bold');
-    doc.text('Fee Details', 20, startY + 84);
-    doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', startY + 89);
+      // Fee Details Section
+      doc.setFont('helvetica', 'bold');
+      doc.text('Fee Details', 20, startY + 84);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 89);
 
-    const netPayable = (payment.amount || 0) - (payment.discount || 0) + (payment.lateFee || 0);
-    const balance = Math.max(0, netPayable - payment.totalAmount);
+      const paidAmt = payment.totalAmount || payment.amount || 0;
+      const netPayable = (payment.amount || 0) - (payment.discount || 0) + (payment.lateFee || 0);
+      const balance = Math.max(0, netPayable - paidAmt);
 
-    // Table Header
-    doc.setFont('helvetica', 'bold');
-    doc.text('Description', 20, startY + 96);
-    doc.text('Amount', 140, startY + 96);
+      // Table Header
+      doc.setFont('helvetica', 'bold');
+      doc.text('Description', 20, startY + 96);
+      doc.text('Amount', 140, startY + 96);
 
-    doc.setFont('helvetica', 'normal');
-    centerText('---------------------------------------------------------', startY + 101);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 101);
 
-    // Table Rows
-    doc.text(`Total Fee (${payment.feeType})`, 20, startY + 109);
-    doc.text(`₹ ${netPayable.toLocaleString()}`, 140, startY + 109);
+      // Table Rows
+      doc.text(`Total Fee (${payment.feeType || 'General Fee'})`, 20, startY + 109);
+      doc.text(`₹ ${netPayable.toLocaleString()}`, 140, startY + 109);
 
-    doc.text(`Amount Paid NOW`, 20, startY + 116);
-    doc.text(`₹ ${payment.totalAmount.toLocaleString()}`, 140, startY + 116);
+      doc.text(`Amount Paid NOW`, 20, startY + 116);
+      doc.text(`₹ ${paidAmt.toLocaleString()}`, 140, startY + 116);
 
-    doc.text(`Remaining Balance`, 20, startY + 123);
-    doc.text(`₹ ${balance.toLocaleString()}`, 140, startY + 123);
+      doc.text(`Remaining Balance`, 20, startY + 123);
+      doc.text(`₹ ${balance.toLocaleString()}`, 140, startY + 123);
 
-    centerText('---------------------------------------------------------', startY + 131);
+      centerText('---------------------------------------------------------', startY + 131);
 
-    // Total
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Payment Received : ₹ ${payment.totalAmount.toLocaleString()}`, 20, startY + 139);
-    centerText('---------------------------------------------------------', startY + 146);
+      // Total
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Payment Received : ₹ ${paidAmt.toLocaleString()}`, 20, startY + 139);
+      centerText('---------------------------------------------------------', startY + 146);
 
-    // Footer
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text('Thank you for your payment.', 20, startY + 156);
-    doc.text('Authorized Signature', 140, startY + 171);
-    doc.text('School Admin', 140, startY + 178);
+      // Footer
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text('Thank you for your payment.', 20, startY + 156);
+      doc.text('Authorized Signature', 140, startY + 171);
+      doc.text('School Admin', 140, startY + 178);
 
-    centerText('---------------------------------------------------------', startY + 191);
-    centerText('Generated from School Management System', startY + 198);
-    centerText('---------------------------------------------------------', startY + 205);
+      centerText('---------------------------------------------------------', startY + 191);
+      centerText('Generated from School Management System', startY + 198);
+      centerText('---------------------------------------------------------', startY + 205);
 
-    // Download
-    doc.save(`Receipt_${payment.receiptNo}.pdf`);
+      // Download
+      doc.save(`Receipt_${payment.receiptNo || 'N/A'}.pdf`);
+    } catch (error) {
+      console.error('Error generating receipt PDF:', error);
+      alert('Failed to generate PDF receipt. Please check console logs or try again.');
+    }
   };
 
   // Handle Communication Actions
@@ -469,60 +535,65 @@ export function FeeModule() {
   const handleStructureSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isEditMode && editingStructure) {
-      // Update existing structure
-      const updatedStructure: FeeStructure = {
-        ...editingStructure,
-        class: structureForm.class,
-        admissionFee: parseFloat(structureForm.admissionFee) || 0,
-        annualFee: parseFloat(structureForm.annualFee) || 0,
-        monthlyFee: parseFloat(structureForm.monthlyFee) || 0,
-        quarterlyFee: parseFloat(structureForm.quarterlyFee) || 0,
-        transportFee: parseFloat(structureForm.transportFee) || 0,
-        daycareFee: parseFloat(structureForm.daycareFee) || 0,
-        activityFee: parseFloat(structureForm.activityFee) || 0,
-      };
+    try {
+      if (isEditMode && editingStructure) {
+        // Update existing structure
+        const updatedStructure: FeeStructure = {
+          ...editingStructure,
+          class: structureForm.class,
+          admissionFee: parseFloat(structureForm.admissionFee) || 0,
+          annualFee: parseFloat(structureForm.annualFee) || 0,
+          monthlyFee: parseFloat(structureForm.monthlyFee) || 0,
+          quarterlyFee: parseFloat(structureForm.quarterlyFee) || 0,
+          transportFee: parseFloat(structureForm.transportFee) || 0,
+          daycareFee: parseFloat(structureForm.daycareFee) || 0,
+          activityFee: parseFloat(structureForm.activityFee) || 0,
+        };
 
-      await feeService.updateStructure(editingStructure.id, updatedStructure);
-      const updatedStructures = feeStructures.map(s =>
-        s.id === editingStructure.id ? updatedStructure : s
-      );
-      setFeeStructures(updatedStructures);
+        await feeService.updateStructure(editingStructure.id, updatedStructure);
+        const updatedStructures = feeStructures.map(s =>
+          s.id === editingStructure.id ? updatedStructure : s
+        );
+        setFeeStructures(updatedStructures);
 
-      alert(`Fee structure for Class ${structureForm.class} has been updated successfully!`);
-      setIsEditMode(false);
-      setEditingStructure(null);
-    } else {
-      // Add new structure
-      const newStructure: FeeStructure = {
-        id: Date.now().toString(),
-        class: structureForm.class,
-        admissionFee: parseFloat(structureForm.admissionFee) || 0,
-        annualFee: parseFloat(structureForm.annualFee) || 0,
-        monthlyFee: parseFloat(structureForm.monthlyFee) || 0,
-        quarterlyFee: parseFloat(structureForm.quarterlyFee) || 0,
-        transportFee: parseFloat(structureForm.transportFee) || 0,
-        daycareFee: parseFloat(structureForm.daycareFee) || 0,
-        activityFee: parseFloat(structureForm.activityFee) || 0,
-        customCategories: [],
-      };
-      await feeService.createStructure(newStructure);
-      const updatedStructures = [...feeStructures, newStructure];
-      setFeeStructures(updatedStructures);
-      alert(`Fee structure for Class ${structureForm.class} has been added successfully!`);
+        alert(`Fee structure for Class ${structureForm.class} has been updated successfully!`);
+        setIsEditMode(false);
+        setEditingStructure(null);
+      } else {
+        // Add new structure
+        const newStructure: FeeStructure = {
+          id: Date.now().toString(),
+          class: structureForm.class,
+          admissionFee: parseFloat(structureForm.admissionFee) || 0,
+          annualFee: parseFloat(structureForm.annualFee) || 0,
+          monthlyFee: parseFloat(structureForm.monthlyFee) || 0,
+          quarterlyFee: parseFloat(structureForm.quarterlyFee) || 0,
+          transportFee: parseFloat(structureForm.transportFee) || 0,
+          daycareFee: parseFloat(structureForm.daycareFee) || 0,
+          activityFee: parseFloat(structureForm.activityFee) || 0,
+          customCategories: [],
+        };
+        await feeService.createStructure(newStructure);
+        const updatedStructures = [...feeStructures, newStructure];
+        setFeeStructures(updatedStructures);
+        alert(`Fee structure for Class ${structureForm.class} has been added successfully!`);
+      }
+
+      setStructureForm({
+        class: '',
+        admissionFee: '',
+        annualFee: '',
+        monthlyFee: '',
+        quarterlyFee: '',
+        transportFee: '',
+        daycareFee: '',
+        activityFee: '',
+      });
+      setShowStructureForm(false);
+    } catch (err) {
+      console.error('Failed to save fee structure:', err);
+      alert('Failed to save fee structure. Please try again.');
     }
-
-    setStructureForm({
-      class: '',
-      admissionFee: '',
-      annualFee: '',
-      monthlyFee: '',
-      quarterlyFee: '',
-      transportFee: '',
-      daycareFee: '',
-      activityFee: '',
-    });
-    setShowStructureForm(false);
   };
 
   // Handle Edit Fee Structure
@@ -700,6 +771,108 @@ export function FeeModule() {
       classWise[cls] += (parseFloat(p.totalAmount as any) || parseFloat(p.amount as any) || 0);
     });
     return classWise;
+  };
+
+  const downloadDailyReport = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const dailyPayments = payments.filter(p => p.paymentDate === today);
+    
+    if (dailyPayments.length === 0) {
+      alert("No payments collected today.");
+      return;
+    }
+
+    const headers = [
+      'Payment ID', 'Student Name', 'Admission No', 'Class', 
+      'Receipt No', 'Fee Type', 'Paid Amount (₹)', 'Discount (₹)', 
+      'Late Fee (₹)', 'Payment Mode', 'Notes'
+    ];
+
+    const rows = dailyPayments.map(p => [
+      p.id,
+      p.studentName,
+      p.admissionNo,
+      p.class,
+      p.receiptNo || '',
+      p.feeType || 'General Fee',
+      p.totalAmount || p.amount || 0,
+      p.discount || 0,
+      p.lateFee || 0,
+      p.paymentMode,
+      p.notes || ''
+    ]);
+
+    exportCSV(`daily_collection_report_${today}.csv`, headers, rows);
+  };
+
+  const downloadMonthlyReport = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthLabel = monthNames[currentMonth];
+
+    const monthlyPayments = payments.filter(p => {
+      if (!p.paymentDate) return false;
+      const date = new Date(p.paymentDate);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
+
+    if (monthlyPayments.length === 0) {
+      alert(`No payments collected in ${monthLabel} ${currentYear}.`);
+      return;
+    }
+
+    const headers = [
+      'Payment ID', 'Student Name', 'Admission No', 'Class', 
+      'Receipt No', 'Fee Type', 'Paid Amount (₹)', 'Discount (₹)', 
+      'Late Fee (₹)', 'Payment Date', 'Payment Mode', 'Notes'
+    ];
+
+    const rows = monthlyPayments.map(p => [
+      p.id,
+      p.studentName,
+      p.admissionNo,
+      p.class,
+      p.receiptNo || '',
+      p.feeType || 'General Fee',
+      p.totalAmount || p.amount || 0,
+      p.discount || 0,
+      p.lateFee || 0,
+      p.paymentDate,
+      p.paymentMode,
+      p.notes || ''
+    ]);
+
+    exportCSV(`monthly_collection_report_${monthLabel}_${currentYear}.csv`, headers, rows);
+  };
+
+  const downloadOutstandingReport = () => {
+    const outstandingDues = studentLedgers.filter(l => l.dueAmount > 0);
+
+    if (outstandingDues.length === 0) {
+      alert("No outstanding dues found.");
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const headers = [
+      'Student Name', 'Admission No', 'Class', 'Parent Phone', 
+      'Total Fee (₹)', 'Paid Amount (₹)', 'Outstanding Due (₹)', 'Last Payment Date'
+    ];
+
+    const rows = outstandingDues.map(l => [
+      l.studentName,
+      l.admissionNo,
+      l.class,
+      l.parentPhone || '',
+      l.totalFee || 0,
+      l.paidAmount || 0,
+      l.dueAmount || 0,
+      l.lastPaymentDate || '-'
+    ]);
+
+    exportCSV(`outstanding_fees_report_${today}.csv`, headers, rows);
   };
 
   return (
@@ -1003,7 +1176,7 @@ export function FeeModule() {
 
           {/* Collection Form */}
           {showCollectionForm && (
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
+            <div id="collection-form-container" className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6 scroll-mt-6">
               <h3 className="text-gray-900 mb-4">Payment Entry</h3>
               <form onSubmit={handleCollectionSubmit} className="space-y-6">
 
@@ -1281,7 +1454,7 @@ export function FeeModule() {
           )}
 
           {/* Recent Payments */}
-          <div className="mt-12">
+          <div id="recent-payments-section" className="mt-12 scroll-mt-6">
             <h3 className="text-gray-900 font-bold text-xl mb-6 flex items-center gap-2">
               <Receipt className="w-6 h-6 text-blue-600" />
               Recent Payments History
@@ -1406,7 +1579,10 @@ export function FeeModule() {
 
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+            <div
+              onClick={() => handleCardClick('collection', 'recent-payments-section')}
+              className="cursor-pointer bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+            >
               <div className="flex items-center justify-between mb-2">
                 <p className="text-blue-100">Today's Collection</p>
                 <Calendar className="w-6 h-6 text-blue-100" />
@@ -1414,7 +1590,10 @@ export function FeeModule() {
               <p className="text-white mb-1">₹{getTodayCollection().toLocaleString()}</p>
             </div>
 
-            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+            <div
+              onClick={() => handleCardClick('collection', 'recent-payments-section')}
+              className="cursor-pointer bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+            >
               <div className="flex items-center justify-between mb-2">
                 <p className="text-green-100">Monthly Collection</p>
                 <TrendingUp className="w-6 h-6 text-green-100" />
@@ -1422,7 +1601,10 @@ export function FeeModule() {
               <p className="text-white mb-1">₹{getMonthlyCollection().toLocaleString()}</p>
             </div>
 
-            <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+            <div
+              onClick={() => handleCardClick('accounting', 'student-ledgers-section')}
+              className="cursor-pointer bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+            >
               <div className="flex items-center justify-between mb-2">
                 <p className="text-red-100">Total Outstanding</p>
                 <IndianRupee className="w-6 h-6 text-red-100" />
@@ -1430,7 +1612,10 @@ export function FeeModule() {
               <p className="text-white mb-1">₹{getTotalOutstanding().toLocaleString()}</p>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+            <div
+              onClick={() => handleCardClick('accounting', 'student-ledgers-section')}
+              className="cursor-pointer bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+            >
               <div className="flex items-center justify-between mb-2">
                 <p className="text-purple-100">Total Students</p>
                 <Users className="w-6 h-6 text-purple-100" />
@@ -1444,16 +1629,20 @@ export function FeeModule() {
             <h3 className="text-gray-900 mb-4">Class-wise Fee Collection</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {Object.entries(getClassWiseCollection()).map(([className, amount]) => (
-                <div key={className} className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-blue-700 mb-1">Class {className}</p>
-                  <p className="text-blue-900">₹{amount.toLocaleString()}</p>
+                <div
+                  key={className}
+                  onClick={() => handleClassCardClick(className)}
+                  className="cursor-pointer bg-blue-50 rounded-lg p-4 border border-blue-100 hover:border-blue-400 hover:bg-blue-100/30 transition-all hover:-translate-y-1 shadow-sm hover:shadow-md"
+                >
+                  <p className="text-blue-700 mb-1 font-medium">Class {className}</p>
+                  <p className="text-blue-900 font-bold text-lg">₹{amount.toLocaleString()}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Student Ledgers */}
-          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-8">
+          <div id="student-ledgers-section" className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-8 scroll-mt-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <h3 className="text-gray-900">Student Ledgers & Outstanding Fees</h3>
               <div className="flex flex-col md:flex-row gap-3">
@@ -1505,7 +1694,11 @@ export function FeeModule() {
                       return matchesSearch && matchesClass;
                     })
                     .map((student, index) => (
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr
+                        key={index}
+                        onClick={() => handleStudentRowClick(student)}
+                        className="border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer transition-colors"
+                      >
                         <td className="px-4 py-3 text-gray-900">{student.studentName}</td>
                         <td className="px-4 py-3 text-gray-700">{student.admissionNo}</td>
                         <td className="px-4 py-3 text-gray-700">Class {student.class}</td>
@@ -1517,7 +1710,7 @@ export function FeeModule() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-700">{student.lastPaymentDate}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => handleCall(student.parentPhone)}
@@ -1546,7 +1739,10 @@ export function FeeModule() {
 
           {/* Reports Download */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left">
+            <button
+              onClick={downloadDailyReport}
+              className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                   <Download className="w-5 h-5 text-blue-600" />
@@ -1556,7 +1752,10 @@ export function FeeModule() {
               <p className="text-gray-600">Download today's collection summary</p>
             </button>
 
-            <button className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left">
+            <button
+              onClick={downloadMonthlyReport}
+              className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                   <Download className="w-5 h-5 text-green-600" />
@@ -1566,7 +1765,10 @@ export function FeeModule() {
               <p className="text-gray-600">Download monthly collection report</p>
             </button>
 
-            <button className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left">
+            <button
+              onClick={downloadOutstandingReport}
+              className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow text-left"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
                   <Download className="w-5 h-5 text-red-600" />

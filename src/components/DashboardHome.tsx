@@ -702,7 +702,12 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                   </tr>
                 ) : (
                   teacherPresenceData.map((presence) => (
-                    <tr key={presence.slotId} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={presence.slotId}
+                      className="hover:bg-purple-50/50 cursor-pointer transition-colors"
+                      onClick={() => onNavigate?.('teachers', { searchQuery: presence.teacherName })}
+                      title={`Click to view ${presence.teacherName}'s details & assignments`}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold text-xs">

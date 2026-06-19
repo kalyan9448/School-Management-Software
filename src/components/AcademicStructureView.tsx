@@ -95,6 +95,7 @@ export function AcademicStructureView() {
 
           return {
             id: y.id,
+            school_id: y.school_id || schoolId,
             name: y.name,
             startDate: y.startDate,
             endDate: y.endDate,
@@ -195,10 +196,12 @@ export function AcademicStructureView() {
 
         const newYear: AcademicYear = {
           id: createdYear.id,
+          school_id: schoolId,
           name: createdYear.name,
           startDate: createdYear.startDate,
           endDate: createdYear.endDate,
-          status: 'upcoming'
+          status: 'upcoming',
+          isCurrent: false
         };
 
         setAcademicYears(prev => [...prev, newYear]);
@@ -498,7 +501,16 @@ export function AcademicStructureView() {
 
             <div className="grid gap-4">
               {academicYears.map((year) => (
-                <div key={year.id} className={`bg-white rounded-xl shadow-sm p-6 border transition-colors ${year.isCurrent ? 'border-purple-500 ring-1 ring-purple-100' : 'border-gray-200 hover:border-purple-300'}`}>
+                <div
+                  key={year.id}
+                  onClick={async () => {
+                    if (!year.isCurrent) {
+                      await handleSetActiveYear(year.id);
+                    }
+                    setActiveTab('classes');
+                  }}
+                  className={`cursor-pointer bg-white rounded-xl shadow-sm p-6 border transition-colors ${year.isCurrent ? 'border-purple-500 ring-1 ring-purple-100' : 'border-gray-200 hover:border-purple-300'}`}
+                >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${year.isCurrent ? 'bg-purple-100 text-purple-600' :
@@ -533,7 +545,10 @@ export function AcademicStructureView() {
                     <div className="flex items-center gap-2 self-start sm:self-auto">
                       {!year.isCurrent && (
                         <button 
-                          onClick={() => handleSetActiveYear(year.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetActiveYear(year.id);
+                          }}
                           className="p-2 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-1" 
                           title="Set as Default System Year"
                         >
@@ -542,14 +557,20 @@ export function AcademicStructureView() {
                         </button>
                       )}
                       <button 
-                        onClick={() => handleEditYear(year)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditYear(year);
+                        }}
                         className="p-2 text-gray-400 hover:text-purple-600 bg-gray-50 hover:bg-purple-50 rounded-lg transition-colors" 
                         title="Edit Year"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => handleDeleteAcademicYear(year.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAcademicYear(year.id);
+                        }}
                         className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" 
                         title="Delete Year"
                       >

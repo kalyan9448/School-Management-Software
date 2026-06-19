@@ -212,7 +212,10 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
 
       {/* Real-time Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <div 
+          onClick={() => onNavigate && onNavigate('dashboard')}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Active Users</p>
@@ -228,7 +231,10 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <div 
+          onClick={() => onNavigate && onNavigate('students', { tab: 'attendance' })}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Students Present</p>
@@ -241,7 +247,10 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <div 
+          onClick={() => onNavigate && onNavigate('academic-structure')}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Lessons in Progress</p>
@@ -254,7 +263,10 @@ export function MonitoringView({ onNavigate }: MonitoringViewProps) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <div 
+          onClick={() => onNavigate && onNavigate('fees')}
+          className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 mb-1">Pending Payments</p>

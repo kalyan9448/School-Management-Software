@@ -234,6 +234,16 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
     }
   };
 
+  const handleCardClick = (status: string) => {
+    setFilterStatus(status);
+    setTimeout(() => {
+      const element = document.getElementById('admissions-list-container');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   const getStatusBadge = (status: string) => {
     const styles = {
       enquiry: 'bg-gray-100 text-gray-700 border-gray-300',
@@ -666,30 +676,45 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
 
       {/* Stats Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-3xl border-2 border-gray-100 shadow-sm">
+        <div 
+          onClick={() => handleCardClick('all')}
+          className="bg-white p-6 rounded-3xl border-2 border-gray-100 shadow-sm cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Total</p>
           <p className="text-2xl font-black text-gray-900">{stats.total}</p>
         </div>
-        <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 shadow-sm">
+        <div 
+          onClick={() => handleCardClick('enquiry')}
+          className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 shadow-sm cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">Enquiries</p>
           <p className="text-2xl font-black text-blue-900">{stats.enquiry}</p>
         </div>
-        <div className="bg-yellow-50 p-6 rounded-3xl border-2 border-yellow-100 shadow-sm">
+        <div 
+          onClick={() => handleCardClick('in-process')}
+          className="bg-yellow-50 p-6 rounded-3xl border-2 border-yellow-100 shadow-sm cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-yellow-600 text-xs font-bold uppercase tracking-wider mb-1">In Process</p>
           <p className="text-2xl font-black text-yellow-900">{stats.inProcess}</p>
         </div>
-        <div className="bg-purple-50 p-6 rounded-3xl border-2 border-purple-100 shadow-sm">
+        <div 
+          onClick={() => handleCardClick('confirmed')}
+          className="bg-purple-50 p-6 rounded-3xl border-2 border-purple-100 shadow-sm cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-purple-600 text-xs font-bold uppercase tracking-wider mb-1">Confirmed</p>
           <p className="text-2xl font-black text-purple-900">{stats.confirmed}</p>
         </div>
-        <div className="bg-green-50 p-6 rounded-3xl border-2 border-green-100 shadow-sm">
+        <div 
+          onClick={() => handleCardClick('admitted')}
+          className="bg-green-50 p-6 rounded-3xl border-2 border-green-100 shadow-sm cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all"
+        >
           <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Admitted</p>
           <p className="text-2xl font-black text-green-900">{stats.admitted}</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 mb-6">
+      <div id="admissions-list-container" className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 p-6 mb-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Calendar className="w-5 h-5 text-purple-600" />
