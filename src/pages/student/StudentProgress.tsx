@@ -200,7 +200,7 @@ export function ProgressPage() {
       {/* Header */}
       <div 
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }} 
-        className="text-white p-6 md:p-10 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative overflow-hidden mb-6"
+        className="text-white p-6 md:p-10 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative overflow-hidden mb-6 isolate"
       >
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
         <div className="max-w-screen-xl mx-auto relative z-10">

@@ -51,7 +51,13 @@ interface ChildProgress {
   }>;
 }
 
-export function ParentDashboardChildProgress({ targetChildId }: { targetChildId?: string | null }) {
+export function ParentDashboardChildProgress({ 
+  targetChildId,
+  onNavigate
+}: { 
+  targetChildId?: string | null;
+  onNavigate?: (view: any, targetId?: string) => void;
+}) {
   const { user } = useAuth();
   const [childrenProgress, setChildrenProgress] = useState<ChildProgress[]>([]);
   const [loading, setLoading] = useState(true);
@@ -305,7 +311,10 @@ export function ParentDashboardChildProgress({ targetChildId }: { targetChildId?
           {/* Quick Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Attendance Card */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div 
+              onClick={() => onNavigate?.('reports', 'attendance-summary-section')}
+              className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 border border-transparent hover:border-gray-200"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-blue-600" />
@@ -337,7 +346,10 @@ export function ParentDashboardChildProgress({ targetChildId }: { targetChildId?
             </div>
 
             {/* Homework Card */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div 
+              onClick={() => onNavigate?.('reports', 'homework-completion-section')}
+              className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 border border-transparent hover:border-gray-200"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-blue-600" />
@@ -369,7 +381,15 @@ export function ParentDashboardChildProgress({ targetChildId }: { targetChildId?
             </div>
 
             {/* Overall Exam Performance */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div 
+              onClick={() => {
+                const element = document.getElementById('subject-wise-performance-section');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 border border-transparent hover:border-gray-200"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                   <Award className="w-5 h-5 text-blue-600" />
@@ -400,7 +420,7 @@ export function ParentDashboardChildProgress({ targetChildId }: { targetChildId?
           </div>
 
           {/* Exam Scores by Subject */}
-          <div className="bg-white rounded-lg shadow-md p-6">
+          <div id="subject-wise-performance-section" className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Subject-wise Performance</h3>
             <div className="space-y-3">
               {Object.entries(selectedChild.examScores.subjectWiseAverage).map(
