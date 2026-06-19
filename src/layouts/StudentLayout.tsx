@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { BottomNav } from "@/components/student/BottomNav";
-import { Home, BookOpen, Calendar, BarChart3, User } from "lucide-react";
+import { Home, BookOpen, Calendar, BarChart3, User, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import logoImage from '../assets/logo.jpeg';
 import { SettingsService } from '@/services/student/studentDataService';
+import { useAuth } from '@/contexts/AuthContext';
+import { ticketService, schoolService } from '../utils/centralDataService';
 
 const sidebarNavItems = [
     { path: "/student/dashboard", icon: Home, label: "Dashboard" },
@@ -16,7 +18,15 @@ const sidebarNavItems = [
 
 const DashboardLayout: React.FC = () => {
     const location = useLocation();
+    const { user } = useAuth();
     const [showSupportModal, setShowSupportModal] = useState(false);
+    const [schoolName, setSchoolName] = useState('Unknown School');
+
+    // Ticket Form States
+    const [category, setCategory] = useState("Account Access & Login");
+    const [urgency, setUrgency] = useState("Normal");
+    const [description, setDescription] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         SettingsService.get().then(settings => {
@@ -28,6 +38,17 @@ const DashboardLayout: React.FC = () => {
         });
     }, []);
 
+    useEffect(() => {
+        if (user?.school_id) {
+            schoolService.getAll().then(schools => {
+                const s = schools.find(x => x.id === user.school_id);
+                if (s) setSchoolName(s.name);
+            }).catch(err => {
+                console.error("Failed to load school name for support tickets:", err);
+            });
+        }
+    }, [user?.school_id]);
+
     const isDashboard = location.pathname.includes('dashboard') || location.pathname === '/';
 
     const pageTitle = isDashboard ? 'Main Dashboard'
@@ -36,6 +57,70 @@ const DashboardLayout: React.FC = () => {
         : location.pathname.includes('analytics') ? 'Analytics Insight'
         : location.pathname.includes('profile') ? 'My Profile'
         : 'Student Dashboard';
+
+    const handleSubmitTicket = async () => {
+        if (!user) {
+            alert("You must be logged in to submit a ticket.");
+            return;
+        }
+        if (!description.trim()) {
+            alert("Please provide a description of the issue.");
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        // Map Category: Student UI -> Firestore SupportTicket Schema
+        let mappedCategory: 'Technical' | 'Billing' | 'Feature Request' | 'Other' = 'Other';
+        if (category === "Account Access & Login" || category === "Technical / Bug Report") {
+            mappedCategory = 'Technical';
+        } else if (category === "Homework & Assignments") {
+            mappedCategory = 'Feature Request';
+        } else if (category === "Schedule & Classes") {
+            mappedCategory = 'Other';
+        } else if (category === "Other Inquiry") {
+            mappedCategory = 'Other';
+        }
+
+        // Map Urgency/Priority: Student UI -> Firestore SupportTicket Schema
+        let mappedPriority: 'Low' | 'Medium' | 'High' | 'Urgent' = 'Medium';
+        if (urgency === "Low") {
+            mappedPriority = 'Low';
+        } else if (urgency === "Normal") {
+            mappedPriority = 'Medium';
+        } else if (urgency === "High") {
+            mappedPriority = 'High';
+        }
+
+        try {
+            await ticketService.create({
+                school_id: user.school_id || 'default',
+                schoolName: schoolName,
+                userId: user.id || '',
+                userName: user.name || 'Student',
+                userEmail: user.email || '',
+                subject: `Student Support: ${category}`,
+                message: description,
+                priority: mappedPriority,
+                category: mappedCategory,
+                status: 'Open',
+                responses: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+
+            alert("Support ticket created successfully! Our team will contact you shortly.");
+            setDescription("");
+            setCategory("Account Access & Login");
+            setUrgency("Normal");
+            setShowSupportModal(false);
+        } catch (err) {
+            console.error("Failed to create support ticket:", err);
+            alert("Failed to submit support ticket. Please try again later.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         /* Outermost: full-screen flex row. No overflow:hidden so sticky header works correctly. */
@@ -140,18 +225,22 @@ const DashboardLayout: React.FC = () => {
 
             {/* ─── Support Modal ─── */}
             {showSupportModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] z-50"
                     >
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-blue-600 text-white">
                             <div>
                                 <h2 className="text-2xl font-bold">IT Support Desk</h2>
                                 <p className="text-sm opacity-90 mt-1">We're here to help you succeed.</p>
                             </div>
-                            <button onClick={() => setShowSupportModal(false)} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                            <button 
+                                onClick={() => setShowSupportModal(false)} 
+                                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                                disabled={isSubmitting}
+                            >
                                 ✕
                             </button>
                         </div>
@@ -165,7 +254,12 @@ const DashboardLayout: React.FC = () => {
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-xs font-bold text-gray-700 mb-1">Issue Category</label>
-                                        <select className="w-full border border-gray-200 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white">
+                                        <select 
+                                            value={category} 
+                                            onChange={(e) => setCategory(e.target.value)}
+                                            className="w-full border border-gray-200 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white"
+                                            disabled={isSubmitting}
+                                        >
                                             <option>Account Access & Login</option>
                                             <option>Homework & Assignments</option>
                                             <option>Schedule & Classes</option>
@@ -176,22 +270,46 @@ const DashboardLayout: React.FC = () => {
                                     <div>
                                         <label className="block text-xs font-bold text-gray-700 mb-1">Urgency</label>
                                         <div className="flex gap-2">
-                                            <label className="flex-1 text-center border border-gray-200 rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50">
-                                                <input type="radio" name="urgency" className="mr-1" /> Low
+                                            <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors ${urgency === 'Low' ? 'border-blue-500 bg-blue-50/50 text-blue-700 font-bold' : 'border-gray-200'}`}>
+                                                <input 
+                                                    type="radio" 
+                                                    name="urgency" 
+                                                    className="mr-1" 
+                                                    checked={urgency === "Low"} 
+                                                    onChange={() => setUrgency("Low")}
+                                                    disabled={isSubmitting}
+                                                /> Low
                                             </label>
-                                            <label className="flex-1 text-center border border-gray-200 rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50">
-                                                <input type="radio" name="urgency" className="mr-1" defaultChecked /> Normal
+                                            <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors ${urgency === 'Normal' ? 'border-blue-500 bg-blue-50/50 text-blue-700 font-bold' : 'border-gray-200'}`}>
+                                                <input 
+                                                    type="radio" 
+                                                    name="urgency" 
+                                                    className="mr-1" 
+                                                    checked={urgency === "Normal"}
+                                                    onChange={() => setUrgency("Normal")}
+                                                    disabled={isSubmitting}
+                                                /> Normal
                                             </label>
-                                            <label className="flex-1 text-center border border-red-200 text-red-700 rounded-lg p-2 text-xs cursor-pointer hover:bg-red-50">
-                                                <input type="radio" name="urgency" className="mr-1" /> High
+                                            <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-red-50 transition-colors ${urgency === 'High' ? 'border-red-500 bg-red-50/50 text-red-700 font-bold' : 'border-red-200 text-red-700'}`}>
+                                                <input 
+                                                    type="radio" 
+                                                    name="urgency" 
+                                                    className="mr-1" 
+                                                    checked={urgency === "High"}
+                                                    onChange={() => setUrgency("High")}
+                                                    disabled={isSubmitting}
+                                                /> High
                                             </label>
                                         </div>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
                                         <textarea 
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
                                             className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
                                             placeholder="Please provide as much detail as possible to help us resolve the issue quickly..."
+                                            disabled={isSubmitting}
                                         />
                                     </div>
                                 </div>
@@ -202,17 +320,23 @@ const DashboardLayout: React.FC = () => {
                             <button 
                                 className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                                 onClick={() => setShowSupportModal(false)}
+                                disabled={isSubmitting}
                             >
                                 Cancel
                             </button>
                             <button 
-                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
-                                onClick={() => {
-                                    alert("Support ticket created successfully! Ticket ID: #IT-" + Math.floor(Math.random() * 90000 + 10000) + ". Our team will contact you shortly.");
-                                    setShowSupportModal(false);
-                                }}
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 flex items-center justify-center gap-2 min-w-[120px]"
+                                onClick={handleSubmitTicket}
+                                disabled={isSubmitting}
                             >
-                                Submit Ticket
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Submitting...
+                                    </>
+                                ) : (
+                                    'Submit Ticket'
+                                )}
                             </button>
                         </div>
                     </motion.div>

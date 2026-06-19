@@ -1984,7 +1984,10 @@ export function SuperAdminDashboard() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-600">
+          <div
+            onClick={() => setCurrentView('organizations')}
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Organizations</p>
@@ -2006,7 +2009,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-600">
+          <div onClick={() => setCurrentView('schools')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Active Schools</p>
@@ -2028,7 +2031,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-indigo-600">
+          <div onClick={() => setCurrentView('schools')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-indigo-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Students</p>
@@ -2044,7 +2047,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-teal-600">
+          <div onClick={() => setCurrentView('schools')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-teal-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Teachers</p>
@@ -2060,7 +2063,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-pink-600">
+          <div onClick={() => setCurrentView('schools')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-pink-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Parents</p>
@@ -2076,7 +2079,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600">
+          <div onClick={() => setCurrentView('subscriptions')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Monthly Revenue</p>
@@ -2092,7 +2095,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-600">
+          <div onClick={() => setCurrentView('monitoring')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">System Health</p>
@@ -2318,7 +2321,7 @@ export function SuperAdminDashboard() {
               ) : organizations
                 .filter(org => !searchTerm || org.name.toLowerCase().includes(searchTerm.toLowerCase()) || org.id.toLowerCase().includes(searchTerm.toLowerCase()))
                 .map((org) => (
-                <tr key={org.id} className="hover:bg-gray-50">
+                <tr key={org.id} onClick={() => handleViewOrganizationDetails(org)} className="hover:bg-gray-50 cursor-pointer transition-colors duration-150">
                   <td className="px-6 py-4">
                     <div>
                       <p className="text-gray-900">{org.name}</p>
@@ -2347,7 +2350,7 @@ export function SuperAdminDashboard() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-gray-700">{org.createdDate || ((org as any).created_at ? new Date((org as any).created_at).toISOString().split('T')[0] : '—')}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewOrganizationDetails(org)}
@@ -2629,7 +2632,7 @@ export function SuperAdminDashboard() {
 
         {/* Usage Metrics Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-600">
+          <div onClick={() => document.getElementById('billing-records-section')?.scrollIntoView({ behavior: 'smooth' })} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <IndianRupee className="w-6 h-6 text-purple-600" />
@@ -2644,7 +2647,7 @@ export function SuperAdminDashboard() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600">
+          <div onClick={() => setCurrentView('subscriptions')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -2659,7 +2662,7 @@ export function SuperAdminDashboard() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-600">
+          <div onClick={() => setCurrentView('schools')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Percent className="w-6 h-6 text-blue-600" />
@@ -2674,7 +2677,7 @@ export function SuperAdminDashboard() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-600">
+          <div onClick={() => setCurrentView('monitoring')} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-600 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
                 <TrendingDown className="w-6 h-6 text-orange-600" />
@@ -2691,7 +2694,7 @@ export function SuperAdminDashboard() {
         </div>
 
         {/* Subscription Plans Section */}
-        <div className="space-y-4">
+        <div id="subscription-plans-section" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-gray-900">Subscription Plans</h3>
             <div className="flex items-center gap-3">
@@ -2903,7 +2906,7 @@ export function SuperAdminDashboard() {
         </div>
 
         {/* Transaction History Section */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div id="billing-records-section" className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="p-6 border-b border-gray-200">
             <h3 className="text-gray-900">Billing Records</h3>
           </div>
@@ -2922,8 +2925,14 @@ export function SuperAdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {billingRecords.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50">
+                {billingRecords.map((record) => {
+                  const matchingSchool = schools.find(s => s.name === record.schoolName);
+                  return (
+                    <tr
+                      key={record.id}
+                      onClick={() => matchingSchool && handleViewSchoolDetails(matchingSchool)}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors duration-150"
+                    >
                     <td className="px-6 py-4">
                       <p className="text-gray-900 font-medium">{record.schoolName}</p>
                       <p className="text-gray-500 text-xs">{record.invoiceNumber}</p>
@@ -2965,7 +2974,7 @@ export function SuperAdminDashboard() {
                         {record.paymentStatus}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleViewInvoice(record.invoiceNumber)}
@@ -2984,7 +2993,8 @@ export function SuperAdminDashboard() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -3384,7 +3394,10 @@ export function SuperAdminDashboard() {
 
       {/* System Health */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div
+          onClick={() => setCurrentView('schools')}
+          className="bg-white rounded-xl shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <Server className="w-6 h-6 text-green-600" />
@@ -3397,7 +3410,10 @@ export function SuperAdminDashboard() {
           <p className="text-gray-600">{activeSchoolCount}/{schools.length} schools active ({healthPercent}%)</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div
+          onClick={() => setCurrentView('organizations')}
+          className="bg-white rounded-xl shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <Database className="w-6 h-6 text-blue-600" />
@@ -3410,7 +3426,10 @@ export function SuperAdminDashboard() {
           <p className="text-gray-600">{organizations.length} orgs, {schools.length} schools</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div
+          onClick={() => setCurrentView('schools')}
+          className="bg-white rounded-xl shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <Zap className="w-6 h-6 text-purple-600" />
@@ -3423,7 +3442,10 @@ export function SuperAdminDashboard() {
           <p className="text-gray-600">{totalStudents} students, {totalTeachers} teachers, {totalParents} parents</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div
+          onClick={() => setCurrentView('schools')}
+          className="bg-white rounded-xl shadow-md p-6 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <Globe className="w-6 h-6 text-orange-600" />
@@ -4789,13 +4811,19 @@ export function SuperAdminDashboard() {
         </div>
 
         {/* Subscription Limits */}
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="bg-white rounded-xl shadow-md p-6" id="subscription-limits-section">
           <h3 className="text-gray-900 mb-6 flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-purple-600" />
             Subscription Limits
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-blue-50 rounded-lg p-4">
+            <div
+              onClick={() => {
+                setCurrentView('subscriptions');
+                setSelectedSchool(null);
+              }}
+              className="bg-blue-50 rounded-lg p-4 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+            >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-gray-600">Students Limit</span>
                 <Users className="w-5 h-5 text-blue-600" />
@@ -4806,8 +4834,8 @@ export function SuperAdminDashboard() {
                 <div className="mt-3">
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{ width: `${Math.min(usagePercentage.students, 100)}%` }}
+                       className="bg-blue-600 h-2 rounded-full transition-all"
+                       style={{ width: `${Math.min(usagePercentage.students, 100)}%` }}
                     />
                   </div>
                   <p className="text-xs text-gray-600 mt-1">{usagePercentage.students}% used</p>
@@ -4815,7 +4843,13 @@ export function SuperAdminDashboard() {
               )}
             </div>
 
-            <div className="bg-green-50 rounded-lg p-4">
+            <div
+              onClick={() => {
+                setCurrentView('subscriptions');
+                setSelectedSchool(null);
+              }}
+              className="bg-green-50 rounded-lg p-4 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+            >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-gray-600">Teachers Limit</span>
                 <GraduationCap className="w-5 h-5 text-green-600" />
@@ -4826,8 +4860,8 @@ export function SuperAdminDashboard() {
                 <div className="mt-3">
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-green-600 h-2 rounded-full transition-all"
-                      style={{ width: `${Math.min(usagePercentage.teachers, 100)}%` }}
+                       className="bg-green-600 h-2 rounded-full transition-all"
+                       style={{ width: `${Math.min(usagePercentage.teachers, 100)}%` }}
                     />
                   </div>
                   <p className="text-xs text-gray-600 mt-1">{usagePercentage.teachers}% used</p>
@@ -4835,7 +4869,13 @@ export function SuperAdminDashboard() {
               )}
             </div>
 
-            <div className="bg-purple-50 rounded-lg p-4">
+            <div
+              onClick={() => {
+                setCurrentView('configuration');
+                setSelectedSchool(null);
+              }}
+              className="bg-purple-50 rounded-lg p-4 cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+            >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-gray-600">Storage Limit</span>
                 <Database className="w-5 h-5 text-purple-600" />
@@ -4846,8 +4886,8 @@ export function SuperAdminDashboard() {
                 <div className="mt-3">
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-purple-600 h-2 rounded-full transition-all"
-                      style={{ width: `${Math.min(usagePercentage.storage, 100)}%` }}
+                       className="bg-purple-600 h-2 rounded-full transition-all"
+                       style={{ width: `${Math.min(usagePercentage.storage, 100)}%` }}
                     />
                   </div>
                   <p className="text-xs text-gray-600 mt-1">{usagePercentage.storage}% used</p>
@@ -4875,26 +4915,50 @@ export function SuperAdminDashboard() {
             Active Summary
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+            <div
+              onClick={() => {
+                setCurrentView('schools');
+                setSelectedSchool(null);
+              }}
+              className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+            >
               <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Students</p>
               <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeStudents}</p>
             </div>
-            <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+            <div
+              onClick={() => {
+                setCurrentView('schools');
+                setSelectedSchool(null);
+              }}
+              className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+            >
               <GraduationCap className="w-8 h-8 text-green-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Teachers</p>
               <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeTeachers}</p>
             </div>
-            <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
+            <div
+              onClick={() => {
+                setCurrentView('schools');
+                setSelectedSchool(null);
+              }}
+              className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+            >
               <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
               <p className="text-gray-600 text-sm mb-1">Active Parents</p>
               <p className="text-3xl text-gray-900 font-bold">{schoolStats.activeParents}</p>
             </div>
-            <div className={`text-center p-4 rounded-lg ${
-              selectedSchool.aiEnabled !== false
-                ? 'bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200'
-                : 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200'
-            }`}>
+            <div
+              onClick={() => {
+                setCurrentView('configuration');
+                setSelectedSchool(null);
+              }}
+              className={`text-center p-4 rounded-lg cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200 ${
+                selectedSchool.aiEnabled !== false
+                  ? 'bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200'
+                  : 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200'
+              }`}
+            >
               <Zap className={`w-8 h-8 mx-auto mb-2 ${selectedSchool.aiEnabled !== false ? 'text-purple-600' : 'text-gray-400'}`} />
               <p className="text-gray-600 text-sm mb-1">AI Features</p>
               <p className={`text-lg font-bold ${selectedSchool.aiEnabled !== false ? 'text-green-600' : 'text-red-600'}`}>
@@ -4905,7 +4969,7 @@ export function SuperAdminDashboard() {
         </div>
 
         {/* Actions */}
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="bg-white rounded-xl shadow-md p-6" id="actions-section">
           <h3 className="text-gray-900 mb-6 flex items-center gap-2">
             <Settings className="w-5 h-5 text-purple-600" />
             Actions

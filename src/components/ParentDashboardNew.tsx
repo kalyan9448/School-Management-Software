@@ -8,6 +8,8 @@ import { ParentDashboardChildProgress } from './ParentDashboardChildProgress';
 import { ParentNotificationPanel } from './ParentNotificationPanel';
 import { CalendarModule } from './CalendarModule';
 import { ParentTeacherChat } from './ParentTeacherChat';
+import { jsPDF } from 'jspdf';
+import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import {
   Users,
   Calendar,
@@ -635,7 +637,8 @@ export function ParentDashboardNew() {
     dueDate: p.academicYear,
     status: 'paid' as const,
     paidDate: p.paymentDate,
-    receiptNo: p.receiptNo
+    receiptNo: p.receiptNo,
+    original: p
   }));
 
   // Deduplicate: exclude invoices that already have a matching payment
@@ -871,6 +874,115 @@ export function ParentDashboardNew() {
     }
   };
 
+  const downloadReceiptPDF = (payment: any) => {
+    try {
+      const doc = createTemplatedDoc();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      // Start below the template header
+      const startY = TEMPLATE_MARGINS.top;
+
+      // Helper for centering text
+      const centerText = (text: string, y: number) => {
+        const textWidth = doc.getTextWidth(text);
+        doc.text(text, (pageWidth - textWidth) / 2, y);
+      };
+
+      // Title
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      centerText('FEE PAYMENT RECEIPT', startY);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 8);
+
+      // Basic Info
+      doc.setFontSize(11);
+      doc.text(`Receipt No : ${payment.receiptNo || 'N/A'}`, 20, startY + 16);
+      
+      let formattedDate = 'N/A';
+      try {
+        if (payment.paymentDate) {
+          formattedDate = new Date(payment.paymentDate).toLocaleDateString('en-GB', { 
+            day: '2-digit', 
+            month: 'long', 
+            year: 'numeric' 
+          });
+        }
+      } catch (e) {
+        console.warn('Invalid date format:', e);
+      }
+      doc.text(`Date       : ${formattedDate}`, 20, startY + 23);
+      doc.text(`Payment Mode: ${(payment.paymentMode || 'cash').toUpperCase()}`, 20, startY + 30);
+
+      centerText('---------------------------------------------------------', startY + 37);
+
+      // Student Details Section
+      doc.setFont('helvetica', 'bold');
+      doc.text('Student Details', 20, startY + 44);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 49);
+
+      doc.text(`Student Name   : ${payment.studentName || 'N/A'}`, 20, startY + 56);
+      doc.text(`Admission No   : ${payment.admissionNo || 'N/A'}`, 20, startY + 63);
+      doc.text(`Class          : ${payment.class || 'N/A'}`, 20, startY + 70);
+
+      centerText('---------------------------------------------------------', startY + 77);
+
+      // Fee Details Section
+      doc.setFont('helvetica', 'bold');
+      doc.text('Fee Details', 20, startY + 84);
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 89);
+
+      const paidAmt = payment.totalAmount || payment.amount || 0;
+      const netPayable = (payment.amount || 0) - (payment.discount || 0) + (payment.lateFee || 0);
+      const balance = Math.max(0, netPayable - paidAmt);
+
+      // Table Header
+      doc.setFont('helvetica', 'bold');
+      doc.text('Description', 20, startY + 96);
+      doc.text('Amount', 140, startY + 96);
+
+      doc.setFont('helvetica', 'normal');
+      centerText('---------------------------------------------------------', startY + 101);
+
+      // Table Rows
+      doc.text(`Total Fee (${payment.feeType || 'General Fee'})`, 20, startY + 109);
+      doc.text(`₹ ${netPayable.toLocaleString()}`, 140, startY + 109);
+
+      doc.text(`Amount Paid NOW`, 20, startY + 116);
+      doc.text(`₹ ${paidAmt.toLocaleString()}`, 140, startY + 116);
+
+      doc.text(`Remaining Balance`, 20, startY + 123);
+      doc.text(`₹ ${balance.toLocaleString()}`, 140, startY + 123);
+
+      centerText('---------------------------------------------------------', startY + 131);
+
+      // Total
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Payment Received : ₹ ${paidAmt.toLocaleString()}`, 20, startY + 139);
+      centerText('---------------------------------------------------------', startY + 146);
+
+      // Footer
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text('Thank you for your payment.', 20, startY + 156);
+      doc.text('Authorized Signature', 140, startY + 171);
+      doc.text('School Admin', 140, startY + 178);
+
+      centerText('---------------------------------------------------------', startY + 191);
+      centerText('Generated from School Management System', startY + 198);
+      centerText('---------------------------------------------------------', startY + 205);
+
+      // Download
+      doc.save(`Receipt_${payment.receiptNo || 'N/A'}.pdf`);
+    } catch (error) {
+      console.error('Error generating receipt PDF:', error);
+      alert('Failed to generate PDF receipt. Please check console logs or try again.');
+    }
+  };
+
   const renderReports = () => {
     const reportData = selectedReportPeriod === 'weekly' ? weeklyReportData : monthlyReportData;
     const attendancePercentage = reportData.attendanceSummary.total > 0
@@ -892,7 +1004,7 @@ export function ParentDashboardNew() {
         </div>
 
         {/* Report Period Selector */}
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div id="report-period-selector" className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-900">Select Report Period</h3>
             <div className="flex gap-2">
@@ -941,7 +1053,16 @@ export function ParentDashboardNew() {
               <p className="text-gray-700 mb-1">Roll Number</p>
               <p className="text-gray-900">{selectedChild?.rollNo || 'N/A'}</p>
             </div>
-            <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+            <div 
+              onClick={() => {
+                setSelectedReportPeriod(prev => prev === 'weekly' ? 'monthly' : 'weekly');
+                const element = document.getElementById('report-period-selector');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-700 mb-1">Report Period</p>
               <p className="text-gray-900 capitalize">{selectedReportPeriod}</p>
             </div>
@@ -949,29 +1070,44 @@ export function ParentDashboardNew() {
         </div>
 
         {/* Attendance Summary */}
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div id="attendance-summary-section" className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-gray-900 mb-4 flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-600" />
             Attendance Summary
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-gray-50 rounded-lg cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border border-transparent hover:border-gray-200"
+            >
               <p className="text-gray-600 mb-1">Total Days</p>
               <p className="text-2xl text-gray-900">{reportData.attendanceSummary.total}</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Present</p>
               <p className="text-2xl text-green-600">{reportData.attendanceSummary.present}</p>
             </div>
-            <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-red-50 rounded-lg border border-red-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Absent</p>
               <p className="text-2xl text-red-600">{reportData.attendanceSummary.absent}</p>
             </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Late</p>
               <p className="text-2xl text-orange-600">{reportData.attendanceSummary.late}</p>
             </div>
-            <div className="text-center p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-purple-50 rounded-lg border-2 border-purple-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Attendance %</p>
               <p className="text-2xl text-purple-600">{attendancePercentage}%</p>
             </div>
@@ -987,33 +1123,51 @@ export function ParentDashboardNew() {
         </div>
 
         {/* Homework Completion */}
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div id="homework-completion-section" className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-gray-900 mb-4 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-blue-600" />
             Homework Completion
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-gray-50 rounded-lg cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border border-transparent hover:border-gray-200"
+            >
               <p className="text-gray-600 mb-1">Assigned</p>
               <p className="text-2xl text-gray-900">{reportData.homeworkSummary.assigned}</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Completed</p>
               <p className="text-2xl text-green-600">{reportData.homeworkSummary.completed}</p>
             </div>
-            <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">On Time</p>
               <p className="text-2xl text-blue-600">{reportData.homeworkSummary.onTime}</p>
             </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Late</p>
               <p className="text-2xl text-orange-600">{reportData.homeworkSummary.late}</p>
             </div>
-            <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-red-50 rounded-lg border border-red-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Pending</p>
               <p className="text-2xl text-red-600">{reportData.homeworkSummary.pending}</p>
             </div>
-            <div className="text-center p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="text-center p-4 bg-purple-50 rounded-lg border-2 border-purple-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <p className="text-gray-600 mb-1">Rate</p>
               <p className="text-2xl text-purple-600">{reportData.homeworkSummary.completionRate}%</p>
             </div>
@@ -1394,12 +1548,15 @@ export function ParentDashboardNew() {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Attendance */}
-            <div className={`p-4 rounded-lg border-2 ${
-              todayAttendance.status === 'present' ? 'bg-green-50 border-green-200' :
-              todayAttendance.status === 'absent' ? 'bg-red-50 border-red-200' :
-              todayAttendance.status === 'late' ? 'bg-orange-50 border-orange-200' :
-              'bg-gray-50 border-gray-200'
-            }`}>
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className={`p-4 rounded-lg border-2 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${
+                todayAttendance.status === 'present' ? 'bg-green-50 border-green-200' :
+                todayAttendance.status === 'absent' ? 'bg-red-50 border-red-200' :
+                todayAttendance.status === 'late' ? 'bg-orange-50 border-orange-200' :
+                'bg-gray-50 border-gray-200'
+              }`}
+            >
               <div className="flex items-center gap-3 mb-2">
                 {todayAttendance.status === 'present' ? (
                   <CheckCircle className="w-5 h-5 text-green-600" />
@@ -1434,7 +1591,10 @@ export function ParentDashboardNew() {
             </div>
 
             {/* Lessons */}
-            <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <div 
+              onClick={() => setCurrentView('timeline')}
+              className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <BookOpen className="w-5 h-5 text-blue-600" />
                 <p className="text-gray-700">Lessons Today</p>
@@ -1453,7 +1613,10 @@ export function ParentDashboardNew() {
             </div>
 
             {/* Quizzes */}
-            <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+            <div 
+              onClick={() => setCurrentView('timeline')}
+              className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <Brain className="w-5 h-5 text-purple-600" />
                 <p className="text-gray-700">Quizzes</p>
@@ -1472,7 +1635,10 @@ export function ParentDashboardNew() {
             </div>
 
             {/* Performance */}
-            <div className="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+            <div 
+              onClick={() => setCurrentView('progress')}
+              className="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <Award className="w-5 h-5 text-yellow-600" />
                 <p className="text-gray-700">Avg Score</p>
@@ -1867,7 +2033,20 @@ export function ParentDashboardNew() {
             Back to Dashboard
           </button>
         </div>
-        <ParentDashboardChildProgress targetChildId={selectedChildId} />
+        <ParentDashboardChildProgress 
+          targetChildId={selectedChildId} 
+          onNavigate={(view, targetId) => {
+            setCurrentView(view);
+            if (targetId) {
+              setTimeout(() => {
+                const element = document.getElementById(targetId);
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 150);
+            }
+          }}
+        />
       </div>
     );
   };
@@ -1960,7 +2139,10 @@ export function ParentDashboardNew() {
                       <td className="px-6 py-4 text-gray-700">{fee.paidDate}</td>
                       <td className="px-6 py-4 text-gray-700">{fee.receiptNo}</td>
                       <td className="px-6 py-4">
-                        <button className="flex items-center gap-2 text-purple-600 hover:text-purple-700">
+                        <button 
+                          onClick={() => downloadReceiptPDF(fee.original)}
+                          className="flex items-center gap-2 text-purple-600 hover:text-purple-700"
+                        >
                           <Download className="w-4 h-4" />
                           Download
                         </button>

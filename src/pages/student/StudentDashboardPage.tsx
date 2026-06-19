@@ -143,7 +143,7 @@ export function Dashboard() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         style={{ background: 'linear-gradient(to right, #0A2540, #1F6FEB)' }}
-        className="text-white p-6 md:p-10 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative"
+        className="text-white p-6 md:p-10 rounded-b-[2rem] md:rounded-b-[3rem] shadow-xl relative isolate"
       >
         {/* Decorative Background Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2rem] md:rounded-b-[3rem]">
