@@ -140,7 +140,7 @@ export const StudentProfile = {
           name: student.name,
           grade: student.class,
           section: student.section,
-          avatar: student.photo || "",
+          avatar: (await getData<any>("student_profile", {})).avatar || student.photo || "",
           email: student.email || email,
           id: student.id,
           phone: student.phone || student.parentPhone || "Not Provided",
@@ -1727,6 +1727,51 @@ export const TimelineService = {
     await saveData("timeline", updated);
     return updated;
   },
+  /**
+   * Build timeline from lesson history when the store is empty.
+   * Called on first page load — subsequent loads use the stored events.
+   */
+  buildFromHistory: async () => {
+    const stored = await TimelineService.getAll();
+    if (stored.length > 0) return stored; // Already has events
+
+    const profile = await StudentProfile.get();
+    if (!profile.grade || !profile.section) return stored;
+
+    const events: any[] = [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+
+    try {
+      // Backfill class events from lesson logs (last 30 days)
+      const lessons = await lessonService.getByClass(profile.grade, profile.section);
+      for (const lesson of lessons) {
+        if (new Date(lesson.date) < cutoff) continue;
+        events.push({
+          id: Date.now() + Math.random(),
+          type: "class",
+          title: lesson.subject,
+          subject: lesson.subject,
+          date: lesson.date,
+          time: "08:00 AM",
+          teacher: lesson.teacherName,
+          topics: [lesson.topic],
+          icon: lesson.subject.toLowerCase().includes("math") ? "calculator" : "book-open",
+          color: lesson.subject.toLowerCase().includes("math") ? "bg-blue-500" : "bg-indigo-500",
+          topicId: null,
+        });
+      }
+    } catch (e) {
+      console.warn("[TimelineService] Failed to backfill from lessons:", e);
+    }
+
+    if (events.length > 0) {
+      // Sort newest first before storing
+      events.sort((a, b) => b.date.localeCompare(a.date));
+      await saveData("timeline", events);
+    }
+    return events;
+  },
 };
 
 // ─── Quiz Questions ──────────────────────────────────────────────────────────
@@ -1768,6 +1813,8 @@ export const SettingsService = {
     theme: "light",
     language: "en",
     soundEnabled: true,
+    privacy: { profileVisibility: "School Only", showActivityStatus: true },
+    welcomeBannerDismissed: false,
   }),
   update: async (updates: any) => {
     const current = await SettingsService.get();

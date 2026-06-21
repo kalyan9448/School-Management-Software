@@ -8,6 +8,8 @@ import {
   Target,
   Home,
   RotateCcw,
+  Lock,
+  BookOpen,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Card } from "@/components/student/ui/card";
@@ -15,28 +17,71 @@ import { Button } from "@/components/student/ui/button";
 import { Input } from "@/components/student/ui/input";
 import { Progress } from "@/components/student/ui/progress";
 import { Badge } from "@/components/student/ui/badge";
-import { QuizService, StudentProfile } from "@/services/student/studentDataService";
+import { QuizService, StudentProfile, HomeworkService } from "@/services/student/studentDataService";
+import { aiService } from "@/services/aiService";
+import { useAIFeatureEnabled } from "@/hooks/useAIFeatureEnabled";
 import { useNavigate } from "react-router";
 
 type Answer = number | string | boolean | null;
 
 export function QuizPage() {
   const navigate = useNavigate();
+  const { isEnabled: isAIEnabled, isLoading: isAILoading } = useAIFeatureEnabled();
   
   // State to track quiz regeneration
   const [quizKey, setQuizKey] = useState(0);
   
   const [shuffledQuestions, setShuffledQuestions] = useState<any[]>([]);
   const [questionsLoaded, setQuestionsLoaded] = useState(false);
+  const [quizGenError, setQuizGenError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isAILoading) return;
     (async () => {
-      const allQuestions = await QuizService.getAll();
-      const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-      setShuffledQuestions(shuffled.slice(0, Math.min(10, shuffled.length)));
-      setQuestionsLoaded(true);
+      setQuestionsLoaded(false);
+      setQuizGenError(null);
+
+      if (!isAIEnabled) {
+        setQuestionsLoaded(true);
+        return;
+      }
+
+      try {
+        // Build a mixed-subject daily review from today's homework lessons
+        const topics = await HomeworkService.getAll();
+        const profile = await StudentProfile.get();
+        const allGenerated: any[] = [];
+
+        for (const topic of topics.slice(0, 3)) { // max 3 topics = up to 9 questions
+          try {
+            const qs = await aiService.generateQuiz(
+              topic.subject,
+              topic.topic,
+              profile.grade || "8",
+              3
+            );
+            qs.forEach((q, i) => {
+              allGenerated.push({ ...q, id: allGenerated.length + i + 1, subject: topic.subject });
+            });
+          } catch { /* skip topic on AI error */ }
+        }
+
+        if (allGenerated.length === 0) {
+          setQuizGenError("no_lessons");
+          setQuestionsLoaded(true);
+          return;
+        }
+
+        const shuffled = [...allGenerated].sort(() => Math.random() - 0.5);
+        setShuffledQuestions(shuffled.slice(0, Math.min(10, shuffled.length)));
+      } catch (err) {
+        console.error("[QuizPage] Failed to generate quiz:", err);
+        setQuizGenError("error");
+      } finally {
+        setQuestionsLoaded(true);
+      }
     })();
-  }, [quizKey]);
+  }, [quizKey, isAIEnabled, isAILoading]);
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>(new Array(shuffledQuestions.length).fill(null));
@@ -169,8 +214,81 @@ export function QuizPage() {
   const isAnswered = currentAnswer !== null;
   const isCorrect = isAnswered && isCorrectAnswer(currentAnswer);
 
+  // Loading state while AI generates questions
+  if (!questionsLoaded || isAILoading) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF] flex flex-col items-center justify-center p-4">
+        <Target className="w-16 h-16 text-purple-500 animate-pulse mb-6" />
+        <h2 className="text-2xl font-black text-[#1A1A1A] mb-2 tracking-tight">
+          {isAILoading ? "Checking AI features…" : "AI is building your quiz"}
+        </h2>
+        <p className="text-[#4A5568] font-medium">Personalizing questions for today's lessons…</p>
+        <div className="w-48 h-2 bg-gray-200 rounded-full mt-6 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-purple-400 to-pink-500 animate-pulse w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // AI disabled
+  if (!isAIEnabled) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF]">
+        <div style={{ background: "linear-gradient(to right, #0A2540, #1F6FEB)" }} className="text-white p-6 rounded-b-3xl shadow-lg mb-6">
+          <div className="max-w-screen-xl mx-auto">
+            <h1 className="text-2xl font-bold">Daily Quiz</h1>
+          </div>
+        </div>
+        <div className="max-w-md mx-auto px-4">
+          <Card className="p-8 text-center border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100">
+            <Lock className="w-14 h-14 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">AI Features Disabled</h2>
+            <p className="text-gray-600 text-sm mb-4">
+              This quiz is powered by AI. Please ask your school administrator to enable AI features.
+            </p>
+            <Button onClick={() => navigate(-1)} variant="outline">Go Back</Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // No lessons available today
+  if (quizGenError === "no_lessons" || (questionsLoaded && shuffledQuestions.length === 0)) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFF]">
+        <div style={{ background: "linear-gradient(to right, #0A2540, #1F6FEB)" }} className="text-white p-6 rounded-b-3xl shadow-lg mb-6">
+          <div className="max-w-screen-xl mx-auto">
+            <h1 className="text-2xl font-bold">Daily Quiz</h1>
+          </div>
+        </div>
+        <div className="max-w-md mx-auto px-4">
+          <Card className="p-8 text-center">
+            <BookOpen className="w-14 h-14 text-blue-300 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">No Lessons Today</h2>
+            <p className="text-gray-600 text-sm mb-6">
+              Your teacher hasn't posted any lessons yet. Check back later or practice from your homework.
+            </p>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <Button onClick={() => navigate("/homework")} className="bg-blue-600 hover:bg-blue-700 text-white">
+                Go to Homework
+              </Button>
+              <Button
+                onClick={() => { setQuizKey(k => k + 1); }}
+                variant="outline"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" /> Retry
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   // Results Screen
   if (quizCompleted) {
+
     const score = calculateScore();
     const percentage = Math.round((score / shuffledQuestions.length) * 100);
 

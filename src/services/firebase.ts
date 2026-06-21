@@ -3,6 +3,7 @@ import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,6 +19,7 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 // ── Firebase AI Logic (Gemini via Firebase) ───────────────────────────────────
 // Uses GoogleAIBackend so requests are routed through Firebase with your
@@ -43,5 +45,5 @@ enableMultiTabIndexedDbPersistence(db).catch((err) => {
     }
 });
 
-export { app, analytics, auth, db, ai, getGeminiModel };
+export { app, analytics, auth, db, storage, ai, getGeminiModel };
 export default app;

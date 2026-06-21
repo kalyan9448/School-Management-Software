@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { User, IndianRupee, Calendar, FileText, LogOut, Bell, Download, AlertCircle, PartyPopper, Megaphone, Award, Sparkles, Heart, Star, TrendingUp } from 'lucide-react';
-import logoImage from '../assets/logo.jpeg';
+import logoImage from '../assets/logo.png';
 
 export function ParentDashboard() {
   const { user, logout } = useAuth();

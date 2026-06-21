@@ -59,7 +59,7 @@ export function TimelinePage() {
   const [allEvents, setAllEvents] = useState<any[]>([]);
 
   useEffect(() => {
-    TimelineService.getAll().then(setAllEvents);
+    TimelineService.buildFromHistory().then(setAllEvents);
   }, []);
 
   const filteredEvents = allEvents.filter((event: any) => {

@@ -767,12 +767,12 @@ service cloud.firestore {
     // =========================================================================
 
     match /support_tickets/{ticketId} {
-      allow read: if isSuperAdmin() || (isSignedIn() && resource.data.school_id == userSchoolId());
+      allow read: if isSuperAdmin() || (isSignedIn() && (resource.data.school_id == userSchoolId() || resource.data.userId == request.auth.uid));
       
-      // School Admins can create tickets for their own school
+      // School members can create tickets for their own school
       allow create: if isSignedIn() 
           && request.resource.data.school_id == userSchoolId()
-          && request.resource.data.role == "admin";
+          && resolvedRole() in ["admin", "teacher", "student", "parent", "accountant"];
 
       // SuperAdmin can update anything; School Admins can ONLY add responses to their own tickets
       allow update: if isSuperAdmin() 

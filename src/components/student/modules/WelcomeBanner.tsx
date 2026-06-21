@@ -2,10 +2,24 @@ import { motion } from "motion/react";
 import { X, Sparkles } from "lucide-react";
 import { Button } from "@/components/student/ui/button";
 import { Card } from "@/components/student/ui/card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { SettingsService } from "@/services/student/studentDataService";
 
 export function WelcomeBanner() {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false); // hidden until Firestore confirms
+
+  useEffect(() => {
+    SettingsService.get().then(s => {
+      // Only show if the user has never dismissed it before
+      if (!s.welcomeBannerDismissed) setIsVisible(true);
+    });
+  }, []);
+
+  const handleDismiss = async () => {
+    setIsVisible(false);
+    // Persist dismiss so banner stays hidden after page refresh
+    await SettingsService.update({ welcomeBannerDismissed: true });
+  };
 
   if (!isVisible) return null;
 
@@ -16,7 +30,7 @@ export function WelcomeBanner() {
       exit={{ opacity: 0, y: -20 }}
       className="mb-6"
     >
-      <Card style={{ background: 'linear-gradient(to right, #1F6FEB, #0A2540)' }} className="p-4 text-white border-0">
+      <Card style={{ background: "linear-gradient(to right, #1F6FEB, #0A2540)" }} className="p-4 text-white border-0">
         <div className="flex items-start gap-3">
           <div className="bg-white/20 p-2 rounded-lg">
             <Sparkles className="w-5 h-5" />
@@ -30,7 +44,7 @@ export function WelcomeBanner() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsVisible(false)}
+            onClick={handleDismiss}
             className="text-white hover:bg-white/20 -mt-1 -mr-1"
           >
             <X className="w-4 h-4" />

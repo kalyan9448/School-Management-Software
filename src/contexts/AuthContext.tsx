@@ -41,6 +41,7 @@ interface AuthContextType {
     resetPassword: (email: string, password: string) => Promise<boolean>;
     requestPasswordReset: (email: string) => Promise<boolean>;
     logout: () => void;
+    refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -623,8 +624,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem('active_organization_id');
     };
 
+    // ── refreshUser ───────────────────────────────────────────────────────────
+    const refreshUser = async () => {
+        const firebaseUser = auth.currentUser;
+        if (firebaseUser) {
+            const email = firebaseUser.email ?? '';
+            const appUser = await getUserFromFirestore(firebaseUser.uid, email);
+            if (appUser) {
+                setUser(appUser);
+                persistUser(appUser);
+            }
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, checkEmail, login, createPassword, resetPassword, requestPasswordReset, logout }}>
+        <AuthContext.Provider value={{ user, loading, checkEmail, login, createPassword, resetPassword, requestPasswordReset, logout, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

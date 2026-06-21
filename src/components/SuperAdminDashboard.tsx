@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -60,7 +60,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
-import logoImage from '../assets/logo.jpeg';
+import logoImage from '../assets/logo.png';
 import { jsPDF } from 'jspdf';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import autoTable from 'jspdf-autotable';
@@ -195,8 +195,69 @@ export function SuperAdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
 
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && user?.id) {
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 256;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                try {
+                  const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+                  const { storage } = await import("../services/firebase");
+                  const { userService } = await import("../utils/firestoreService");
+                  
+                  const fileRef = ref(storage, `superadmin_photos/${user.id}.jpg`);
+                  await uploadBytes(fileRef, blob);
+                  const downloadUrl = await getDownloadURL(fileRef);
+                  
+                  await userService.update(user.id, { avatar: downloadUrl });
+                  await refreshUser();
+                  alert("Profile picture updated successfully!");
+                } catch (err) {
+                  console.error("Failed to upload avatar to Firebase Storage:", err);
+                  alert("Failed to upload avatar. Please try again.");
+                } finally {
+                  setIsUploading(false);
+                }
+              }
+            }, "image/jpeg", 0.7);
+          }
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // ── Bidirectional URL ↔ View sync ─────────────────────────────────────────
   // 1. When currentView changes (e.g. nav button clicked), push the new view
@@ -6600,9 +6661,32 @@ export function SuperAdminDashboard() {
 
         {/* User Info */}
         <div className="p-4 pb-8 border-t border-purple-700">
-          <div className="mb-3">
-            <p className="text-purple-100 mb-1 font-semibold">{user?.name}</p>
-            <p className="text-purple-300 text-xs truncate">{user?.email}</p>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-400 group-hover:border-yellow-400 transition-all flex items-center justify-center bg-purple-800 text-white font-bold text-lg">
+                {isUploading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : user?.avatar ? (
+                  <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  user?.name ? user.name.charAt(0).toUpperCase() : 'S'
+                )}
+              </div>
+              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Settings className="w-4 h-4 text-white" />
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                className="hidden"
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-purple-100 font-semibold truncate leading-tight">{user?.name}</p>
+              <p className="text-purple-300 text-xs truncate leading-normal">{user?.email}</p>
+            </div>
           </div>
           <button
             onClick={logout}

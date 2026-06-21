@@ -16,7 +16,7 @@ import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
 import { type HomeworkTopic } from "@/data/studentMockData";
-import { HomeworkService, StudentProfile } from "@/services/student/studentDataService";
+import { HomeworkService, StudentProfile, TimelineService } from "@/services/student/studentDataService";
 import { PerformanceRewardScreen } from "@/components/student/modules/PerformanceRewardScreen";
 import { aiService } from "@/services/aiService";
 import { useAIFeatureEnabled } from "@/hooks/useAIFeatureEnabled";
@@ -144,6 +144,23 @@ export function ObjectiveQuestionsPage() {
         };
 
         await HomeworkService.saveDetailedResults(Number(topicId), detailedData);
+
+        // Fix 1: Write a timeline event so Learning Timeline reflects this quiz
+        const timeSpent = Math.round((Date.now() - startTime) / 1000);
+        const timeFormatted = `${Math.floor(timeSpent / 60)}m ${timeSpent % 60}s`;
+        await TimelineService.add({
+          type: "quiz",
+          title: `${topicDetails?.subject || "Quiz"} — ${topicDetails?.topic || ""}`,
+          subject: topicDetails?.subject || "",
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+          score: accuracy,
+          correctAnswers,
+          totalQuestions: questions.length,
+          timeSpent: timeFormatted,
+          topicId: Number(topicId),
+          color: "bg-purple-500",
+        });
       })();
     }
   }, [showResults, topicId, questions, correctAnswers, accuracy, answers]);

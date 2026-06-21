@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { BottomNav } from "@/components/student/BottomNav";
-import { Home, BookOpen, Calendar, BarChart3, User, Loader2 } from "lucide-react";
+import { Home, BookOpen, Calendar, BarChart3, User, Loader2, MessageSquare, Clock, Send, ArrowLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
-import logoImage from '../assets/logo.jpeg';
+import logoImage from '../assets/logo.png';
 import { SettingsService } from '@/services/student/studentDataService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ticketService, schoolService } from '../utils/centralDataService';
+import { ticketService, schoolService, type SupportTicket, type TicketResponse } from '../utils/centralDataService';
 
 const sidebarNavItems = [
     { path: "/student/dashboard", icon: Home, label: "Dashboard" },
@@ -27,6 +27,80 @@ const DashboardLayout: React.FC = () => {
     const [urgency, setUrgency] = useState("Normal");
     const [description, setDescription] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Ticket Tracking States
+    const [activeModalTab, setActiveModalTab] = useState<'submit' | 'history'>('submit');
+    const [userTickets, setUserTickets] = useState<SupportTicket[]>([]);
+    const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+    const [replyMessage, setReplyMessage] = useState("");
+    const [loadingTickets, setLoadingTickets] = useState(false);
+
+    const loadUserTickets = async () => {
+        if (!user?.id) return;
+        setLoadingTickets(true);
+        try {
+            const fetched = await (ticketService as any).getUserTickets(user.id, user.school_id || 'default');
+            setUserTickets(fetched || []);
+        } catch (err) {
+            console.error("Failed to load user tickets:", err);
+        } finally {
+            setLoadingTickets(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showSupportModal && activeModalTab === 'history') {
+            loadUserTickets();
+        }
+    }, [showSupportModal, activeModalTab, user?.id]);
+
+    const handleSendReply = async () => {
+        if (!selectedTicket || !replyMessage.trim() || !user) return;
+        setIsSubmitting(true);
+        try {
+            const response: TicketResponse = {
+                userId: user.id,
+                userName: user.name || 'Student',
+                message: replyMessage,
+                timestamp: new Date().toISOString(),
+                isAdminResponse: false
+            };
+            await ticketService.addResponse(selectedTicket.id, response);
+            setReplyMessage("");
+            // Refresh selected ticket
+            const updated = await ticketService.getById(selectedTicket.id);
+            if (updated) {
+                setSelectedTicket(updated);
+                // Also update in list
+                setUserTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
+            }
+        } catch (err) {
+            console.error("Failed to send reply:", err);
+            alert("Failed to send reply. Please try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'Open': return 'bg-blue-100 text-blue-700 border-blue-200';
+            case 'In Progress': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+            case 'Resolved': return 'bg-green-100 text-green-700 border-green-200';
+            case 'Closed': return 'bg-gray-100 text-gray-700 border-gray-200';
+            default: return 'bg-gray-100 text-gray-700 border-gray-200';
+        }
+    };
+
+    const getPriorityColor = (priority: string) => {
+        switch (priority) {
+            case 'Urgent': return 'text-red-600 font-semibold';
+            case 'High': return 'text-orange-600 font-semibold';
+            case 'Medium': return 'text-yellow-600 font-semibold';
+            case 'Low': return 'text-green-600 font-semibold';
+            default: return 'text-gray-600 font-semibold';
+        }
+    };
 
     useEffect(() => {
         SettingsService.get().then(settings => {
@@ -113,7 +187,8 @@ const DashboardLayout: React.FC = () => {
             setDescription("");
             setCategory("Account Access & Login");
             setUrgency("Normal");
-            setShowSupportModal(false);
+            setActiveModalTab('history');
+            loadUserTickets();
         } catch (err) {
             console.error("Failed to create support ticket:", err);
             alert("Failed to submit support ticket. Please try again later.");
@@ -130,9 +205,9 @@ const DashboardLayout: React.FC = () => {
             {/* ─── Desktop Sidebar ─── */}
             <aside className="hidden md:flex flex-col flex-shrink-0 w-64 bg-white border-r border-gray-200 overflow-y-auto">
                 {/* Brand */}
-                <div className="flex items-center gap-3 px-6 py-8">
-                    <div className="p-2 bg-blue-600 rounded-xl shadow-lg shadow-blue-100">
-                        <img src={logoImage} alt="Logo" className="w-7 h-7 object-contain brightness-0 invert" />
+                <div className="flex items-center gap-3 px-6 py-6">
+                    <div className="shrink-0">
+                        <img src={logoImage} alt="Logo" className="w-12 h-12 object-contain" />
                     </div>
                     <div>
                         <div className="text-lg font-black text-gray-900 tracking-tight leading-none italic">KIDZ VISION</div>
@@ -231,114 +306,292 @@ const DashboardLayout: React.FC = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] z-50"
                     >
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-blue-600 text-white">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-blue-600 text-white flex-shrink-0">
                             <div>
                                 <h2 className="text-2xl font-bold">IT Support Desk</h2>
                                 <p className="text-sm opacity-90 mt-1">We're here to help you succeed.</p>
                             </div>
                             <button 
-                                onClick={() => setShowSupportModal(false)} 
-                                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                                onClick={() => {
+                                    setShowSupportModal(false);
+                                    setSelectedTicket(null);
+                                    setActiveModalTab('submit');
+                                }} 
+                                className="p-2 hover:bg-white/20 rounded-lg transition-colors font-bold text-xl"
                                 disabled={isSubmitting}
                             >
                                 ✕
                             </button>
                         </div>
+
+                        {/* Modal Tab Controls */}
+                        {!selectedTicket && (
+                            <div className="flex border-b border-gray-100 bg-gray-50 px-4 flex-shrink-0">
+                                <button
+                                    onClick={() => setActiveModalTab('submit')}
+                                    className={`flex-1 py-3 text-sm font-bold border-b-2 transition-all duration-200 ${activeModalTab === 'submit' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                                >
+                                    New Ticket
+                                </button>
+                                <button
+                                    onClick={() => setActiveModalTab('history')}
+                                    className={`flex-1 py-3 text-sm font-bold border-b-2 transition-all duration-200 ${activeModalTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                                >
+                                    My Tickets
+                                </button>
+                            </div>
+                        )}
                         
                         <div className="p-6 flex-1 overflow-y-auto">
-                            {/* Ticket Form */}
-                            <div className="h-fit">
-                                <h3 className="font-bold text-gray-900 text-base mb-1">Submit a Support Ticket</h3>
-                                <p className="text-xs text-gray-500 mb-4">Our team typically responds within 2-4 hours.</p>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Issue Category</label>
-                                        <select 
-                                            value={category} 
-                                            onChange={(e) => setCategory(e.target.value)}
-                                            className="w-full border border-gray-200 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white"
-                                            disabled={isSubmitting}
+                            {selectedTicket ? (
+                                /* Conversation Detail View */
+                                <div className="flex flex-col h-full min-h-[350px]">
+                                    {/* Ticket Header */}
+                                    <div className="pb-3 border-b border-gray-100 flex items-center gap-2 mb-4 flex-shrink-0">
+                                        <button
+                                            onClick={() => {
+                                                setSelectedTicket(null);
+                                                loadUserTickets(); // Refresh list when going back
+                                            }}
+                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+                                            title="Back to list"
                                         >
-                                            <option>Account Access & Login</option>
-                                            <option>Homework & Assignments</option>
-                                            <option>Schedule & Classes</option>
-                                            <option>Technical / Bug Report</option>
-                                            <option>Other Inquiry</option>
-                                        </select>
+                                            <ArrowLeft className="w-4 h-4" />
+                                        </button>
+                                        <div className="min-w-0 flex-1">
+                                            <h4 className="font-bold text-gray-900 text-sm truncate">Ticket #{selectedTicket.id.slice(0, 8)}</h4>
+                                            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                                                {selectedTicket.category} • {selectedTicket.priority} Priority
+                                            </p>
+                                        </div>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex-shrink-0 ${getStatusColor(selectedTicket.status)}`}>
+                                            {selectedTicket.status}
+                                        </span>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Urgency</label>
+
+                                    {/* Message Thread */}
+                                    <div className="flex-1 space-y-4 overflow-y-auto max-h-[250px] pr-1 mb-4">
+                                        {/* Original Message */}
                                         <div className="flex gap-2">
-                                            <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors ${urgency === 'Low' ? 'border-blue-500 bg-blue-50/50 text-blue-700 font-bold' : 'border-gray-200'}`}>
-                                                <input 
-                                                    type="radio" 
-                                                    name="urgency" 
-                                                    className="mr-1" 
-                                                    checked={urgency === "Low"} 
-                                                    onChange={() => setUrgency("Low")}
-                                                    disabled={isSubmitting}
-                                                /> Low
-                                            </label>
-                                            <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors ${urgency === 'Normal' ? 'border-blue-500 bg-blue-50/50 text-blue-700 font-bold' : 'border-gray-200'}`}>
-                                                <input 
-                                                    type="radio" 
-                                                    name="urgency" 
-                                                    className="mr-1" 
-                                                    checked={urgency === "Normal"}
-                                                    onChange={() => setUrgency("Normal")}
-                                                    disabled={isSubmitting}
-                                                /> Normal
-                                            </label>
-                                            <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-red-50 transition-colors ${urgency === 'High' ? 'border-red-500 bg-red-50/50 text-red-700 font-bold' : 'border-red-200 text-red-700'}`}>
-                                                <input 
-                                                    type="radio" 
-                                                    name="urgency" 
-                                                    className="mr-1" 
-                                                    checked={urgency === "High"}
-                                                    onChange={() => setUrgency("High")}
-                                                    disabled={isSubmitting}
-                                                /> High
-                                            </label>
+                                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                                {selectedTicket.userName.charAt(0)}
+                                            </div>
+                                            <div className="flex-1 space-y-1">
+                                                <div className="bg-gray-100 p-3 rounded-2xl rounded-tl-none inline-block max-w-[85%]">
+                                                    <p className="font-bold text-xs text-gray-900 mb-1">{selectedTicket.subject}</p>
+                                                    <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedTicket.message}</p>
+                                                </div>
+                                                <p className="text-[9px] text-gray-400 font-medium pl-1">{new Date(selectedTicket.createdAt).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Replies */}
+                                        {selectedTicket.responses && selectedTicket.responses.map((resp, idx) => (
+                                            <div key={idx} className={`flex gap-2 ${resp.isAdminResponse ? '' : 'flex-row-reverse'}`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${resp.isAdminResponse ? 'bg-indigo-600' : 'bg-blue-600'}`}>
+                                                    {resp.userName.charAt(0)}
+                                                </div>
+                                                <div className={`flex-1 space-y-1 ${resp.isAdminResponse ? '' : 'text-right'}`}>
+                                                    <div className={`p-3 rounded-2xl border text-left inline-block max-w-[85%] ${
+                                                        resp.isAdminResponse 
+                                                            ? 'bg-indigo-50 border-indigo-100 rounded-tl-none' 
+                                                            : 'bg-blue-50 border-blue-100 rounded-tr-none'
+                                                    }`}>
+                                                        {resp.isAdminResponse && (
+                                                            <p className="text-[9px] font-black text-indigo-600 uppercase tracking-tighter mb-0.5 select-none">
+                                                                Support Response
+                                                            </p>
+                                                        )}
+                                                        <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{resp.message}</p>
+                                                    </div>
+                                                    <p className="text-[9px] text-gray-400 font-medium px-1">{new Date(resp.timestamp).toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Reply Form */}
+                                    {selectedTicket.status !== 'Closed' ? (
+                                        <div className="pt-3 border-t border-gray-100 flex gap-2 flex-shrink-0">
+                                            <textarea
+                                                value={replyMessage}
+                                                onChange={(e) => setReplyMessage(e.target.value)}
+                                                placeholder="Type your reply..."
+                                                className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition-all max-h-[80px] resize-none"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        handleSendReply();
+                                                    }
+                                                }}
+                                                disabled={isSubmitting}
+                                            />
+                                            <button
+                                                onClick={handleSendReply}
+                                                disabled={isSubmitting || !replyMessage.trim()}
+                                                className="w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                            >
+                                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="p-3 bg-gray-100 text-center text-gray-500 text-xs italic rounded-xl flex-shrink-0">
+                                            This ticket is closed.
+                                        </div>
+                                    )}
+                                </div>
+                            ) : activeModalTab === 'history' ? (
+                                /* Ticket History List View */
+                                <div className="h-fit">
+                                    <h3 className="font-bold text-gray-900 text-base mb-1">My Submitted Tickets</h3>
+                                    <p className="text-xs text-gray-500 mb-4">Click a ticket below to view history and replies.</p>
+
+                                    {loadingTickets ? (
+                                        <div className="flex flex-col items-center justify-center py-12">
+                                            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+                                            <p className="text-xs text-gray-500">Loading your tickets...</p>
+                                        </div>
+                                    ) : userTickets.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <MessageSquare className="w-6 h-6 text-blue-500" />
+                                            </div>
+                                            <p className="text-gray-500 text-sm font-bold">No tickets found</p>
+                                            <p className="text-gray-400 text-xs mt-1">Submit a new ticket if you need assistance.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                                            {userTickets.map((t) => (
+                                                <button
+                                                    key={t.id}
+                                                    onClick={() => setSelectedTicket(t)}
+                                                    className="w-full text-left p-4 rounded-xl border border-gray-100 bg-white hover:bg-gray-50 transition-all shadow-sm flex items-center justify-between"
+                                                >
+                                                    <div className="min-w-0 flex-1 pr-2">
+                                                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(t.status)}`}>
+                                                                {t.status}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-400 font-medium flex items-center gap-0.5">
+                                                                <Clock className="w-3 h-3" />
+                                                                {new Date(t.createdAt).toLocaleDateString()}
+                                                            </span>
+                                                        </div>
+                                                        <h4 className="font-bold text-gray-900 text-sm truncate">{t.subject}</h4>
+                                                        <p className="text-[10px] text-gray-500 truncate mt-1">
+                                                            Category: {t.category} • Urgency: <span className={getPriorityColor(t.priority)}>{t.priority}</span>
+                                                        </p>
+                                                    </div>
+                                                    <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* Ticket Form */
+                                <div className="h-fit">
+                                    <h3 className="font-bold text-gray-900 text-base mb-1">Submit a Support Ticket</h3>
+                                    <p className="text-xs text-gray-500 mb-4">Our team typically responds within 2-4 hours.</p>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 mb-1">Issue Category</label>
+                                            <select 
+                                                value={category} 
+                                                onChange={(e) => setCategory(e.target.value)}
+                                                className="w-full border border-gray-200 rounded-lg p-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white"
+                                                disabled={isSubmitting}
+                                            >
+                                                <option>Account Access & Login</option>
+                                                <option>Homework & Assignments</option>
+                                                <option>Schedule & Classes</option>
+                                                <option>Technical / Bug Report</option>
+                                                <option>Other Inquiry</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 mb-1">Urgency</label>
+                                            <div className="flex gap-2">
+                                                <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors ${urgency === 'Low' ? 'border-blue-500 bg-blue-50/50 text-blue-700 font-bold' : 'border-gray-200'}`}>
+                                                    <input 
+                                                        type="radio" 
+                                                        name="urgency" 
+                                                        className="mr-1" 
+                                                        checked={urgency === "Low"} 
+                                                        onChange={() => setUrgency("Low")}
+                                                        disabled={isSubmitting}
+                                                    /> Low
+                                                </label>
+                                                <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors ${urgency === 'Normal' ? 'border-blue-500 bg-blue-50/50 text-blue-700 font-bold' : 'border-gray-200'}`}>
+                                                    <input 
+                                                        type="radio" 
+                                                        name="urgency" 
+                                                        className="mr-1" 
+                                                        checked={urgency === "Normal"}
+                                                        onChange={() => setUrgency("Normal")}
+                                                        disabled={isSubmitting}
+                                                    /> Normal
+                                                </label>
+                                                <label className={`flex-1 text-center border rounded-lg p-2 text-xs cursor-pointer hover:bg-red-50 transition-colors ${urgency === 'High' ? 'border-red-500 bg-red-50/50 text-red-700 font-bold' : 'border-red-200 text-red-700'}`}>
+                                                    <input 
+                                                        type="radio" 
+                                                        name="urgency" 
+                                                        className="mr-1" 
+                                                        checked={urgency === "High"}
+                                                        onChange={() => setUrgency("High")}
+                                                        disabled={isSubmitting}
+                                                    /> High
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
+                                            <textarea 
+                                                value={description}
+                                                onChange={(e) => setDescription(e.target.value)}
+                                                className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
+                                                placeholder="Please provide as much detail as possible to help us resolve the issue quickly..."
+                                                disabled={isSubmitting}
+                                            />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
-                                        <textarea 
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
-                                            placeholder="Please provide as much detail as possible to help us resolve the issue quickly..."
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
-                        <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-                            <button 
-                                className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                                onClick={() => setShowSupportModal(false)}
-                                disabled={isSubmitting}
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 flex items-center justify-center gap-2 min-w-[120px]"
-                                onClick={handleSubmitTicket}
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Submitting...
-                                    </>
-                                ) : (
-                                    'Submit Ticket'
+                        {/* Modal Footer */}
+                        {(!selectedTicket && (activeModalTab === 'submit' || activeModalTab === 'history')) && (
+                            <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 flex-shrink-0">
+                                <button 
+                                    className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                        setShowSupportModal(false);
+                                        setSelectedTicket(null);
+                                        setActiveModalTab('submit');
+                                    }}
+                                    disabled={isSubmitting}
+                                >
+                                    Close
+                                </button>
+                                {activeModalTab === 'submit' && (
+                                    <button 
+                                        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 flex items-center justify-center gap-2 min-w-[120px]"
+                                        onClick={handleSubmitTicket}
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Submitting...
+                                            </>
+                                        ) : (
+                                            'Submit Ticket'
+                                        )}
+                                    </button>
                                 )}
-                            </button>
-                        </div>
+                            </div>
+                        )}
                     </motion.div>
                 </div>
             )}

@@ -105,7 +105,47 @@ export function TeacherForm({ teacher, onBack, onSave }: TeacherFormProps) {
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => {
-                setTeacherPhoto(reader.result as string);
+                const img = new Image();
+                img.onload = async () => {
+                    const maxDim = 256;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                        if (width > maxDim) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                        }
+                    } else {
+                        if (height > maxDim) {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                        }
+                    }
+
+                    const canvas = document.createElement("canvas");
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext("2d");
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.toBlob(async (blob) => {
+                            if (blob) {
+                                try {
+                                    const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+                                    const { storage } = await import("../services/firebase");
+                                    const fileRef = ref(storage, `teacher_photos/${formData.employeeId || teacher?.id || Date.now().toString()}.jpg`);
+                                    await uploadBytes(fileRef, blob);
+                                    const downloadUrl = await getDownloadURL(fileRef);
+                                    setTeacherPhoto(downloadUrl);
+                                } catch (err) {
+                                    console.error("Failed to upload teacher photo to Firebase Storage:", err);
+                                    alert("Failed to upload photo. Please check your internet connection.");
+                                }
+                            }
+                        }, "image/jpeg", 0.7);
+                    }
+                };
+                img.src = reader.result as string;
             };
             reader.readAsDataURL(file);
         }

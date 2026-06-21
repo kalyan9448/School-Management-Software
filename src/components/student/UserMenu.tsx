@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { Avatar, AvatarFallback } from "./ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { Button } from "./ui/button";
 import { NotificationCenter } from "./NotificationCenter";
 import { motion, AnimatePresence } from "motion/react";
@@ -12,6 +12,23 @@ export function UserMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
    const [isOpen, setIsOpen] = useState(false);
+   const [avatarUrl, setAvatarUrl] = useState<string>("");
+
+   useEffect(() => {
+     if (user?.role === 'student') {
+       import("@/services/student/studentDataService")
+         .then(({ StudentProfile }) => {
+           StudentProfile.get().then((profile) => {
+             if (profile?.avatar) {
+               setAvatarUrl(profile.avatar);
+             }
+           });
+         })
+         .catch((err) => {
+           console.warn("Failed to load student avatar in UserMenu:", err);
+         });
+     }
+   }, [user]);
    const menuRef = useRef<HTMLDivElement>(null);
    const buttonRef = useRef<HTMLButtonElement>(null);
    const [coords, setCoords] = useState({ top: 0, right: 0 });
@@ -67,12 +84,16 @@ export function UserMenu() {
           onClick={() => setIsOpen(!isOpen)}
         >
           <Avatar className="h-10 w-10">
-            <AvatarFallback
-              className="text-white"
-              style={{ background: 'linear-gradient(135deg, #0A2540 0%, #1F6FEB 100%)' }}
-            >
-              {userInitial}
-            </AvatarFallback>
+            {avatarUrl ? (
+              <AvatarImage src={avatarUrl} alt="User Avatar" />
+            ) : (
+              <AvatarFallback
+                className="text-white"
+                style={{ background: 'linear-gradient(135deg, #0A2540 0%, #1F6FEB 100%)' }}
+              >
+                {userInitial}
+              </AvatarFallback>
+            )}
           </Avatar>
         </Button>
 

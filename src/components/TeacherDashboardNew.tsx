@@ -36,7 +36,7 @@ import {
   Lock,
   MapPin,
 } from 'lucide-react';
-import logoImage from '../assets/logo.jpeg';
+import logoImage from '../assets/logo.png';
 import {
   studentService,
   attendanceService,
@@ -125,10 +125,82 @@ export function TeacherDashboardNew() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
   
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { isEnabled: isAIEnabled, getDisabledMessage } = useAIFeatureEnabled();
   const { uniqueClasses } = useAcademicClasses();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && user?.id && user?.email) {
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 256;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                try {
+                  const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+                  const { storage } = await import("../services/firebase");
+                  const { userService, teacherService } = await import("../utils/firestoreService");
+                  
+                  const fileRef = ref(storage, `teacher_photos/${user.id}.jpg`);
+                  await uploadBytes(fileRef, blob);
+                  const downloadUrl = await getDownloadURL(fileRef);
+                  
+                  // Update both users profile and teacher profile document
+                  await userService.update(user.id, { avatar: downloadUrl });
+                  try {
+                    const teachers = await teacherService.getAll();
+                    const matchedTeacher = teachers.find(t => t.email.toLowerCase() === user.email.toLowerCase());
+                    if (matchedTeacher) {
+                      await teacherService.update(matchedTeacher.id, { photo: downloadUrl });
+                    }
+                  } catch (teacherErr) {
+                    console.warn("Failed to update teacher photo field:", teacherErr);
+                  }
+                  
+                  await refreshUser();
+                  alert("Profile picture updated successfully!");
+                } catch (err) {
+                  console.error("Failed to upload avatar to Firebase Storage:", err);
+                  alert("Failed to upload avatar. Please try again.");
+                } finally {
+                  setIsUploading(false);
+                }
+              }
+            }, "image/jpeg", 0.7);
+          }
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Weekly View State
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
@@ -3644,12 +3716,37 @@ export function TeacherDashboardNew() {
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
             <img src={logoImage} alt="Kidz Vision Logo" className="w-12 h-12" />
-            <div>
-              <h1 className="text-white mb-1">Teacher Portal</h1>
-              <p className="text-purple-200 text-sm">{user?.name}</p>
-            </div>
           </div>
           <div className="flex items-center gap-4">
+            {/* Profile Section (Photo Upload + Name) */}
+            <div className="flex items-center gap-3 bg-white/5 py-1.5 px-3 rounded-xl border border-white/10 backdrop-blur-sm">
+              <div className="text-right">
+                <h1 className="text-white text-lg sm:text-xl font-black leading-tight">Teacher Portal</h1>
+                <p className="text-purple-200 text-xs sm:text-sm font-medium leading-tight">{user?.name}</p>
+              </div>
+              <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-purple-400 group-hover:border-yellow-400 transition-all flex items-center justify-center bg-purple-800 text-white font-bold text-base shadow-inner animate-fade-in">
+                  {isUploading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : user?.avatar ? (
+                    <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    user?.name ? user.name.charAt(0).toUpperCase() : 'T'
+                  )}
+                </div>
+                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Users className="w-3.5 h-3.5 text-white" />
+                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+              </div>
+            </div>
+
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}

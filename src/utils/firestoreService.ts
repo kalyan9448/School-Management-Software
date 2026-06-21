@@ -3122,6 +3122,15 @@ export const ticketService = {
         );
     },
 
+    getUserTickets: async (userId: string, schoolId: string): Promise<SupportTicket[]> => {
+        const tickets = await fetchCollection<SupportTicket>(
+            'support_tickets',
+            where('school_id', '==', schoolId),
+            where('userId', '==', userId)
+        );
+        return tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    },
+
     getById: async (id: string): Promise<SupportTicket | null> => {
         return getDocById<SupportTicket>('support_tickets', id);
     },

@@ -24,7 +24,7 @@ import {
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
 import { Badge } from "@/components/student/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/student/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/student/ui/avatar";
 import { Progress } from "@/components/student/ui/progress";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,14 +43,49 @@ export function ProfilePage() {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
-        setStudentData({ ...studentData, avatar: base64String });
-        try {
-          await StudentProfile.update({ avatar: base64String });
-        } catch (err) {
-          console.error("Failed to update avatar:", err);
-        }
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 256;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                try {
+                  const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+                  const { storage } = await import("@/services/firebase");
+                  const fileRef = ref(storage, `student_avatars/${studentData.id || user?.id || Date.now().toString()}.jpg`);
+                  await uploadBytes(fileRef, blob);
+                  const downloadUrl = await getDownloadURL(fileRef);
+                  setStudentData((prev: any) => ({ ...prev, avatar: downloadUrl }));
+                  await StudentProfile.update({ avatar: downloadUrl });
+                } catch (err) {
+                  console.error("Failed to upload avatar to Firebase Storage:", err);
+                  alert("Failed to upload avatar. Please try again.");
+                }
+              }
+            }, "image/jpeg", 0.7);
+          }
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -281,12 +316,16 @@ export function ProfilePage() {
               <div className="flex flex-col items-center">
                 <div className="relative">
                   <Avatar className="w-32 h-32 border-4" style={{ borderColor: '#1F6FEB' }}>
-                    <AvatarFallback
-                      className="text-white text-4xl"
-                      style={{ background: 'linear-gradient(135deg, #0A2540 0%, #1F6FEB 100%)' }}
-                    >
-                      {studentData.avatar}
-                    </AvatarFallback>
+                    {studentData.avatar ? (
+                      <AvatarImage src={studentData.avatar} alt="Profile" />
+                    ) : (
+                      <AvatarFallback
+                        className="text-white text-4xl"
+                        style={{ background: 'linear-gradient(135deg, #0A2540 0%, #1F6FEB 100%)' }}
+                      >
+                        {studentData.name ? studentData.name.charAt(0) : "S"}
+                      </AvatarFallback>
+                    )}
                   </Avatar>
                   <button
                     className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg border-2 cursor-pointer"
