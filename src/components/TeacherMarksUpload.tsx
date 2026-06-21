@@ -10,6 +10,7 @@ import {
   X,
   Edit2,
   Trash2,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   examScoreService,
@@ -32,7 +33,12 @@ interface MarksRow {
   tempId?: string;
 }
 
-export function TeacherMarksUpload() {
+interface TeacherMarksUploadProps {
+  teacherEmail?: string;
+  onBack?: () => void;
+}
+
+export function TeacherMarksUpload({ onBack }: TeacherMarksUploadProps = {}) {
   const { user } = useAuth();
   const { schoolId } = useTenant();
 
@@ -313,14 +319,27 @@ export function TeacherMarksUpload() {
 
   return (
     <div className="w-full bg-white rounded-lg shadow-md p-6 space-y-6">
-      <div className="border-b pb-4">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <Upload className="w-6 h-6 text-blue-600" />
-          Upload Exam Scores
-        </h2>
-        <p className="text-gray-600 text-sm mt-1">
-          Upload marks for students in a specific class and subject
-        </p>
+      <div className="border-b pb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0 mr-1"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="w-6 h-6 text-gray-600" />
+            </button>
+          )}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <Upload className="w-6 h-6 text-blue-600" />
+              Upload Exam Scores
+            </h2>
+            <p className="text-gray-600 text-sm mt-1">
+              Upload marks for students in a specific class and subject
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Alert Messages */}

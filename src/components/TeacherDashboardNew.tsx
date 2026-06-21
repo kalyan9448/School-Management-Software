@@ -297,6 +297,7 @@ export function TeacherDashboardNew() {
   const [dashboardPresentCount, setDashboardPresentCount] = useState(0);
   const [dashboardWeekLessons, setDashboardWeekLessons] = useState<any[]>([]);
   const [lessonLogs, setLessonLogs] = useState<any[]>([]);
+  const [historicalLessons, setHistoricalLessons] = useState<any[]>([]);
   const [lessonsLoading, setLessonsLoading] = useState(false);
   const [allTimetableSlots, setAllTimetableSlots] = useState<TimetableSlot[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string>('');
@@ -490,6 +491,29 @@ export function TeacherDashboardNew() {
       isMounted = false;
     };
   }, [user?.email, currentWeekStart]);
+
+  // Load historical lessons for Learning Objectives tracking
+  useEffect(() => {
+    let isMounted = true;
+    const loadHistoricalLessons = async () => {
+      if (!user?.email) {
+        if (isMounted) setHistoricalLessons([]);
+        return;
+      }
+      try {
+        const allLessons = await lessonService.getByTeacher(user.email);
+        if (isMounted) {
+          setHistoricalLessons(allLessons);
+        }
+      } catch (error) {
+        console.error('Error loading historical lessons:', error);
+      }
+    };
+    loadHistoricalLessons();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.email]);
 
   const handleSaveNote = async () => {
     if (!selectedNoteStudentId || !noteContent) {
@@ -2012,6 +2036,7 @@ export function TeacherDashboardNew() {
       });
 
       setLessonLogs((prevLessons) => [lesson, ...prevLessons]);
+      setHistoricalLessons((prevLessons) => [lesson, ...prevLessons]);
 
       // Update dashboard stats immediately if lesson is for today
       const today = new Date().toISOString().split('T')[0];
@@ -2703,19 +2728,7 @@ export function TeacherDashboardNew() {
 
   const renderMarksUpload = () => {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-gray-900">Upload Exam Scores</h2>
-          <button
-            onClick={handleBack}
-            className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-bold"
-          >
-            <ChevronLeft className="w-4 h-4 inline mr-1" />
-            Back
-          </button>
-        </div>
-        <TeacherMarksUpload />
-      </div>
+      <TeacherMarksUpload onBack={handleBack} />
     );
   };
 
@@ -3441,7 +3454,7 @@ export function TeacherDashboardNew() {
     const predefinedList = subjectSpecificObjectives[activeSubject] || subjectSpecificObjectives['Default'];
 
     // Get lessons logged for this class and subject
-    const classLessons = lessonLogs.filter(l => {
+    const classLessons = historicalLessons.filter(l => {
       if (!activeClass) return false;
       return l.class === activeClass.class && 
              l.section === activeClass.section && 
