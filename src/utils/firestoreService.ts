@@ -192,7 +192,7 @@ function getQueryKey(collectionName: string, constraints: QueryConstraint[]): st
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Collections that are global (not scoped to a single school). */
-const GLOBAL_COLLECTIONS = new Set(['users', 'organizations', 'plans', 'support_tickets']);
+const GLOBAL_COLLECTIONS = new Set(['users', 'organizations', 'plans', 'support_tickets', 'subscriptions', 'billing_records']);
 
 function getOrganizationId(): string {
     let oid = (sessionStorage.getItem('active_organization_id') || '').trim();
@@ -1976,6 +1976,10 @@ export const announcementService = {
         });
     },
 
+    update: async (id: string, updates: Partial<Announcement>): Promise<void> => {
+        await updateDocById('announcements', id, updates);
+    },
+
     delete: async (id: string): Promise<void> => {
         await deleteDocById('announcements', id);
     },
@@ -2104,8 +2108,18 @@ export const notificationService = {
                 where('recipientRole', '==', roleLower)
             );
 
+            // Query B: Universal announcements (sent to 'all' roles)
+            const universalQuery = await fetchCollection<Notification>(
+                'notifications',
+                where('userId', '==', 'all'),
+                where('recipientRole', '==', 'all')
+            );
+
+            // Combine before filtering
+            const allGlobal = [...baseQuery, ...universalQuery];
+
             // Filter in-memory to distinguish between global and class-specific
-            global = baseQuery.filter(n => {
+            global = allGlobal.filter(n => {
                 // If notification has NO class constraint, it's global for the role
                 if (!n.class) return true;
                 
@@ -3110,16 +3124,27 @@ export const planService = {
 // ==================== SUPPORT TICKETS SERVICE ====================
 
 export const ticketService = {
-    getAll: async (): Promise<SupportTicket[]> => {
+    getAll: async (ticketType?: 'school' | 'platform'): Promise<SupportTicket[]> => {
+        if (ticketType) {
+            const tickets = await fetchCollection<SupportTicket>(
+                'support_tickets',
+                where('ticketType', '==', ticketType)
+            );
+            return tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        }
         return fetchCollection<SupportTicket>('support_tickets', orderBy('createdAt', 'desc'));
     },
 
-    getSchoolTickets: async (schoolId: string): Promise<SupportTicket[]> => {
-        return fetchCollection<SupportTicket>(
+    getSchoolTickets: async (schoolId: string, ticketType?: 'school' | 'platform'): Promise<SupportTicket[]> => {
+        const constraints: QueryConstraint[] = [where('school_id', '==', schoolId)];
+        if (ticketType) {
+            constraints.push(where('ticketType', '==', ticketType));
+        }
+        const tickets = await fetchCollection<SupportTicket>(
             'support_tickets',
-            where('school_id', '==', schoolId),
-            orderBy('createdAt', 'desc')
+            ...constraints
         );
+        return tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     },
 
     getUserTickets: async (userId: string, schoolId: string): Promise<SupportTicket[]> => {
@@ -3156,11 +3181,21 @@ export const ticketService = {
         if (!ticket) throw new Error('Ticket not found');
 
         const updatedResponses = [...(ticket.responses || []), response];
-        await updateDocById('support_tickets', id, {
-            responses: updatedResponses,
-            updatedAt: new Date().toISOString(),
-            status: response.isAdminResponse ? 'In Progress' : ticket.status,
-        });
+
+        if (response.isAdminResponse && ticket.status === 'Open') {
+            // Admin/resolver reply: allowed to also update status (Firestore Case 1 rule)
+            await updateDocById('support_tickets', id, {
+                responses: updatedResponses,
+                updatedAt: new Date().toISOString(),
+                status: 'In Progress',
+            });
+        } else {
+            // Student/requester reply: only update responses + updatedAt (Firestore Case 2 rule)
+            await updateDocById('support_tickets', id, {
+                responses: updatedResponses,
+                updatedAt: new Date().toISOString(),
+            });
+        }
     },
 };
 
@@ -3209,6 +3244,94 @@ export const teacherCheckinService = {
     },
 };
 
+// ==================== SYSTEM CONFIGURATION SERVICE ====================
+
+export const systemConfigService = {
+    get: async (serviceId: string): Promise<any | null> => {
+        return getDocById<any>('system_configuration', serviceId);
+    },
+
+    set: async (serviceId: string, data: any): Promise<void> => {
+        await setDocById<any>('system_configuration', serviceId, data);
+    },
+};
+
+// ==================== RECOVERY LOGS SERVICE ====================
+
+export interface RecoveryLogRecord {
+    id: string;
+    date: string;
+    schoolName: string;
+    userEmail: string;
+    action: string;
+    status: 'Completed' | 'Pending';
+}
+
+export const recoveryLogService = {
+    getAll: async (): Promise<RecoveryLogRecord[]> => {
+        const logs = await fetchCollection<RecoveryLogRecord>('recovery_logs');
+        return logs.sort((a, b) => b.id.localeCompare(a.id));
+    },
+
+    create: async (log: Omit<RecoveryLogRecord, 'id'> & { id?: string }): Promise<RecoveryLogRecord> => {
+        return createDoc<RecoveryLogRecord>('recovery_logs', log);
+    },
+};
+
+// ==================== SUBSCRIPTION SERVICE ====================
+
+export const subscriptionService = {
+    getAll: async (): Promise<any[]> => {
+        return fetchCollection<any>('subscriptions');
+    },
+    getById: async (id: string): Promise<any | null> => {
+        return getDocById<any>('subscriptions', id);
+    },
+    create: async (sub: any): Promise<any> => {
+        const id = sub.id || doc(getModuleCollection('subscriptions')).id;
+        const { id: _strip, ...rest } = sub;
+        const payload = { ...rest, id };
+        await setDoc(getDocRef('subscriptions', id), payload);
+        clearFirestoreCache('subscriptions');
+        return payload;
+    },
+    update: async (id: string, updates: any): Promise<void> => {
+        await updateDocById('subscriptions', id, updates);
+        clearFirestoreCache('subscriptions');
+    },
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('subscriptions', id);
+        clearFirestoreCache('subscriptions');
+    }
+};
+
+// ==================== BILLING SERVICE ====================
+
+export const billingService = {
+    getAll: async (): Promise<any[]> => {
+        return fetchCollection<any>('billing_records');
+    },
+    getById: async (id: string): Promise<any | null> => {
+        return getDocById<any>('billing_records', id);
+    },
+    create: async (bill: any): Promise<any> => {
+        const id = bill.id || doc(getModuleCollection('billing_records')).id;
+        const { id: _strip, ...rest } = bill;
+        const payload = { ...rest, id };
+        await setDoc(getDocRef('billing_records', id), payload);
+        clearFirestoreCache('billing_records');
+        return payload;
+    },
+    update: async (id: string, updates: any): Promise<void> => {
+        await updateDocById('billing_records', id, updates);
+        clearFirestoreCache('billing_records');
+    },
+    delete: async (id: string): Promise<void> => {
+        await deleteDocById('billing_records', id);
+        clearFirestoreCache('billing_records');
+    }
+};
+
 // ==================== DEFAULT EXPORT (same shape as old service) ====================
 
 const firestoreDataService = {
@@ -3245,6 +3368,11 @@ const firestoreDataService = {
     quizResult: quizResultService,
     plan: planService,
     teacherCheckin: teacherCheckinService,
+    systemConfig: systemConfigService,
+    recoveryLog: recoveryLogService,
+    subscription: subscriptionService,
+    billing: billingService,
 };
 
 export default firestoreDataService;
+

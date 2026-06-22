@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/firebase';
 import { INDIAN_STATES, STATE_CITY_MAPPING } from '../data/locationData';
-import { schoolService, organizationService, announcementService, statisticsService, planService, ticketService, clearFirestoreCache, type SubscriptionPlan, type SupportTicket, type TicketResponse } from '../utils/centralDataService';
+import { schoolService, organizationService, announcementService, notificationService, statisticsService, planService, ticketService, clearFirestoreCache, userService, systemConfigService, recoveryLogService, subscriptionService, billingService, type SubscriptionPlan, type SupportTicket, type TicketResponse, type User } from '../utils/centralDataService';
 import {
   Building2,
   Building,
@@ -195,7 +195,7 @@ export function SuperAdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = (searchParams.get('view') as ViewType) || 'dashboard';
 
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, requestPasswordReset } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -356,7 +356,9 @@ export function SuperAdminDashboard() {
   });
   const [newFeature, setNewFeature] = useState('');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [superAdminTicketFilter, setSuperAdminTicketFilter] = useState<'platform' | 'school' | 'all'>('platform');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [superAdmins, setSuperAdmins] = useState<User[]>([]);
   const [ticketReply, setTicketReply] = useState('');
   const [isUpdatingTicket, setIsUpdatingTicket] = useState(false);
 
@@ -426,47 +428,11 @@ export function SuperAdminDashboard() {
   // Data for schools - loaded from Firestore via useEffect
   const [schools, setSchools] = useState<School[]>([]);
 
-  // Subscriptions — derived from Firestore schools
-  const subscriptions = useMemo<Subscription[]>(() => schools.map(s => {
-    const planName = s.plan || 'Basic';
-    const planInfo = planDetails[planName] || { price: 3000, maxStudents: 200, maxTeachers: 20, storage: '20 GB' };
-    
-    return {
-      id: s.id,
-      schoolName: s.name,
-      plan: planName,
-      status: s.status === 'active' ? 'active' : s.status === 'archived' ? 'expired' : ('trial' as 'active' | 'expired' | 'trial'),
-      students: s.activeStudents || s.students || 0,
-      maxStudents: s.maxStudents || planInfo.maxStudents,
-      teachers: s.activeTeachers || s.teachers || 0,
-      maxTeachers: s.maxTeachers || planInfo.maxTeachers,
-      storage: s.storage || '0 GB',
-      maxStorage: planInfo.storage,
-      monthlyFee: planInfo.price,
-      startDate: s.subscriptionStart || '',
-      endDate: s.subscriptionEnd || '',
-    };
-  }), [schools, planDetails]);
+  // Subscriptions — loaded from Firestore
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
 
-  // Billing records — derived from Firestore schools
-  const billingRecords = useMemo<BillingRecord[]>(() => schools.map((s, index) => {
-    const planName = (s.plan || 'Basic') as 'Basic' | 'Professional' | 'Enterprise';
-    const planInfo = planDetails[planName] || { price: 3000, maxStudents: 200 };
-
-    return {
-      id: `INV-${s.id}`,
-      schoolName: s.name,
-      plan: planName,
-      billingCycle: 'Monthly' as const,
-      activeUsers: (s.activeStudents || s.students || 0) + (s.activeTeachers || s.teachers || 0),
-      userLimit: s.maxStudents || planInfo.maxStudents,
-      nextBillingDate: s.subscriptionEnd || '',
-      amount: planInfo.price,
-      paymentStatus: (s.status === 'active' ? 'Paid' : 'Overdue') as 'Paid' | 'Pending' | 'Overdue',
-      invoiceNumber: `INV-${new Date().getFullYear()}-${String(index + 1).padStart(3, '0')}`,
-      lastPaymentDate: s.subscriptionStart || '',
-    };
-  }), [schools, planDetails]);
+  // Billing records — loaded from Firestore
+  const [billingRecords, setBillingRecords] = useState<BillingRecord[]>([]);
 
   // Load data from Firestore once user auth is ready
   useEffect(() => {
@@ -585,6 +551,15 @@ export function SuperAdminDashboard() {
       }
 
       try {
+        const allUsers = await fetchWithRetry(() => userService.getAll());
+        const admins = allUsers.filter(u => u.role === 'superadmin');
+        setSuperAdmins(admins);
+      } catch (err: any) {
+        console.error('Failed to load super admins:', err);
+        errors.push('Super Admins: ' + (err?.message || 'Failed to load'));
+      }
+
+      try {
         const firestoreTickets = await fetchWithRetry(() => ticketService.getAll());
         setTickets(firestoreTickets);
       } catch (err: any) {
@@ -597,6 +572,14 @@ export function SuperAdminDashboard() {
         setPlatformStats(stats);
       } catch (err: any) {
         console.error('Failed to load platform stats:', err);
+      }
+
+      // Load recovery logs from Firestore
+      try {
+        const logs = await fetchWithRetry(() => recoveryLogService.getAll());
+        if (logs.length > 0) setRecoveryHistory(logs as any);
+      } catch (err: any) {
+        console.error('Failed to load recovery logs:', err);
       }
 
       // ── Step 4: Fetch real-time metrics for all schools ───────────────────
@@ -674,6 +657,72 @@ export function SuperAdminDashboard() {
         return true;
       });
 
+      let firestoreSubscriptions: any[] = [];
+      let firestoreBillingRecords: any[] = [];
+      try {
+        firestoreSubscriptions = await fetchWithRetry(() => subscriptionService.getAll());
+      } catch (err: any) {
+        console.error('Failed to load subscriptions:', err);
+      }
+      try {
+        firestoreBillingRecords = await fetchWithRetry(() => billingService.getAll());
+      } catch (err: any) {
+        console.error('Failed to load billing records:', err);
+      }
+
+      // Seeding Subscriptions and Billing Records if Firestore is empty
+      if (firestoreSubscriptions.length === 0 && uniqueSchools.length > 0) {
+        console.log('Seeding subscriptions to Firestore...');
+        const seededSubs = await Promise.all(uniqueSchools.map(async (s: any) => {
+          const planName = s.plan || 'Basic';
+          const planInfo = firestorePlans.find(p => (p.name || p.id) === planName) || { price: 3000, maxStudents: 200, maxTeachers: 20, storage: '20 GB' };
+          const subData = {
+            id: s.id,
+            schoolName: s.name,
+            plan: planName,
+            status: s.status === 'active' ? 'active' : s.status === 'archived' ? 'expired' : 'trial',
+            students: s.activeStudents || s.students || 0,
+            maxStudents: s.maxStudents || planInfo.maxStudents,
+            teachers: s.activeTeachers || s.teachers || 0,
+            maxTeachers: s.maxTeachers || planInfo.maxTeachers,
+            storage: s.storage || '0 GB',
+            maxStorage: planInfo.storage,
+            monthlyFee: planInfo.price,
+            startDate: s.subscriptionStart || new Date().toISOString().split('T')[0],
+            endDate: s.subscriptionEnd || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          };
+          await subscriptionService.create(subData);
+          return subData;
+        }));
+        firestoreSubscriptions = seededSubs;
+      }
+
+      if (firestoreBillingRecords.length === 0 && uniqueSchools.length > 0) {
+        console.log('Seeding billing records to Firestore...');
+        const seededBills = await Promise.all(uniqueSchools.map(async (s: any, index: number) => {
+          const planName = s.plan || 'Basic';
+          const planInfo = firestorePlans.find(p => (p.name || p.id) === planName) || { price: 3000, maxStudents: 200 };
+          const billData = {
+            id: `INV-${s.id}`,
+            schoolName: s.name,
+            plan: planName,
+            billingCycle: 'Monthly',
+            activeUsers: (s.activeStudents || s.students || 0) + (s.activeTeachers || s.teachers || 0),
+            userLimit: s.maxStudents || planInfo.maxStudents,
+            nextBillingDate: s.subscriptionEnd || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            amount: planInfo.price,
+            paymentStatus: s.status === 'active' ? 'Paid' : 'Overdue',
+            invoiceNumber: `INV-${new Date().getFullYear()}-${String(index + 1).padStart(3, '0')}`,
+            lastPaymentDate: s.subscriptionStart || new Date().toISOString().split('T')[0],
+          };
+          await billingService.create(billData);
+          return billData;
+        }));
+        firestoreBillingRecords = seededBills;
+      }
+
+      setSubscriptions(firestoreSubscriptions);
+      setBillingRecords(firestoreBillingRecords);
       setSchools(uniqueSchools as any);
       setOrganizations(repairedOrganizations as any);
       if (firestoreAnnouncements.length > 0) {
@@ -867,6 +916,44 @@ export function SuperAdminDashboard() {
       const savedSchool = await schoolService.create(newSchool);
       // Update local state with the persisted school (IDs always match now)
       setSchools(prev => prev.map(s => s.id === newSchool.id ? { ...newSchool, ...savedSchool } : s));
+
+      // Create subscription and billing record in Firestore
+      const planName = schoolForm.plan || 'Basic';
+      const planInfo = planDetails[planName] || { price: 3000, maxStudents: 200, maxTeachers: 20, storage: '20 GB' };
+      const subData: Subscription = {
+        id: schoolId,
+        schoolName: schoolForm.name,
+        plan: planName,
+        status: 'active',
+        students: 0,
+        maxStudents: schoolForm.maxStudents || planInfo.maxStudents,
+        teachers: 0,
+        maxTeachers: schoolForm.maxTeachers || planInfo.maxTeachers,
+        storage: '0 GB',
+        maxStorage: planInfo.storage,
+        monthlyFee: planInfo.price,
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: subscriptionEnd.toISOString().split('T')[0],
+      };
+
+      const billData: BillingRecord = {
+        id: `INV-${schoolId}`,
+        schoolName: schoolForm.name,
+        plan: planName,
+        billingCycle: 'Monthly',
+        activeUsers: 0,
+        userLimit: schoolForm.maxStudents || planInfo.maxStudents,
+        nextBillingDate: subscriptionEnd.toISOString().split('T')[0],
+        amount: planInfo.price,
+        paymentStatus: 'Paid',
+        invoiceNumber: `INV-${new Date().getFullYear()}-${String(schools.length + 1).padStart(3, '0')}`,
+        lastPaymentDate: new Date().toISOString().split('T')[0],
+      };
+
+      await subscriptionService.create(subData);
+      await billingService.create(billData);
+      setSubscriptions(prev => [...prev, subData]);
+      setBillingRecords(prev => [...prev, billData]);
     } catch (err: any) {
       console.error('Failed to save school to Firestore:', err);
       alert(`Failed to save school to Firestore:\n${err?.message || err}\n\nPlease check the browser console for details.`);
@@ -1266,6 +1353,9 @@ export function SuperAdminDashboard() {
     setSchools(schools.map((s) => (s.id === school.id ? { ...s, status: newStatus as 'active' | 'suspended' } : s)));
     setSelectedSchool(selectedSchool?.id === school.id ? { ...school, status: newStatus as 'active' | 'suspended' } : selectedSchool);
     schoolService.update(school.id, { status: newStatus }).catch(err => console.error('Failed to update school status:', err));
+    const subStatus = newStatus === 'active' ? 'active' : 'expired';
+    subscriptionService.update(school.id, { status: subStatus }).catch(() => {});
+    setSubscriptions(prev => prev.map(s => s.id === school.id ? { ...s, status: subStatus } : s));
     alert(`${school.name} has been ${newStatus}`);
   };
 
@@ -1327,6 +1417,20 @@ export function SuperAdminDashboard() {
     setSelectedSchool(updatedSchool);
     setIsEditingSchool(false);
     schoolService.update(selectedSchool.id, updatedSchool).catch(err => console.error('Failed to update school:', err));
+
+    const planName = schoolForm.plan || 'Basic';
+    const planInfo = planDetails[planName] || { price: 3000, maxStudents: 200, maxTeachers: 20, storage: '20 GB' };
+    const subUpdates = {
+      schoolName: schoolForm.name,
+      plan: planName,
+      maxStudents: schoolForm.maxStudents || planInfo.maxStudents,
+      maxTeachers: schoolForm.maxTeachers || planInfo.maxTeachers,
+      maxStorage: planInfo.storage,
+      monthlyFee: planInfo.price,
+    };
+    subscriptionService.update(selectedSchool.id, subUpdates).catch(() => {});
+    setSubscriptions(prev => prev.map(s => s.id === selectedSchool.id ? { ...s, ...subUpdates } : s));
+
     alert('School details updated successfully!');
   };
 
@@ -1352,18 +1456,44 @@ export function SuperAdminDashboard() {
     });
   };
 
-  const handleResetCredentials = (school: School) => {
+  const handleResetCredentials = async (school: School) => {
+    if (!school.email) {
+      alert('School admin email is not set!');
+      return;
+    }
     const newPassword = 'Admin@' + Math.random().toString(36).substring(2, 10);
-    alert(
-      `Credentials Reset Successfully!\n\n` +
-      `School: ${school.name}\n` +
-      `Admin Email: ${school.email || 'not set'}\n` +
-      `New Password: ${newPassword}\n\n` +
-      `⚠️ Important:\n` +
-      `- This password is temporary\n` +
-      `- Admin must change it on first login\n` +
-      `- Email has been sent to the admin`
-    );
+    
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+      const response = await fetch(`${apiBase}/api/auth/reset-user-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: school.email,
+          password: newPassword
+        })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to reset password');
+      }
+      alert(
+        `Credentials Reset Successfully!\n\n` +
+        `School: ${school.name}\n` +
+        `Admin Email: ${school.email}\n` +
+        `New Password: ${newPassword}\n\n` +
+        `⚠️ Important:\n` +
+        `- This password is temporary\n` +
+        `- Admin must change it on first login`
+      );
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      alert(`Failed to reset credentials: ${err.message}`);
+    }
   };
 
   // Organization Detail Handlers
@@ -1481,9 +1611,34 @@ export function SuperAdminDashboard() {
     setShowResetCredentialsModal(true);
   };
 
-  const confirmResetCredentials = () => {
-    setShowResetCredentialsModal(false);
-    setResetCredentials({ email: '', password: '' });
+  const confirmResetCredentials = async () => {
+    if (!resetCredentials.email || !resetCredentials.password) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+      const response = await fetch(`${apiBase}/api/auth/reset-user-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: resetCredentials.email,
+          password: resetCredentials.password
+        })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to reset password');
+      }
+      alert(`Credentials reset successfully for ${resetCredentials.email}!`);
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      alert(`Failed to reset credentials: ${err.message}`);
+    } finally {
+      setShowResetCredentialsModal(false);
+      setResetCredentials({ email: '', password: '' });
+    }
   };
 
   const handleDeleteOrganization = () => {
@@ -1497,7 +1652,14 @@ export function SuperAdminDashboard() {
     setSchools(schools.filter(s => s.organizationId !== selectedOrganization.id));
     setOrganizations(organizations.filter(o => o.id !== selectedOrganization.id));
     organizationService.delete(selectedOrganization.id).catch(err => console.error('Failed to delete org:', err));
-    orgSchools.forEach(s => schoolService.delete(s.id).catch(err => console.error('Failed to delete school:', err)));
+    orgSchools.forEach(s => {
+      schoolService.delete(s.id).catch(err => console.error('Failed to delete school:', err));
+      subscriptionService.delete(s.id).catch(() => {});
+      billingService.delete(`INV-${s.id}`).catch(() => {});
+    });
+    const orgSchoolIds = new Set(orgSchools.map(s => s.id));
+    setSubscriptions(prev => prev.filter(sub => !orgSchoolIds.has(sub.id)));
+    setBillingRecords(prev => prev.filter(br => !orgSchoolIds.has(br.id.replace('INV-', ''))));
     setShowDeleteOrgModal(false);
     setCurrentView('organizations');
     setSelectedOrganization(null);
@@ -1537,47 +1699,101 @@ export function SuperAdminDashboard() {
     setShowManageStorageModal(true);
   };
 
-  const confirmUpdateCredentials = () => {
+  const confirmUpdateCredentials = async () => {
     if (!configForm.apiKey || !configForm.apiSecret) {
       alert('Please fill in all required fields');
       return;
     }
 
-    alert(`✅ Credentials Updated Successfully!\n\nService: ${selectedService}\nProvider: ${configForm.provider}\n\nNew credentials have been saved securely.`);
+    try {
+      await systemConfigService.set(`creds_${selectedService.replace(/\s+/g, '_').toLowerCase()}`, {
+        service: selectedService,
+        provider: configForm.provider,
+        apiKey: configForm.apiKey,
+        apiSecret: configForm.apiSecret,
+        endpoint: configForm.endpoint,
+        webhookUrl: configForm.webhookUrl,
+        updatedAt: new Date().toISOString(),
+      });
+      alert(`✅ Credentials Updated Successfully!\n\nService: ${selectedService}\nProvider: ${configForm.provider}\n\nNew credentials have been saved securely.`);
+    } catch (err: any) {
+      console.error('Failed to save credentials:', err);
+      alert(`❌ Failed to save credentials: ${err.message}`);
+    }
     setShowUpdateCredsModal(false);
   };
 
-  const performConnectionTest = () => {
-    // Simulate connection test
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.2; // 80% success rate for demo
+  const performConnectionTest = async () => {
+    setConnectionTestResult(null);
+    // Try to load stored config for this service and validate credentials format
+    try {
+      const serviceKey = `creds_${selectedService.replace(/\s+/g, '_').toLowerCase()}`;
+      const stored = await systemConfigService.get(serviceKey);
+      const hasCredentials = stored && (stored as any).apiKey && (stored as any).apiSecret;
+      if (hasCredentials) {
+        setConnectionTestResult({
+          success: true,
+          message: 'Configuration validated!',
+          details: `✅ Credentials found for ${selectedService}\n• Provider: ${(stored as any).provider || 'N/A'}\n• API Key: ${String((stored as any).apiKey).substring(0, 6)}...\n• Last updated: ${(stored as any).updatedAt ? new Date((stored as any).updatedAt).toLocaleString() : 'Unknown'}\n• Status: Configured`,
+        });
+      } else {
+        setConnectionTestResult({
+          success: false,
+          message: 'No credentials configured',
+          details: `❌ No credentials saved for ${selectedService}\n• Please update credentials first using "Update Credentials"\n• Then re-test the connection`,
+        });
+      }
+    } catch (err: any) {
       setConnectionTestResult({
-        success: isSuccess,
-        message: isSuccess ? 'Connection successful!' : 'Connection failed',
-        details: isSuccess
-          ? `✅ Connected to ${selectedService}\n• Response time: ${Math.floor(Math.random() * 100 + 20)}ms\n• Status: Active\n• Last sync: ${new Date().toLocaleTimeString()}`
-          : `❌ Failed to connect\n• Error: Timeout\n• Please check credentials and try again`,
+        success: false,
+        message: 'Test failed',
+        details: `❌ Could not verify connection: ${err.message}`,
       });
-    }, 1500);
+    }
   };
 
-  const confirmConfigureService = () => {
+  const confirmConfigureService = async () => {
     if (!configForm.provider) {
       alert('Please select a provider');
       return;
     }
 
-    alert(`✅ Configuration Saved!\n\nService: ${selectedService}\nProvider: ${configForm.provider}\n\nSettings have been applied successfully.`);
+    try {
+      await systemConfigService.set(`config_${selectedService.replace(/\s+/g, '_').toLowerCase()}`, {
+        service: selectedService,
+        provider: configForm.provider,
+        endpoint: configForm.endpoint,
+        webhookUrl: configForm.webhookUrl,
+        updatedAt: new Date().toISOString(),
+      });
+      alert(`✅ Configuration Saved!\n\nService: ${selectedService}\nProvider: ${configForm.provider}\n\nSettings have been applied successfully.`);
+    } catch (err: any) {
+      console.error('Failed to save config:', err);
+      alert(`❌ Failed to save configuration: ${err.message}`);
+    }
     setShowConfigureModal(false);
   };
 
-  const confirmManageStorage = () => {
+  const confirmManageStorage = async () => {
     if (!storageForm.bucketName || !storageForm.accessKey || !storageForm.secretKey) {
       alert('Please fill in all required fields');
       return;
     }
 
-    alert(`✅ Storage Configuration Updated!\n\nProvider: ${storageForm.provider}\nBucket: ${storageForm.bucketName}\nRegion: ${storageForm.region}\n\nChanges will take effect immediately.`);
+    try {
+      await systemConfigService.set('cloud_storage', {
+        provider: storageForm.provider,
+        bucketName: storageForm.bucketName,
+        region: storageForm.region,
+        accessKey: storageForm.accessKey,
+        secretKey: storageForm.secretKey,
+        updatedAt: new Date().toISOString(),
+      });
+      alert(`✅ Storage Configuration Updated!\n\nProvider: ${storageForm.provider}\nBucket: ${storageForm.bucketName}\nRegion: ${storageForm.region}\n\nChanges will take effect immediately.`);
+    } catch (err: any) {
+      console.error('Failed to save storage config:', err);
+      alert(`❌ Failed to save storage configuration: ${err.message}`);
+    }
     setShowManageStorageModal(false);
   };
 
@@ -1632,7 +1848,7 @@ export function SuperAdminDashboard() {
     setSelectedRecoveryUser(null);
   };
 
-  const logRecoveryAction = (action: string) => {
+  const logRecoveryAction = async (action: string) => {
     if (!selectedRecoveryUser) return;
 
     const newLog: RecoveryLog = {
@@ -1646,15 +1862,37 @@ export function SuperAdminDashboard() {
 
     const updatedHistory = [newLog, ...recoveryHistory];
     setRecoveryHistory(updatedHistory);
+
+    // Persist recovery log to Firestore
+    try {
+      await recoveryLogService.create(newLog);
+    } catch (err) {
+      console.error('Failed to persist recovery log:', err);
+    }
   };
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     if (!selectedRecoveryUser) {
       alert('Please search and select a user first');
       return;
     }
-    logRecoveryAction('Password Reset');
-    alert(`Password Reset Link Sent to ${selectedRecoveryUser.email}!\n\n✅ Email sent\n- Valid for 24 hours`);
+    const email = selectedRecoveryUser.email;
+    if (!email) {
+      alert('No email address found for this user.');
+      return;
+    }
+    try {
+      const sent = await requestPasswordReset(email);
+      if (sent) {
+        await logRecoveryAction('Password Reset');
+        alert(`✅ Password Reset Link Sent to ${email}!\n\n- Email delivered\n- Link valid for 24 hours`);
+      } else {
+        alert(`❌ Failed to send password reset email to ${email}. Please try again.`);
+      }
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      alert(`❌ Error: ${err.message || 'Failed to send reset email'}`);
+    }
   };
 
   const handleUnlockAccount = () => {
@@ -1683,13 +1921,39 @@ export function SuperAdminDashboard() {
     alert(`Account Unlocked for ${selectedRecoveryUser.name}!\n\n✅ Access restored`);
   };
 
-  const handleTempAccess = () => {
+  const handleTempAccess = async () => {
     if (!selectedRecoveryUser) {
       alert('Please search and select a user first');
       return;
     }
-    logRecoveryAction('Temp Access Generated');
-    alert(`Temporary Access Generated for ${selectedRecoveryUser.name}!\n\n✅ Credentials:\n- Valid for 24 hours\n- Sent to ${selectedRecoveryUser.email}`);
+    const email = selectedRecoveryUser.email;
+    if (!email) {
+      alert('No email address found for this user.');
+      return;
+    }
+    // Generate a secure temporary password
+    const tempPassword = 'Temp@' + Math.random().toString(36).substring(2, 10) + '!';
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const apiBase = ((import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:3001').replace(/\/$/, '');
+      const response = await fetch(`${apiBase}/api/auth/reset-user-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password: tempPassword }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to generate temp access');
+      }
+      await logRecoveryAction('Temp Access Generated');
+      alert(`✅ Temporary Access Generated for ${selectedRecoveryUser.name}!\n\nCredentials:\n- Email: ${email}\n- Temp Password: ${tempPassword}\n- Valid for 24 hours\n\nPlease share securely.`);
+    } catch (err: any) {
+      console.error('Temp access error:', err);
+      alert(`❌ Failed to generate temporary access: ${err.message}`);
+    }
   };
 
   const handleSendAnnouncement = async () => {
@@ -1714,6 +1978,20 @@ export function SuperAdminDashboard() {
     setAnnouncements(updatedAnnouncements);
     try {
       await announcementService.create(newAnnouncement as any);
+
+      // Broadcast as a global notification so all dashboards receive it dynamically
+      const recipientRole = announcementForm.audience === 'Teachers Only' ? 'teacher'
+        : announcementForm.audience === 'Parents Only' ? 'parent'
+        : 'all';
+      await notificationService.create({
+        userId: 'all',
+        recipientRole,
+        type: 'announcement',
+        title: announcementForm.title,
+        message: announcementForm.message,
+        date: new Date().toISOString(),
+        read: false,
+      });
     } catch (err) {
       console.error('Failed to save announcement:', err);
     }
@@ -1760,6 +2038,20 @@ export function SuperAdminDashboard() {
     setAnnouncements(updatedAnnouncements);
     try {
       await announcementService.create(newAnnouncement as any);
+
+      // Broadcast as a global notification so all dashboards receive it dynamically
+      const recipientRole = announcementForm.audience === 'Teachers Only' ? 'teacher'
+        : announcementForm.audience === 'Parents Only' ? 'parent'
+        : 'all';
+      await notificationService.create({
+        userId: 'all',
+        recipientRole,
+        type: 'announcement',
+        title: announcementForm.title,
+        message: `[Scheduled for ${new Date(scheduledDateTime).toLocaleString()}] ${announcementForm.message}`,
+        date: new Date().toISOString(),
+        read: false,
+      });
     } catch (err) {
       console.error('Failed to save scheduled announcement:', err);
     }
@@ -1792,22 +2084,8 @@ export function SuperAdminDashboard() {
     setShowScheduleMaintenanceModal(true);
   };
 
-  const confirmScheduleMaintenance = () => {
-    // Save to maintenance log
-    const maintenance = {
-      id: 'MAINT-' + Date.now(),
-      startDateTime: maintenanceForm.startDateTime,
-      endDateTime: maintenanceForm.endDateTime,
-      reason: maintenanceForm.reason,
-      scheduledAt: new Date().toISOString(),
-    };
-
-    const existing: any[] = [];
-    const maintenanceList = [...existing];
-    maintenanceList.push(maintenance);
-
-
-    // Also add to announcements history
+  const confirmScheduleMaintenance = async () => {
+    // Build the announcement object for Firestore
     const maintenanceAnnouncement: Announcement = {
       id: 'ANN-' + Date.now(),
       date: new Date().toISOString().split('T')[0],
@@ -1819,8 +2097,16 @@ export function SuperAdminDashboard() {
       scheduledAt: maintenanceForm.startDateTime,
     };
 
+    // Update local state immediately
     const updatedAnnouncements = [maintenanceAnnouncement, ...announcements];
     setAnnouncements(updatedAnnouncements);
+
+    // Persist to Firestore
+    try {
+      await announcementService.create(maintenanceAnnouncement as any);
+    } catch (err) {
+      console.error('Failed to persist maintenance announcement:', err);
+    }
 
     alert(`✅ Maintenance Scheduled!\n\nWindow:\nStart: ${new Date(maintenanceForm.startDateTime).toLocaleString()}\nEnd: ${new Date(maintenanceForm.endDateTime).toLocaleString()}\nReason: ${maintenanceForm.reason}\n\nAll schools will be notified.`);
 
@@ -2014,6 +2300,10 @@ export function SuperAdminDashboard() {
     const activeSchools = schools.filter(s => s.status === 'active').length;
     const paidSubscriptions = subscriptions.filter(s => s.status === 'active').length;
 
+    const dynamicTotalStudents = schools.reduce((sum, s) => sum + (s.activeStudents || s.students || 0), 0);
+    const dynamicTotalTeachers = schools.reduce((sum, s) => sum + (s.activeTeachers || s.teachers || 0), 0);
+    const dynamicTotalParents = schools.reduce((sum, s) => sum + (s.activeParents || 0), 0);
+
     // System health: % of schools that are active
     const systemHealth = schools.length > 0
       ? Math.round((activeSchools / schools.length) * 1000) / 10
@@ -2096,7 +2386,7 @@ export function SuperAdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Students</p>
-                <h3 className="text-gray-900 mb-1">{platformStats.totalStudents}</h3>
+                <h3 className="text-gray-900 mb-1">{dynamicTotalStudents}</h3>
                 <p className="text-green-600 flex items-center gap-1">
                   <TrendingUp className="w-4 h-4" />
                   Across {activeSchools} schools
@@ -2112,7 +2402,7 @@ export function SuperAdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Teachers</p>
-                <h3 className="text-gray-900 mb-1">{platformStats.totalTeachers}</h3>
+                <h3 className="text-gray-900 mb-1">{dynamicTotalTeachers}</h3>
                 <p className="text-teal-600 flex items-center gap-1">
                   <GraduationCap className="w-4 h-4" />
                   Staff Members
@@ -2128,7 +2418,7 @@ export function SuperAdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 mb-1">Total Parents</p>
-                <h3 className="text-gray-900 mb-1">{platformStats.totalParents}</h3>
+                <h3 className="text-gray-900 mb-1">{dynamicTotalParents}</h3>
                 <p className="text-pink-600 flex items-center gap-1">
                   <Heart className="w-4 h-4" fill="currentColor" />
                   Family Accounts
@@ -2213,7 +2503,7 @@ export function SuperAdminDashboard() {
           <div className="bg-white rounded-xl shadow-md p-6">
             <h2 className="text-gray-900 mb-4">Recent Organizations</h2>
             <div className="space-y-3">
-              {organizations.slice(0, 3).map((org) => (
+              {[...organizations].sort((a: any, b: any) => new Date(b.createdDate || b.created_at || 0).getTime() - new Date(a.createdDate || a.created_at || 0).getTime()).slice(0, 3).map((org) => (
                 <div
                   key={org.id}
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -2586,7 +2876,7 @@ export function SuperAdminDashboard() {
                 </button>
               )}
               <button
-                onClick={() => alert(`Archive ${school.name}\n\nThis will:\n- Disable all access\n- Preserve data for 90 days\n- Send notification to admin`)}
+                onClick={() => { setSchoolToArchive(school); setShowArchiveSchoolModal(true); }}
                 className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                 title="Archive School"
               >
@@ -2609,6 +2899,26 @@ export function SuperAdminDashboard() {
         if (b.billingCycle === 'Annual') return sum + (b.amount / 12);
         return sum;
       }, 0);
+
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    const activeSubsThisMonth = subscriptions.filter(s => {
+      const d = new Date(s.startDate);
+      return s.status === 'active' && !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length;
+
+    const trialSubs = subscriptions.filter(s => s.status === 'trial').length;
+    const expiredSubs = subscriptions.filter(s => s.status === 'expired').length;
+    const totalSubs = subscriptions.length;
+
+    const trialConversionRate = totalSubs > 0 
+      ? (((totalSubs - trialSubs) / totalSubs) * 100).toFixed(1)
+      : "0.0";
+
+    const churnRate = totalSubs > 0
+      ? ((expiredSubs / totalSubs) * 100).toFixed(1)
+      : "0.0";
 
     const activeSubscriptions = billingRecords.filter(b => b.paymentStatus === 'Paid').length;
     const overduePayments = billingRecords.filter(b => b.paymentStatus === 'Overdue');
@@ -2702,9 +3012,8 @@ export function SuperAdminDashboard() {
             </div>
             <p className="text-gray-600 text-sm mb-1">Total MRR</p>
             <h3 className="text-gray-900 mb-1">₹{Math.round(totalMRR).toLocaleString()}</h3>
-            <p className="text-green-600 text-sm flex items-center gap-1">
-              <TrendingUp className="w-4 h-4" />
-              +12.5% from last month
+            <p className="text-gray-500 text-sm flex items-center gap-1">
+              Based on active plans
             </p>
           </div>
 
@@ -2719,7 +3028,7 @@ export function SuperAdminDashboard() {
             <h3 className="text-gray-900 mb-1">{activeSubscriptions}</h3>
             <p className="text-green-600 text-sm flex items-center gap-1">
               <TrendingUp className="w-4 h-4" />
-              +3 new this month
+              {activeSubsThisMonth > 0 ? `+${activeSubsThisMonth} new this month` : 'No new this month'}
             </p>
           </div>
 
@@ -2731,10 +3040,10 @@ export function SuperAdminDashboard() {
               <ArrowUpRight className="w-5 h-5 text-green-600" />
             </div>
             <p className="text-gray-600 text-sm mb-1">Trial Conversion Rate</p>
-            <h3 className="text-gray-900 mb-1">68.5%</h3>
+            <h3 className="text-gray-900 mb-1">{trialConversionRate}%</h3>
             <p className="text-green-600 text-sm flex items-center gap-1">
               <TrendingUp className="w-4 h-4" />
-              +5.2% from last month
+              {trialSubs} accounts in trial
             </p>
           </div>
 
@@ -2746,10 +3055,10 @@ export function SuperAdminDashboard() {
               <ArrowDownRight className="w-5 h-5 text-green-600" />
             </div>
             <p className="text-gray-600 text-sm mb-1">Churn Rate</p>
-            <h3 className="text-gray-900 mb-1">2.3%</h3>
-            <p className="text-green-600 text-sm flex items-center gap-1">
+            <h3 className="text-gray-900 mb-1">{churnRate}%</h3>
+            <p className="text-orange-600 text-sm flex items-center gap-1">
               <TrendingDown className="w-4 h-4" />
-              -0.8% improvement
+              {expiredSubs} expired plans
             </p>
           </div>
         </div>
@@ -3445,9 +3754,9 @@ export function SuperAdminDashboard() {
       return sum + 20;
     }, 0);
 
-    const totalStudents = platformStats.totalStudents;
-    const totalTeachers = platformStats.totalTeachers;
-    const totalParents = platformStats.totalParents;
+    const totalStudents = schools.reduce((sum, s) => sum + (s.activeStudents || s.students || 0), 0);
+    const totalTeachers = schools.reduce((sum, s) => sum + (s.activeTeachers || s.teachers || 0), 0);
+    const totalParents = schools.reduce((sum, s) => sum + (s.activeParents || 0), 0);
 
     return (
     <div className="space-y-6">
@@ -4169,10 +4478,15 @@ export function SuperAdminDashboard() {
           <div className="flex justify-end gap-3">
             {ann.status === 'Scheduled' && (
               <button
-                onClick={() => {
-                  const updated = announcements.map(a => a.id === ann.id ? { ...a, status: 'Published' as const } : a);
-                  setAnnouncements(updated);
-                  setViewingAnnouncement({ ...ann, status: 'Published' });
+                onClick={async () => {
+                  try {
+                    await announcementService.update(ann.id, { status: 'Published' } as any);
+                    const updated = announcements.map(a => a.id === ann.id ? { ...a, status: 'Published' as const } : a);
+                    setAnnouncements(updated);
+                    setViewingAnnouncement({ ...ann, status: 'Published' });
+                  } catch (err) {
+                    console.error('Failed to publish announcement:', err);
+                  }
                 }}
                 className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
               >
@@ -5091,6 +5405,10 @@ export function SuperAdminDashboard() {
                   schoolService.delete(selectedSchool.id).catch(err =>
                     console.error('Failed to delete school from Firestore:', err)
                   );
+                  subscriptionService.delete(selectedSchool.id).catch(() => {});
+                  billingService.delete(`INV-${selectedSchool.id}`).catch(() => {});
+                  setSubscriptions(prev => prev.filter(sub => sub.id !== selectedSchool.id));
+                  setBillingRecords(prev => prev.filter(br => br.id !== `INV-${selectedSchool.id}`));
                   // Decrement schoolsCount on parent organization
                   if (orgId) {
                     const newCount = Math.max(0, schools.filter(s => s.organizationId === orgId).length - 1);
@@ -6405,59 +6723,113 @@ export function SuperAdminDashboard() {
     </div>
   );
 
-  const renderTickets = () => (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Support Tickets</h2>
-          <p className="text-gray-500">Manage and respond to support requests from all schools.</p>
-        </div>
-      </div>
+  const renderTickets = () => {
+    const superAdminFilteredTickets = tickets.filter(ticket => {
+      if (superAdminTicketFilter === 'all') return true;
+      const type = ticket.ticketType || 'school';
+      return type === superAdminTicketFilter;
+    });
 
-      <div className="flex gap-6 h-[calc(100vh-200px)]">
-        {/* Ticket List */}
-        <div className="w-1/3 bg-white rounded-xl shadow-md overflow-hidden flex flex-col">
-          <div className="p-4 border-b">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search tickets..."
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-              />
+    return (
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 font-display">Support Tickets</h2>
+            <p className="text-gray-500 text-sm">Manage and respond to support requests from all schools.</p>
+          </div>
+          {/* Queue Selector Tabs */}
+          <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl border border-gray-200/50">
+            <button
+              onClick={() => {
+                setSuperAdminTicketFilter('platform');
+                setSelectedTicket(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                superAdminTicketFilter === 'platform'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              Platform Tickets
+            </button>
+            <button
+              onClick={() => {
+                setSuperAdminTicketFilter('school');
+                setSelectedTicket(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                superAdminTicketFilter === 'school'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              School Internal
+            </button>
+            <button
+              onClick={() => {
+                setSuperAdminTicketFilter('all');
+                setSelectedTicket(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                superAdminTicketFilter === 'all'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              All Queue
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-6 h-[calc(100vh-200px)]">
+          {/* Ticket List */}
+          <div className="w-1/3 bg-white rounded-xl shadow-md overflow-hidden flex flex-col">
+            <div className="p-4 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search tickets..."
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {superAdminFilteredTickets.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 italic">No tickets found</div>
+              ) : (
+                superAdminFilteredTickets.map(ticket => (
+                  <button
+                    key={ticket.id}
+                    onClick={() => setSelectedTicket(ticket)}
+                    className={`w-full p-4 text-left border-b hover:bg-gray-50 transition-colors ${selectedTicket?.id === ticket.id ? 'bg-purple-50' : ''}`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-bold text-gray-900 truncate max-w-[120px]">{ticket.schoolName}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                        ticket.status === 'Open' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                        ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                        ticket.status === 'Resolved' ? 'bg-green-100 text-green-700 border-green-200' :
+                        'bg-gray-100 text-gray-700 border-gray-200'
+                      }`}>
+                        {ticket.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 truncate mb-1">{ticket.subject}</p>
+                    <div className="flex justify-between items-center text-[10px] text-gray-400">
+                      <span>{ticket.category} • {ticket.priority}</span>
+                      <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    {ticket.assignedToName && (
+                      <div className="mt-1 text-[9px] text-purple-600 font-semibold bg-purple-50 px-2 py-0.5 rounded inline-block">
+                        Assigned: {ticket.assignedToName}
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            {tickets.length === 0 ? (
-              <div className="p-8 text-center text-gray-500 italic">No tickets found</div>
-            ) : (
-              tickets.map(ticket => (
-                <button
-                  key={ticket.id}
-                  onClick={() => setSelectedTicket(ticket)}
-                  className={`w-full p-4 text-left border-b hover:bg-gray-50 transition-colors ${selectedTicket?.id === ticket.id ? 'bg-purple-50' : ''}`}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-gray-900 truncate max-w-[120px]">{ticket.schoolName}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                      ticket.status === 'Open' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                      ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                      ticket.status === 'Resolved' ? 'bg-green-100 text-green-700 border-green-200' :
-                      'bg-gray-100 text-gray-700 border-gray-200'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 truncate mb-1">{ticket.subject}</p>
-                  <div className="flex justify-between items-center text-[10px] text-gray-400">
-                    <span>{ticket.category} • {ticket.priority}</span>
-                    <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
 
         {/* Conversation View */}
         <div className="flex-1 bg-white rounded-xl shadow-md flex flex-col overflow-hidden">
@@ -6469,6 +6841,35 @@ export function SuperAdminDashboard() {
                   <p className="text-xs text-gray-500">{selectedTicket.schoolName} • {selectedTicket.userName} ({selectedTicket.userEmail})</p>
                 </div>
                 <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-gray-500">Assign To:</span>
+                  <select
+                    value={selectedTicket.assignedTo || ''}
+                    onChange={async (e) => {
+                      const newAssignedTo = e.target.value;
+                      const selectedAdmin = superAdmins.find(admin => admin.id === newAssignedTo);
+                      const newAssignedToName = selectedAdmin ? selectedAdmin.name : '';
+                      
+                      await ticketService.update(selectedTicket.id, { 
+                        assignedTo: newAssignedTo || '', 
+                        assignedToName: newAssignedToName || '' 
+                      });
+                      
+                      const updatedTicket = { 
+                        ...selectedTicket, 
+                        assignedTo: newAssignedTo || undefined, 
+                        assignedToName: newAssignedToName || undefined 
+                      };
+                      setSelectedTicket(updatedTicket);
+                      setTickets(prev => prev.map(t => t.id === selectedTicket.id ? updatedTicket : t));
+                    }}
+                    className="text-xs border rounded-lg px-2 py-1 bg-white outline-none focus:ring-2 focus:ring-purple-500/20"
+                  >
+                    <option value="">Unassigned</option>
+                    {superAdmins.map(admin => (
+                      <option key={admin.id} value={admin.id}>{admin.name}</option>
+                    ))}
+                  </select>
+
                   <span className="text-xs font-medium text-gray-500">Status:</span>
                   <select
                     value={selectedTicket.status}
@@ -6501,7 +6902,7 @@ export function SuperAdminDashboard() {
                 </div>
 
                 {/* Responses */}
-                {selectedTicket.responses.map((resp, idx) => (
+                {(selectedTicket.responses || []).map((resp, idx) => (
                   <div key={idx} className={`flex gap-3 ${resp.isAdminResponse ? 'flex-row-reverse' : ''}`}>
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 font-bold text-xs ${resp.isAdminResponse ? 'bg-amber-600 shadow-md' : 'bg-purple-600'}`}>
                       {resp.userName.charAt(0)}
@@ -6547,6 +6948,17 @@ export function SuperAdminDashboard() {
                           setSelectedTicket(updated);
                           setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
                         }
+                        // Create in-app notification for the school admin who raised the ticket
+                        notificationService.create({
+                          userId: selectedTicket.userId,
+                          recipientRole: 'admin',
+                          school_id: selectedTicket.school_id,
+                          type: 'general',
+                          title: 'Support Ticket Updated',
+                          message: `Platform support has replied to your ticket: "${selectedTicket.subject}"`,
+                          date: new Date().toISOString(),
+                          read: false,
+                        }).catch(err => console.warn('[Ticket] Failed to create admin notification:', err));
                       } catch (err) {
                         console.error('Failed to send response:', err);
                       } finally {
@@ -6575,6 +6987,7 @@ export function SuperAdminDashboard() {
       </div>
     </div>
   );
+};
 
   const renderContent = () => {
     switch (currentView) {
@@ -7044,8 +7457,48 @@ export function SuperAdminDashboard() {
                           <Download className="w-4 h-4" />
                           Download PDF
                         </button>
+                        {invoice.paymentStatus !== 'Paid' ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const newStatus = 'Paid';
+                                await billingService.update(invoice.id, { paymentStatus: newStatus, lastPaymentDate: new Date().toISOString().split('T')[0] });
+                                setBillingRecords(prev => prev.map(b => b.invoiceNumber === selectedInvoice ? { ...b, paymentStatus: newStatus, lastPaymentDate: new Date().toISOString().split('T')[0] } : b));
+                                alert('Invoice status updated to Paid successfully!');
+                              } catch (err: any) {
+                                console.error('Failed to update invoice status:', err);
+                                alert('Failed to update invoice status: ' + err.message);
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Mark as Paid
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const newStatus = 'Pending';
+                                await billingService.update(invoice.id, { paymentStatus: newStatus });
+                                setBillingRecords(prev => prev.map(b => b.invoiceNumber === selectedInvoice ? { ...b, paymentStatus: newStatus } : b));
+                                alert('Invoice status updated to Pending successfully!');
+                              } catch (err: any) {
+                                console.error('Failed to update invoice status:', err);
+                                alert('Failed to update invoice status: ' + err.message);
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                          >
+                            <Clock className="w-4 h-4" />
+                            Mark as Pending
+                          </button>
+                        )}
                         <button
-                          onClick={() => setShowInvoiceModal(false)}
+                          onClick={() => {
+                            setShowInvoiceModal(false);
+                            setSelectedInvoice('');
+                          }}
                           className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                         >
                           Close

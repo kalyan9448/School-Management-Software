@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Download, Search, IndianRupee, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard } from 'lucide-react';
+import { Plus, Download, Search, IndianRupee, Receipt, FileText, TrendingUp, Users, Calendar, Edit2, Trash2, Check, X, Send, Phone, Bell, Wallet, Tag, CreditCard, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
-import { notificationService, feeService, studentService, academicYearService } from '../utils/centralDataService';
+import { notificationService, feeService, studentService, academicYearService, feeInvoiceService } from '../utils/centralDataService';
 import { useAcademicClasses } from '../hooks/useAcademicClasses';
 
 // --- Feature 3: CSV Export Utility ---
@@ -72,6 +72,8 @@ interface StudentLedger {
   lastPaymentDate: string;
   parentPhone: string;
   parentId?: string;
+  isOverdue?: boolean;
+  overdueAmount?: number;
 }
 
 export function FeeModule() {
@@ -116,6 +118,7 @@ export function FeeModule() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('');
+  const [invoices, setInvoices] = useState<any[]>([]);
 
   // Fee Structure State
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
@@ -175,15 +178,17 @@ export function FeeModule() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const structures = await feeService.getAllStructures() as any[];
-        const paymentRecords = await feeService.getAllPayments() as any[];
+        const [structures, paymentRecords, invoiceRecords, students] = await Promise.all([
+          feeService.getAllStructures().catch(() => []),
+          feeService.getAllPayments().catch(() => []),
+          feeInvoiceService.getAll().catch(() => []),
+          studentService.getAll().catch(() => [])
+        ]);
 
         if (structures.length > 0) setFeeStructures(structures);
         if (paymentRecords.length > 0) setPayments(paymentRecords);
-
-        // Fetch students and store them
-        const students = await studentService.getAll();
-        setStudentsData(students);
+        if (invoiceRecords.length > 0) setInvoices(invoiceRecords);
+        if (students.length > 0) setStudentsData(students);
       } catch (err) {
         console.error('Failed to load fee data:', err);
       }
@@ -218,53 +223,81 @@ export function FeeModule() {
       ? studentsData 
       : studentsData.filter(s => s.academicYear === selectedAcademicYear);
 
+    const todayStr = new Date().toISOString().split('T')[0];
+
     const ledgers: StudentLedger[] = filteredStudents.map((s: any) => {
+      // 1. Get payments for this student
       const studentPayments = payments.filter(
         (p: any) => (p.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase() || p.studentId === s.id) &&
                     (selectedAcademicYear === 'all' || !selectedAcademicYear || p.academicYear === selectedAcademicYear)
       );
       const paidAmount = studentPayments.reduce((sum: number, p: any) => sum + (parseFloat(p.totalAmount) || parseFloat(p.amount) || 0), 0);
 
-      // Clean up class name for lookup
-      const studentClass = s.class?.replace(/^Class\s+/i, '') || '';
-      const classStructure = feeStructures.find((str: any) => str.class?.replace(/^Class\s+/i, '') === studentClass);
+      // 2. Get invoices for this student from the backend fee_invoices collection
+      const studentInvoices = invoices.filter(
+        (inv: any) => (inv.studentId === s.id || inv.admissionNo?.toLowerCase() === s.admissionNo?.toLowerCase()) &&
+                      (selectedAcademicYear === 'all' || !selectedAcademicYear || inv.academicYear === selectedAcademicYear)
+      );
 
-      let calculatedTotalFee = parseFloat(s.totalFee as any) || 0;
-      if (s.totalFeeSnapshot !== undefined && s.totalFeeSnapshot !== null) {
-        calculatedTotalFee = parseFloat(s.totalFeeSnapshot as any) || 0;
-      } else if (classStructure) {
-        // If student has explicit selectedFees, calculate based on that.
-        // Otherwise, fallback to full fee structure for backward compatibility.
-        const useSelectedOnly = Array.isArray(s.selectedFees);
-        const legacyFees = ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'];
-        const hasFee = (feeName: string) => useSelectedOnly ? s.selectedFees.includes(feeName) : legacyFees.includes(feeName);
+      let calculatedTotalFee = 0;
+      let overdueAmount = 0;
 
-        calculatedTotalFee = 
-          (hasFee('Admission Fee') ? (parseFloat(classStructure.admissionFee as any) || 0) : 0) +
-          (hasFee('Annual Fee') ? (parseFloat(classStructure.annualFee as any) || 0) : 0) +
-          (hasFee('Monthly Fee') ? ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) : 0) +
-          (hasFee('Quarterly Fee') ? ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) : 0) +
-          (hasFee('Transport Fee') ? ((parseFloat(classStructure.transportFee as any) || 0) * 12) : 0) +
-          (hasFee('Daycare Fee') ? ((parseFloat(classStructure.daycareFee as any) || 0) * 12) : 0) +
-          (hasFee('Activity Fee') ? ((parseFloat(classStructure.activityFee as any) || 0) * 12) : 0);
+      if (studentInvoices.length > 0) {
+        // Aggregate invoice amounts
+        calculatedTotalFee = studentInvoices.reduce((sum: number, inv: any) => sum + (parseFloat(inv.amount) || 0), 0);
+
+        // Sum invoices that are unpaid and past their due date
+        studentInvoices.forEach((inv: any) => {
+          // If invoice has a linked payment in database, it's paid
+          const isPaid = studentPayments.some((p: any) => p.invoiceId === inv.id || p.receiptNo === inv.receiptNo);
+          const isPastDue = inv.dueDate && inv.dueDate < todayStr;
+          if (!isPaid && isPastDue) {
+            overdueAmount += (parseFloat(inv.amount) || 0);
+          }
+        });
+      } else {
+        // Fallback to legacy fee structures if no invoices exist for this student yet
+        const studentClass = s.class?.replace(/^Class\s+/i, '') || '';
+        const classStructure = feeStructures.find((str: any) => str.class?.replace(/^Class\s+/i, '') === studentClass);
+
+        if (s.totalFeeSnapshot !== undefined && s.totalFeeSnapshot !== null) {
+          calculatedTotalFee = parseFloat(s.totalFeeSnapshot as any) || 0;
+        } else if (classStructure) {
+          const useSelectedOnly = Array.isArray(s.selectedFees);
+          const legacyFees = ['Admission Fee', 'Annual Fee', 'Monthly Fee', 'Quarterly Fee', 'Transport Fee', 'Daycare Fee', 'Activity Fee'];
+          const hasFee = (feeName: string) => useSelectedOnly ? s.selectedFees.includes(feeName) : legacyFees.includes(feeName);
+
+          calculatedTotalFee = 
+            (hasFee('Admission Fee') ? (parseFloat(classStructure.admissionFee as any) || 0) : 0) +
+            (hasFee('Annual Fee') ? (parseFloat(classStructure.annualFee as any) || 0) : 0) +
+            (hasFee('Monthly Fee') ? ((parseFloat(classStructure.monthlyFee as any) || 0) * 12) : 0) +
+            (hasFee('Quarterly Fee') ? ((parseFloat(classStructure.quarterlyFee as any) || 0) * 4) : 0) +
+            (hasFee('Transport Fee') ? ((parseFloat(classStructure.transportFee as any) || 0) * 12) : 0) +
+            (hasFee('Daycare Fee') ? ((parseFloat(classStructure.daycareFee as any) || 0) * 12) : 0) +
+            (hasFee('Activity Fee') ? ((parseFloat(classStructure.activityFee as any) || 0) * 12) : 0);
+        }
       }
+
+      const dueAmount = Math.max(0, calculatedTotalFee - paidAmount);
 
       return {
         studentName: s.name || s.studentName || '',
         admissionNo: s.admissionNo || '',
-        class: studentClass,
+        class: s.class?.replace(/^Class\s+/i, '') || '',
         totalFee: calculatedTotalFee,
         paidAmount,
-        dueAmount: Math.max(0, calculatedTotalFee - paidAmount),
+        dueAmount,
         lastPaymentDate: studentPayments.length > 0
           ? studentPayments[studentPayments.length - 1].paymentDate
           : '-',
         parentPhone: s.parentPhone || '',
         parentId: s.parentId,
+        isOverdue: overdueAmount > 0,
+        overdueAmount: Math.min(overdueAmount, dueAmount), // cannot exceed total due amount
       };
     });
     setStudentLedgers(ledgers);
-  }, [studentsData, payments, feeStructures, selectedAcademicYear]);
+  }, [studentsData, payments, feeStructures, selectedAcademicYear, invoices]);
 
   // Generate Receipt Number
   const generateReceiptNo = () => {
@@ -759,6 +792,14 @@ export function FeeModule() {
 
   const getTotalOutstanding = () => {
     return studentLedgers.reduce((sum, s) => sum + s.dueAmount, 0);
+  };
+
+  const getOverdueCount = () => {
+    return studentLedgers.filter(s => s.isOverdue).length;
+  };
+
+  const getOverdueAmount = () => {
+    return studentLedgers.reduce((sum, s) => sum + (s.overdueAmount || 0), 0);
   };
 
   const getClassWiseCollection = () => {
@@ -1614,13 +1655,14 @@ export function FeeModule() {
 
             <div
               onClick={() => handleCardClick('accounting', 'student-ledgers-section')}
-              className="cursor-pointer bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+              className="cursor-pointer bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
             >
               <div className="flex items-center justify-between mb-2">
-                <p className="text-purple-100">Total Students</p>
-                <Users className="w-6 h-6 text-purple-100" />
+                <p className="text-orange-100">Overdue Accounts</p>
+                <AlertCircle className="w-6 h-6 text-orange-100" />
               </div>
-              <p className="text-white mb-1">{studentLedgers.length}</p>
+              <p className="text-white mb-1">₹{getOverdueAmount().toLocaleString()}</p>
+              <p className="text-orange-100 text-xs font-semibold uppercase tracking-wider">{getOverdueCount()} accounts delinquent</p>
             </div>
           </div>
 
@@ -1705,9 +1747,17 @@ export function FeeModule() {
                         <td className="px-4 py-3 text-right text-gray-900">₹{(student.totalFee || 0).toLocaleString()}</td>
                         <td className="px-4 py-3 text-right text-green-700">₹{(student.paidAmount || 0).toLocaleString()}</td>
                         <td className="px-4 py-3 text-right">
-                          <span className={`${student.dueAmount > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                            ₹{(student.dueAmount || 0).toLocaleString()}
-                          </span>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {student.isOverdue && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-800 text-[10px] font-bold rounded uppercase tracking-wide" title={`Overdue amount: ₹${student.overdueAmount}`}>
+                                <AlertCircle className="w-3 h-3 text-red-600" />
+                                Overdue
+                              </span>
+                            )}
+                            <span className={`${student.dueAmount > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                              ₹{(student.dueAmount || 0).toLocaleString()}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-gray-700">{student.lastPaymentDate}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

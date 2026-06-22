@@ -688,12 +688,19 @@ export function StudentInformation({
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (studentToDelete) {
-      setStudents(students.filter(s => s.id !== studentToDelete.id));
-      alert(`Student "${studentToDelete.name}" has been deleted successfully!`);
-      setShowDeleteConfirm(false);
-      setStudentToDelete(null);
+      try {
+        await studentService.delete(studentToDelete.id);
+        setStudents(students.filter(s => s.id !== studentToDelete.id));
+        alert(`Student "${studentToDelete.name}" has been deleted successfully!`);
+      } catch (error) {
+        console.error('Failed to delete student:', error);
+        alert('Failed to delete student from the database. Please try again.');
+      } finally {
+        setShowDeleteConfirm(false);
+        setStudentToDelete(null);
+      }
     }
   };
 

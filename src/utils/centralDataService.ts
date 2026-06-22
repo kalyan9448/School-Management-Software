@@ -475,6 +475,9 @@ export interface SupportTicket {
   createdAt: string;
   updatedAt: string;
   responses: TicketResponse[];
+  assignedTo?: string;
+  assignedToName?: string;
+  ticketType?: 'school' | 'platform';
 }
 
 // ==================== FIRESTORE-BACKED SERVICES ====================
@@ -516,6 +519,10 @@ import {
   planService,
   ticketService,
   teacherCheckinService,
+  systemConfigService,
+  recoveryLogService,
+  subscriptionService,
+  billingService,
   StudentNote,
   type SubscriptionPlan as SubscriptionPlanType,
   type TeacherClassCheckin,
@@ -558,12 +565,17 @@ export {
   planService,
   ticketService,
   teacherCheckinService,
+  systemConfigService,
+  recoveryLogService,
+  subscriptionService,
+  billingService,
   clearFirestoreCache,
 };
 
 export type { TeacherClassCheckin };
 
 export type { StudentNote };
+
 
 // Default export — same shape as before
 export default {
@@ -596,4 +608,8 @@ export default {
   quizResult: quizResultService,
   plan: planService,
   ticket: ticketService,
+  systemConfig: systemConfigService,
+  recoveryLog: recoveryLogService,
+  subscription: subscriptionService,
+  billing: billingService,
 };
