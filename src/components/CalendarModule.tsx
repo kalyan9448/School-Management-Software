@@ -26,7 +26,8 @@ import {
   AlertTriangle,
   GraduationCap,
   Bell,
-  Star
+  Star,
+  ArrowLeft
 } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
@@ -372,13 +373,24 @@ export function CalendarModule({ viewOnly = false }: CalendarModuleProps) {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div>
-                <h3 className="text-xl font-black text-gray-900">
-                  {viewOnly ? 'Event Details' : (editingEvent ? 'Edit Event' : 'Create New Event')}
-                </h3>
-                <p className="text-sm text-gray-500 font-medium tracking-tight">
-                  {viewOnly ? 'View scheduled academic events and holidays.' : 'Schedule an academic event or holiday.'}
-                </p>
+              <div className="flex items-center gap-3">
+                {!viewOnly && (
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    className="p-1.5 hover:bg-gray-200 rounded-xl transition-colors flex items-center justify-center border border-gray-200 bg-white shadow-sm"
+                    title="Back"
+                  >
+                    <ArrowLeft className="w-5 h-5 text-gray-600" />
+                  </button>
+                )}
+                <div>
+                  <h3 className="text-xl font-black text-gray-900">
+                    {viewOnly ? 'Event Details' : (editingEvent ? 'Edit Event' : 'Create New Event')}
+                  </h3>
+                  <p className="text-sm text-gray-500 font-medium tracking-tight">
+                    {viewOnly ? 'View scheduled academic events and holidays.' : 'Schedule an academic event or holiday.'}
+                  </p>
+                </div>
               </div>
               <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
                 <X className="w-6 h-6 text-gray-500" />

@@ -11,10 +11,12 @@ import {
   Circle,
   Target,
   Beaker,
+  ArrowLeft,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
+import { Button } from "@/components/student/ui/button";
 import { type HomeworkTopic } from "@/data/studentMockData";
 import { HomeworkService } from "@/services/student/studentDataService";
 
@@ -65,6 +67,15 @@ export function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8"
         >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/student/dashboard')}
+            className="text-white hover:bg-white/10 mb-4 -ml-2 rounded-lg"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </Button>
           <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-3xl font-bold mb-2">AI Homework</h1>
