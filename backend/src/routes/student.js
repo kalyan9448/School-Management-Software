@@ -46,7 +46,7 @@ router.get('/profile', async (req, res) => {
 			if (student.class && student.section) {
 				const timetableSnap = await db().collection('timetable')
 					.where('school_id', '==', student.school_id)
-					.where('className', '==', student.class)
+					.where('class', '==', student.class)
 					.where('section', '==', student.section)
 					.get();
 				const subjects = new Set(timetableSnap.docs.map(d => d.data().subjectId));
@@ -238,7 +238,7 @@ router.get('/timetable', async (req, res) => {
 		const schoolId = student.school_id || resolveSchoolId(req);
 		const snap = await db().collection('timetable')
 			.where('school_id', '==', schoolId)
-			.where('className', '==', student.class)
+			.where('class', '==', student.class)
 			.where('section', '==', student.section || 'A')
 			.get();
 

@@ -469,4 +469,62 @@ router.get('/profile', verifyFirebaseToken, async (req, res) => {
     }
 });
 
+// POST /api/auth/reset-user-password
+router.post('/reset-user-password', verifyFirebaseToken, async (req, res) => {
+    try {
+        // Ensure caller is superadmin
+        if (req.firebaseUser.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Access denied: superadmin privileges required' });
+        }
+
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        const trimmed = email.trim();
+        const lowered = trimmed.toLowerCase();
+
+        // Find the user in Firebase Auth
+        let authUser;
+        try {
+            authUser = await admin.auth().getUserByEmail(trimmed);
+        } catch (err) {
+            if (err.code === 'auth/user-not-found' && trimmed !== lowered) {
+                try {
+                    authUser = await admin.auth().getUserByEmail(lowered);
+                } catch (e) {
+                    if (e.code === 'auth/user-not-found') {
+                        return res.status(404).json({ error: 'User not found in Authentication service' });
+                    }
+                    throw e;
+                }
+            } else if (err.code === 'auth/user-not-found') {
+                return res.status(404).json({ error: 'User not found in Authentication service' });
+            } else {
+                throw err;
+            }
+        }
+
+        // Update password in Firebase Auth
+        await admin.auth().updateUser(authUser.uid, { password });
+
+        // Update Firestore profile
+        const userRef = db().collection('users').doc(authUser.uid);
+        const snap = await userRef.get();
+        if (snap.exists) {
+            await userRef.update({
+                isFirstLogin: true,
+                updated_at: new Date().toISOString()
+            });
+        }
+
+        res.json({ message: 'Password reset successfully' });
+    } catch (err) {
+        console.error('Reset password error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
+

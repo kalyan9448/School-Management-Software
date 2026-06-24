@@ -20,6 +20,13 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'contacted' | 'converted'>('all');
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
+  const [followUpFormData, setFollowUpFormData] = useState({
+    followUpDate: '',
+    notes: '',
+    status: 'contacted' as Enquiry['status'],
+  });
 
   const handleCardClick = (filter: 'all' | 'new' | 'contacted' | 'converted') => {
     setStatusFilter(filter);
@@ -109,6 +116,25 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
     } catch (error) {
       console.error('Create enquiry error:', error);
       alert('Failed to create enquiry. Please try again.');
+    }
+  };
+
+  const handleFollowUpSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedEnquiry) return;
+    try {
+      await enquiryService.update(selectedEnquiry.id, {
+        followUpDate: followUpFormData.followUpDate,
+        notes: followUpFormData.notes,
+        status: followUpFormData.status,
+      });
+      await loadEnquiries();
+      setShowFollowUpModal(false);
+      setSelectedEnquiry(null);
+      alert('Follow-up details logged successfully!');
+    } catch (error) {
+      console.error('Update follow-up error:', error);
+      alert('Failed to log follow-up. Please try again.');
     }
   };
 
@@ -284,9 +310,9 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
           {/* Popup Modal */}
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden animate-scaleIn">
+            <div className="flex flex-col bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden animate-scaleIn">
               {/* Popup Header */}
-              <div className="sticky top-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white p-6 shadow-lg z-10">
+              <div className="bg-gradient-to-r from-orange-50 to-orange-600 text-white p-6 shadow-lg z-10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -307,7 +333,7 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
               </div>
 
               {/* Popup Content */}
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="flex-1 p-6 overflow-y-auto">
                 <div className="space-y-4">
                   {followUpReminders.map((reminder) => {
                     const style = getReminderStyle(reminder.daysUntilFollowUp);
@@ -464,9 +490,9 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
           {/* Popup Modal */}
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden animate-scaleIn">
+            <div className="flex flex-col bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden animate-scaleIn">
               {/* Popup Header */}
-              <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 shadow-lg z-10">
+              <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 shadow-lg z-10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -487,8 +513,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
               </div>
 
               {/* Popup Content */}
-              <div className="flex-1 overflow-y-auto max-h-[calc(90vh-160px)]">
-                <form id="enquiry-form" onSubmit={handleSubmit} className="p-6 space-y-6 pb-24">
+              <div className="flex-1 overflow-y-auto">
+                <form id="enquiry-form" onSubmit={handleSubmit} className="p-6 space-y-6 pb-6">
 
                   {/* Parent Information Section */}
                   <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5 border-2 border-purple-200">
@@ -616,8 +642,8 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                 </form>
               </div>
 
-              {/* Sticky Modal Footer */}
-              <div className="sticky bottom-0 bg-gray-50 border-t border-gray-100 p-6 flex gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              {/* Modal Footer */}
+              <div className="bg-gray-50 border-t border-gray-100 p-6 flex gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
@@ -632,6 +658,138 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
                 >
                   <Plus className="w-5 h-5" />
                   Add Enquiry
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Log Follow-Up Popup Modal */}
+      {showFollowUpModal && selectedEnquiry && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 animate-fadeIn"
+            onClick={() => {
+              setShowFollowUpModal(false);
+              setSelectedEnquiry(null);
+            }}
+          ></div>
+
+          {/* Popup Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="flex flex-col bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-scaleIn">
+              {/* Popup Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 shadow-lg z-10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                      <Clock className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-white mb-1">Log Follow-Up</h2>
+                      <p className="text-purple-100">
+                        Update follow-up details for {selectedEnquiry.studentName || (selectedEnquiry as any).childName || 'Student'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowFollowUpModal(false);
+                      setSelectedEnquiry(null);
+                    }}
+                    className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Popup Content */}
+              <div className="flex-1 overflow-y-auto">
+                <form id="followup-form" onSubmit={handleFollowUpSubmit} className="p-6 space-y-6">
+                  {/* Enquiry Reference (Read-only) */}
+                  <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Parent Name</p>
+                      <p className="text-gray-900 font-medium">{selectedEnquiry.parentName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Phone Number</p>
+                      <p className="text-gray-900 font-medium">{selectedEnquiry.phone}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Child Name</p>
+                      <p className="text-gray-900 font-medium">{selectedEnquiry.studentName || (selectedEnquiry as any).childName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Class Interest</p>
+                      <p className="text-gray-900 font-medium">Class {selectedEnquiry.classApplied || (selectedEnquiry as any).classInterest || 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  {/* Follow-up Details */}
+                  <div className="bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 rounded-2xl p-5 border-2 border-purple-100 space-y-4">
+                    <div>
+                      <label className="block text-gray-700 font-bold mb-2">Next Follow-up Date</label>
+                      <input
+                        type="date"
+                        value={followUpFormData.followUpDate}
+                        onChange={(e) => setFollowUpFormData({ ...followUpFormData, followUpDate: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 font-bold mb-2">Follow-up Status</label>
+                      <select
+                        value={followUpFormData.status}
+                        onChange={(e) => setFollowUpFormData({ ...followUpFormData, status: e.target.value as any })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white transition"
+                      >
+                        <option value="new">New</option>
+                        <option value="contacted">Contacted / Followed Up</option>
+                        <option value="visited">Visited / Campus Tour</option>
+                        <option value="converted">Converted</option>
+                        <option value="lost">Lost / No Interest</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-700 font-bold mb-2">Follow-up Notes / Discussion Details</label>
+                      <textarea
+                        value={followUpFormData.notes}
+                        onChange={(e) => setFollowUpFormData({ ...followUpFormData, notes: e.target.value })}
+                        rows={4}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white transition resize-none"
+                        placeholder="Add details about the discussion, parent response, or next steps..."
+                      />
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-gray-50 border-t border-gray-100 p-6 flex gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFollowUpModal(false);
+                    setSelectedEnquiry(null);
+                  }}
+                  className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-bold text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  form="followup-form"
+                  type="submit"
+                  onClick={handleFollowUpSubmit}
+                  className="flex-1 px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg shadow-purple-500/30 flex items-center justify-center gap-2 font-bold text-sm"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Save Follow-Up
                 </button>
               </div>
             </div>
@@ -714,8 +872,16 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
                 <div className="flex items-center gap-2 pt-2">
                   <button
-                    onClick={() => handleStatusChange(enquiry.id, 'contacted')}
-                    className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
+                    onClick={() => {
+                      setSelectedEnquiry(enquiry);
+                      setFollowUpFormData({
+                        followUpDate: enquiry.followUpDate || '',
+                        notes: enquiry.notes || '',
+                        status: enquiry.status || 'contacted',
+                      });
+                      setShowFollowUpModal(true);
+                    }}
+                    className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors font-bold text-sm"
                   >
                     Follow Up
                   </button>
@@ -783,9 +949,17 @@ export function EnquiryModule({ onConvert }: EnquiryModuleProps = {}) {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleStatusChange(enquiry.id, 'contacted')}
+                    onClick={() => {
+                      setSelectedEnquiry(enquiry);
+                      setFollowUpFormData({
+                        followUpDate: enquiry.followUpDate || '',
+                        notes: enquiry.notes || '',
+                        status: enquiry.status || 'contacted',
+                      });
+                      setShowFollowUpModal(true);
+                    }}
                     className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
-                    title="Mark as Contacted"
+                    title="Log Follow-Up"
                   >
                     <CheckCircle className="w-4 h-4" />
                   </button>

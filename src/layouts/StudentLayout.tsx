@@ -179,6 +179,7 @@ const DashboardLayout: React.FC = () => {
                 category: mappedCategory,
                 status: 'Open',
                 responses: [],
+                ticketType: 'school',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             });
@@ -362,6 +363,7 @@ const DashboardLayout: React.FC = () => {
                                             <h4 className="font-bold text-gray-900 text-sm truncate">Ticket #{selectedTicket.id.slice(0, 8)}</h4>
                                             <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
                                                 {selectedTicket.category} • {selectedTicket.priority} Priority
+                                                {selectedTicket.assignedToName && ` • Assigned to: ${selectedTicket.assignedToName}`}
                                             </p>
                                         </div>
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex-shrink-0 ${getStatusColor(selectedTicket.status)}`}>
@@ -480,6 +482,7 @@ const DashboardLayout: React.FC = () => {
                                                         <h4 className="font-bold text-gray-900 text-sm truncate">{t.subject}</h4>
                                                         <p className="text-[10px] text-gray-500 truncate mt-1">
                                                             Category: {t.category} • Urgency: <span className={getPriorityColor(t.priority)}>{t.priority}</span>
+                                                            {t.assignedToName && ` • Assigned: ${t.assignedToName}`}
                                                         </p>
                                                     </div>
                                                     <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />

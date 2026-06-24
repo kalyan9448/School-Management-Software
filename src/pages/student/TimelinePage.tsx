@@ -16,6 +16,7 @@ import {
   User,
   Beaker,
   Book,
+  ArrowLeft,
 } from "lucide-react";
 
 import { motion } from "motion/react";
@@ -89,6 +90,15 @@ export function TimelinePage() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
         </div>
         <div className="max-w-screen-xl mx-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/analytics')}
+            className="text-white hover:bg-white/10 mb-4 -ml-2 rounded-lg"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Analytics
+          </Button>
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold">Learning Timeline</h1>
           </div>

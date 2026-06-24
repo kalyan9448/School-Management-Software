@@ -174,7 +174,8 @@ export function SchedulePage() {
     const eventsThisWeek = weekDates.flatMap(d => calendarEvents.filter(e => e.date === toDateStr(d)));
     return {
       classes: eventsThisWeek.filter(e => e.type === "class").length,
-      assignments: eventsThisWeek.filter(e => e.type === "assignment" || e.type === "homework").length,
+      homework: eventsThisWeek.filter(e => e.type === "homework").length,
+      assignments: eventsThisWeek.filter(e => e.type === "assignment").length,
       exams: eventsThisWeek.filter(e => e.type === "exam").length,
       events: eventsThisWeek.filter(e => e.type === "event").length,
     };
@@ -324,10 +325,11 @@ export function SchedulePage() {
           </div>
 
           {/* Quick stats grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-6">
             {[
               { label: "Classes", value: weekStats.classes, icon: BookOpen, color: "bg-blue-500/20", filterValue: "class" as EventTypeFilter },
-              { label: "Homework", value: weekStats.assignments, icon: BookMarked, color: "bg-purple-500/20", filterValue: "homework" as EventTypeFilter },
+              { label: "Homework", value: weekStats.homework, icon: BookMarked, color: "bg-purple-500/20", filterValue: "homework" as EventTypeFilter },
+              { label: "Assignments", value: weekStats.assignments, icon: FileText, color: "bg-orange-500/20", filterValue: "assignment" as EventTypeFilter },
               { label: "Exams", value: weekStats.exams, icon: GraduationCap, color: "bg-red-500/20", filterValue: "exam" as EventTypeFilter },
               { label: "Events", value: weekStats.events, icon: CalendarIcon, color: "bg-violet-500/20", filterValue: "event" as EventTypeFilter },
             ].map(({ label, value, icon: Icon, color, filterValue }) => (
@@ -782,7 +784,8 @@ export function SchedulePage() {
                 <div className="space-y-3">
                   {[
                     { label: "Classes", value: weekStats.classes, color: "#3b82f6", max: 20 },
-                    { label: "Homework", value: weekStats.assignments, color: "#a855f7", max: 15 },
+                    { label: "Homework", value: weekStats.homework, color: "#a855f7", max: 15 },
+                    { label: "Assignments", value: weekStats.assignments, color: "#f59e0b", max: 15 },
                     { label: "Exams", value: weekStats.exams, color: "#ef4444", max: 5 },
                     { label: "Events", value: weekStats.events, color: "#8b5cf6", max: 5 },
                   ].map(({ label, value, color, max }) => (

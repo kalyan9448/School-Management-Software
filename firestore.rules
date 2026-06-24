@@ -774,11 +774,19 @@ service cloud.firestore {
           && request.resource.data.school_id == userSchoolId()
           && resolvedRole() in ["admin", "teacher", "student", "parent", "accountant"];
 
-      // SuperAdmin can update anything; School Admins can ONLY add responses to their own tickets
+      // SuperAdmin can update anything; School Admins can update status, responses, and updatedAt for school-level tickets
       allow update: if isSuperAdmin() 
           || (isSignedIn() 
               && resource.data.school_id == userSchoolId()
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responses', 'updatedAt'])
+              && (
+                // Case 1: School Admin/Accountant updating status, responses, and updatedAt on school-internal tickets (defaulting to 'school')
+                (resolvedRole() in ['admin', 'accountant']
+                 && (!('ticketType' in resource.data) || resource.data.ticketType == 'school')
+                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responses', 'updatedAt', 'status']))
+                ||
+                // Case 2: Creators / standard responders only adding responses or updating updatedAt
+                (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responses', 'updatedAt']))
+              )
              );
              
       allow delete: if isSuperAdmin();

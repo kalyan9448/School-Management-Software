@@ -1,6 +1,6 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Download, FileText, TrendingUp, Users, IndianRupee, Calendar, BarChart3, PieChart, Award, Sparkles } from 'lucide-react';
-import { studentService, attendanceService, feeService, enquiryService, reportsService } from '../utils/centralDataService';
+import { studentService, attendanceService, feeService, enquiryService, reportsService, examResultService } from '../utils/centralDataService';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
@@ -105,20 +105,23 @@ export function ReportsModule() {
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [feePayments, setFeePayments] = useState<any[]>([]);
   const [enquiries, setEnquiries] = useState<any[]>([]);
+  const [examResults, setExamResults] = useState<any[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [s, a, f, e] = await Promise.all([
+        const [s, a, f, e, ex] = await Promise.all([
           studentService.getAll(),
           attendanceService.getAll(),
           feeService.getAllPayments(),
           enquiryService.getAll(),
+          examResultService.getAll(),
         ]);
         setStudents(s);
         setAttendanceRecords(a);
         setFeePayments(f);
         setEnquiries(e);
+        setExamResults(ex);
       } catch (err) {
         console.error('Failed to load report data:', err);
       }
@@ -142,6 +145,56 @@ export function ReportsModule() {
   const confirmedEnquiries = enquiries.filter((e: any) => e.status === 'converted' || e.status === 'admitted').length;
   const inProcessEnquiries = enquiries.filter((e: any) => e.status === 'in_progress' || e.status === 'contacted' || e.status === 'follow_up').length;
   const pendingEnquiries = enquiriesTotal - confirmedEnquiries - inProcessEnquiries;
+
+  const topPerformingClasses = (() => {
+    if (students.length === 0 || examResults.length === 0) return [];
+    
+    const studentClassMap = new Map<string, string>();
+    students.forEach((s: any) => {
+      if (s.id && s.class) {
+        const fullClassName = s.section ? `${s.class}-${s.section}` : s.class;
+        studentClassMap.set(s.id, fullClassName);
+      }
+    });
+
+    const classScores: Record<string, number[]> = {};
+    examResults.forEach((r: any) => {
+      const clsName = studentClassMap.get(r.studentId);
+      if (clsName) {
+        const pct = r.percentage !== undefined 
+          ? r.percentage 
+          : (r.totalMarks ? Math.round((r.marksObtained / r.totalMarks) * 100) : 0);
+        if (!classScores[clsName]) classScores[clsName] = [];
+        classScores[clsName].push(pct);
+      }
+    });
+
+    const classAverages = Object.entries(classScores).map(([className, scores]) => {
+      const average = scores.length > 0 
+        ? Math.round(scores.reduce((sum, val) => sum + val, 0) / scores.length) 
+        : 0;
+      return { className, average };
+    });
+
+    classAverages.sort((a, b) => b.average - a.average);
+
+    const gradients = [
+      { gradient: 'from-purple-500 to-pink-600', bg: 'from-purple-50 to-pink-50' },
+      { gradient: 'from-blue-500 to-indigo-600', bg: 'from-blue-50 to-indigo-50' },
+      { gradient: 'from-emerald-500 to-teal-600', bg: 'from-emerald-50 to-teal-50' },
+      { gradient: 'from-orange-500 to-amber-600', bg: 'from-orange-50 to-amber-50' },
+    ];
+
+    return classAverages.slice(0, 4).map((item, index) => {
+      const grad = gradients[index % gradients.length];
+      return {
+        class: item.className,
+        score: item.average,
+        gradient: grad.gradient,
+        bg: grad.bg
+      };
+    });
+  })();
 
   const handleDownloadReport = async (report: any) => {
     try {
@@ -216,6 +269,92 @@ export function ReportsModule() {
           startY: topY + 22,
           head: [['ID', 'Student Name', 'Class', 'Section', 'Status']],
           body: tableRows.length > 0 ? tableRows : [['-', 'No Students Found', '-', '-', '-']],
+          headStyles: { fillColor: [126, 34, 206] },
+          theme: 'grid'
+        });
+      } else if (report.title.includes('Absent')) {
+        const attendanceData = await attendanceService.getAll();
+        
+        // Group by studentId to check consecutive absences
+        const studentAbsences: Record<string, { name: string; class: string; section: string; records: string[] }> = {};
+        
+        attendanceData.forEach((record: any) => {
+          if (record.studentId && record.status === 'absent') {
+            const studentId = record.studentId;
+            if (!studentAbsences[studentId]) {
+              studentAbsences[studentId] = {
+                name: record.studentName || 'Unnamed Student',
+                class: record.class || 'N/A',
+                section: record.section || 'N/A',
+                records: [],
+              };
+            }
+            if (record.date) {
+              studentAbsences[studentId].records.push(record.date);
+            }
+          }
+        });
+
+        const consecutiveAbsentees: any[] = [];
+
+        Object.entries(studentAbsences).forEach(([studentId, data]) => {
+          const dates = data.records.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+          
+          if (dates.length >= 2) {
+            let maxConsecutive = 1;
+            let currentConsecutive = 1;
+            let consecutiveRanges: string[][] = [];
+            let currentRange: string[] = [dates[0]];
+
+            for (let i = 1; i < dates.length; i++) {
+              const prevDate = new Date(dates[i - 1]);
+              const currDate = new Date(dates[i]);
+              
+              const diffTime = Math.abs(currDate.getTime() - prevDate.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              
+              if (diffDays === 1) {
+                currentConsecutive++;
+                currentRange.push(dates[i]);
+              } else {
+                if (currentRange.length > 1) {
+                  consecutiveRanges.push([...currentRange]);
+                }
+                if (currentConsecutive > maxConsecutive) {
+                  maxConsecutive = currentConsecutive;
+                }
+                currentConsecutive = 1;
+                currentRange = [dates[i]];
+              }
+            }
+            if (currentRange.length > 1) {
+              consecutiveRanges.push([...currentRange]);
+            }
+            if (currentConsecutive > maxConsecutive) {
+              maxConsecutive = currentConsecutive;
+            }
+
+            if (maxConsecutive >= 2) {
+              const allRangesStr = consecutiveRanges
+                .map(r => `${r[0]} to ${r[r.length - 1]}`)
+                .join(', ');
+
+              consecutiveAbsentees.push([
+                data.name,
+                `${data.class}-${data.section}`,
+                allRangesStr || dates.join(', '),
+                `${maxConsecutive} days`
+              ]);
+            }
+          }
+        });
+
+        consecutiveAbsentees.sort((a, b) => parseInt(b[3]) - parseInt(a[3]));
+
+        autoTable(doc, {
+          startY: topY + 22,
+          head: [['Student Name', 'Class & Section', 'Absent Dates', 'Consecutive Days']],
+          body: consecutiveAbsentees.length > 0 ? consecutiveAbsentees : [['-', 'No Records Found', 'No consecutive absences recorded in the system.', '-']],
           headStyles: { fillColor: [126, 34, 206] },
           theme: 'grid'
         });
@@ -511,28 +650,29 @@ export function ReportsModule() {
             </div>
             
             <div className="space-y-4 relative">
-              {[
-                { class: 'Class 5-A', score: 98, gradient: 'from-purple-500 to-pink-600', bg: 'from-purple-50 to-pink-50' },
-                { class: 'Class 7-B', score: 96, gradient: 'from-blue-500 to-indigo-600', bg: 'from-blue-50 to-indigo-50' },
-                { class: 'Class 3-A', score: 95, gradient: 'from-emerald-500 to-teal-600', bg: 'from-emerald-50 to-teal-50' },
-                { class: 'Class 9-C', score: 93, gradient: 'from-orange-500 to-amber-600', bg: 'from-orange-50 to-amber-50' },
-              ].map((item, index) => (
-                <div key={item.class} className={`flex items-center gap-3 p-4 bg-gradient-to-r ${item.bg} rounded-2xl border border-gray-100 hover:border-gray-300 transition-colors`}>
-                  <div className={`w-10 h-10 bg-gradient-to-br ${item.gradient} rounded-2xl flex items-center justify-center text-white flex-shrink-0 shadow-lg transform rotate-3 hover:rotate-6 transition-transform`}>
-                    {index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-gray-900 mb-1.5">{item.class}</p>
-                    <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`absolute inset-y-0 left-0 bg-gradient-to-r ${item.gradient} rounded-full shadow-lg transition-all duration-500`}
-                        style={{ width: `${item.score}%` }}
-                      />
+              {topPerformingClasses.length > 0 ? (
+                topPerformingClasses.map((item, index) => (
+                  <div key={item.class} className={`flex items-center gap-3 p-4 bg-gradient-to-r ${item.bg} rounded-2xl border border-gray-100 hover:border-gray-300 transition-colors`}>
+                    <div className={`w-10 h-10 bg-gradient-to-br ${item.gradient} rounded-2xl flex items-center justify-center text-white flex-shrink-0 shadow-lg transform rotate-3 hover:rotate-6 transition-transform`}>
+                      {index + 1}
                     </div>
+                    <div className="flex-1">
+                      <p className="text-gray-900 mb-1.5">{item.class}</p>
+                      <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`absolute inset-y-0 left-0 bg-gradient-to-r ${item.gradient} rounded-full shadow-lg transition-all duration-500`}
+                          style={{ width: `${item.score}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border-2 border-gray-200">{item.score}%</span>
                   </div>
-                  <span className="text-gray-900 px-3 py-1 bg-white rounded-full shadow-sm border-2 border-gray-200">{item.score}%</span>
+                ))
+              ) : (
+                <div className="text-center py-10 text-gray-500 text-sm">
+                  No performance records found. Generate class grades/exams to see analytics.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
