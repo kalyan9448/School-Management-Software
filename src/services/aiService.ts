@@ -177,8 +177,8 @@ export const aiService = {
             if (questions.length === 0) return getFallbackQuiz(subject, topic).map(shuffleQuestionOptions);
             return questions.map(shuffleQuestionOptions);
         } catch (error) {
-             console.error("Failed to parse quiz:", error);
-             return getFallbackQuiz(subject, topic).map(shuffleQuestionOptions);
+            console.error("Failed to parse quiz:", error);
+            return getFallbackQuiz(subject, topic).map(shuffleQuestionOptions);
         }
     },
 
@@ -221,18 +221,18 @@ export const aiService = {
     /**
      * Contextual Chat for a specific topic
      */
-     chatTopic: async (
-        subject: string, 
-        topic: string, 
-        chatHistory: {role: 'user' | 'assistant', content: string}[], 
+    chatTopic: async (
+        subject: string,
+        topic: string,
+        chatHistory: { role: 'user' | 'assistant', content: string }[],
         newMessage: string,
         studentLevel: string = "Standard",
         curriculumTags: string[] = []
     ): Promise<string> => {
         const messages: ChatMessage[] = [
-            { 
-               role: 'system', 
-               content: `You are a friendly, encouraging AI tutor helping a student master the topic "${topic}" in the subject "${subject}". 
+            {
+                role: 'system',
+                content: `You are a friendly, encouraging AI tutor helping a student master the topic "${topic}" in the subject "${subject}". 
                
                Student Profile:
                - Class Level: ${studentLevel}
@@ -241,17 +241,17 @@ export const aiService = {
                Guidelines:
                1. Provide context-aware explanations suited for a ${studentLevel} level.
                2. Align your teaching style with ${curriculumTags.join(' and ') || 'standard'} pedagogical methods.
-               3. Keep responses concise, easily readable (use bolding or bullets), and focused purely on educational assistance.` 
+               3. Keep responses concise, easily readable (use bolding or bullets), and focused purely on educational assistance.`
             },
             ...chatHistory.map(msg => ({ role: msg.role, content: msg.content })),
             { role: 'user', content: newMessage }
         ];
 
         return callAI(messages);
-     },
+    },
 
-     // Backward compatibility for existing methods
-     generateLessonContent: async (subject: string, topic: string, gradeLevel: string): Promise<string> => {
+    // Backward compatibility for existing methods
+    generateLessonContent: async (subject: string, topic: string, gradeLevel: string): Promise<string> => {
         const prompt = `You are an expert educator. Create a comprehensive lesson plan for:\nSubject: ${subject}\nTopic: ${topic}\nGrade: ${gradeLevel}\n\nInclude: learning objectives, key concepts, activities, and assessment ideas.`;
         return callAI([{ role: 'user', content: prompt }]);
     },
@@ -275,8 +275,8 @@ export const aiService = {
      * based on class context, performance, and curriculum tags.
      */
     generateAILessonPlan: async (
-        subject: string, 
-        topic: string, 
+        subject: string,
+        topic: string,
         classContext: { class: string; section: string },
         performanceAnalysis: any,
         ageProfile: any,
@@ -522,9 +522,9 @@ export const aiService = {
 
         const performanceLevel =
             quizAccuracy === null ? 'not-yet-attempted' :
-            quizAccuracy < 50 ? 'struggling' :
-            quizAccuracy < 75 ? 'developing' :
-            quizAccuracy < 90 ? 'proficient' : 'advanced';
+                quizAccuracy < 50 ? 'struggling' :
+                    quizAccuracy < 75 ? 'developing' :
+                        quizAccuracy < 90 ? 'proficient' : 'advanced';
 
         const topicGap = knowledgeGaps.find(g => g.topic?.toLowerCase() === topic?.toLowerCase());
         const relatedGaps = knowledgeGaps
@@ -539,13 +539,13 @@ export const aiService = {
         const adaptationNote =
             performanceLevel === 'struggling'
                 ? 'Use very simple language, concrete everyday analogies, and build from the most basic first principles. Avoid jargon. Reassure and encourage.'
-            : performanceLevel === 'developing'
-                ? 'Use clear language with relatable examples. Reinforce foundational concepts before introducing nuance.'
-            : performanceLevel === 'proficient'
-                ? 'Assume solid foundational knowledge. Introduce nuance, real-world applications, and connections to other topics.'
-            : performanceLevel === 'advanced'
-                ? 'Use rigorous, precise language. Provide deeper conceptual insight, edge cases, and curriculum exam-level depth.'
-            : 'This student hasn\'t attempted the quiz yet. Provide a welcoming, motivating, and comprehensive introduction.';
+                : performanceLevel === 'developing'
+                    ? 'Use clear language with relatable examples. Reinforce foundational concepts before introducing nuance.'
+                    : performanceLevel === 'proficient'
+                        ? 'Assume solid foundational knowledge. Introduce nuance, real-world applications, and connections to other topics.'
+                        : performanceLevel === 'advanced'
+                            ? 'Use rigorous, precise language. Provide deeper conceptual insight, edge cases, and curriculum exam-level depth.'
+                            : 'This student hasn\'t attempted the quiz yet. Provide a welcoming, motivating, and comprehensive introduction.';
 
         const prompt = `You are a world-class pedagogical AI tutor with expertise in ${subject}. 
 Your task is to generate a DEEP, COMPREHENSIVE, and PERSONALIZED learning guide for a student.
