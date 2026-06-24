@@ -120,11 +120,15 @@ export function ParentTeacherChat({ selectedChild, parentId }: Props) {
           return;
         }
 
+        const orgId = selectedChild.organization_id || 
+                      (selectedChild as any).org_id || 
+                      user?.organization_id || 
+                      (user as any).org_id || 
+                      sessionStorage.getItem('active_organization_id') || 
+                      'ORG001';
+
         const snap = await getDocs(
-          query(
-            collection(db, 'teachers'),
-            where('school_id', '==', schoolId)
-          )
+          collection(db, 'organizations', orgId, 'schools', schoolId, 'teachers')
         );
 
         const childClass = selectedChild.class?.trim().toLowerCase();
