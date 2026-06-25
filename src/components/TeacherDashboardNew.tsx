@@ -542,10 +542,10 @@ export function TeacherDashboardNew() {
 
       // Send notification to parent
       const parentUser = await studentService.getParentByStudentId(selectedNoteStudentId);
-      if (parentUser && parentUser.email) {
+      if (parentUser && (parentUser.id || parentUser.email)) {
         await notificationService.create({
-          userId: parentUser.email,
-          type: 'announcement',
+          userId: parentUser.id || parentUser.email,
+          type: 'general',
           title: `New Teacher Note for ${student.name}`,
           message: `${user?.name} has added a new ${selectedNoteType.toLowerCase()} note for ${student.name}: ${noteContent}`,
           date: new Date().toISOString(),
@@ -3222,10 +3222,10 @@ export function TeacherDashboardNew() {
 
         // Send notification to parent
         const parentUser = await studentService.getParentByStudentId(selectedAchievementStudentId);
-        if (parentUser && parentUser.email) {
+        if (parentUser && (parentUser.id || parentUser.email)) {
           await notificationService.create({
-            userId: parentUser.email,
-            type: 'announcement',
+            userId: parentUser.id || parentUser.email,
+            type: 'general',
             title: `🏆 Achievement Awarded: ${achievementTitle} for ${student.name}`,
             message: `${user?.name} has awarded the "${achievementTitle}" achievement to ${student.name}: ${achievementNoteContent}`,
             date: new Date().toISOString(),
