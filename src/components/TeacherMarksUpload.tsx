@@ -84,11 +84,12 @@ export function TeacherMarksUpload({ onBack }: TeacherMarksUploadProps = {}) {
   // Load sections when class is selected
   useEffect(() => {
     if (selectedClass) {
-      // Find all sections available for this class name
-      const availableSections = allClassesData
-        .filter(c => c.className === selectedClass)
-        .map(c => c.section)
-        .sort();
+      // Find all sections available for this class name, deduplicated
+      const availableSections = Array.from(new Set(
+        allClassesData
+          .filter(c => c.className === selectedClass)
+          .map(c => c.section)
+      )).sort();
 
       setSections(availableSections);
       

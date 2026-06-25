@@ -1,9 +1,9 @@
-import { 
-  Home, 
-  Users, 
-  Calendar, 
-  BookOpen, 
-  FileText, 
+import {
+  Home,
+  Users,
+  Calendar,
+  BookOpen,
+  FileText,
   MessageSquare,
   Award,
   BarChart3,
@@ -25,7 +25,7 @@ interface DashboardNavProps {
 
 export function DashboardNav({ currentView, onViewChange, items }: DashboardNavProps) {
   return (
-    <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
+    <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-[80px] z-10">
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center space-x-1 overflow-x-auto">
           {items.map((item) => (
@@ -34,10 +34,9 @@ export function DashboardNav({ currentView, onViewChange, items }: DashboardNavP
               onClick={() => onViewChange(item.id)}
               className={`
                 flex items-center gap-2 px-4 py-3 font-medium transition-all whitespace-nowrap
-                ${
-                  currentView === item.id
-                    ? 'text-purple-600 border-b-2 border-purple-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ${currentView === item.id
+                  ? 'text-purple-600 border-b-2 border-purple-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }
               `}
             >

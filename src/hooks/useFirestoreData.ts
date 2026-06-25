@@ -434,7 +434,7 @@ export const useExamResults = (filters?: {
   studentId?: string;
   examId?: string;
 }) => {
-  const [results, setResults] = useState<ExamResult[]>([]);
+  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async (isCancelled?: () => boolean) => {
@@ -448,12 +448,9 @@ export const useExamResults = (filters?: {
     setResults([]); // Clear stale data
 
     try {
-      let data: ExamResult[] = [];
-      if (filters?.studentId && filters?.examId) {
-        const examResults = await dataService.examResult.getByExam(filters.examId);
-        data = examResults.filter(r => r.studentId === filters.studentId);
-      } else if (filters?.studentId) {
-        data = await dataService.examResult.getByStudent(filters.studentId);
+      let data: any[] = [];
+      if (filters?.studentId) {
+        data = await dataService.examScore.getByStudent(filters.studentId);
       }
       
       if (isCancelled?.()) { console.log('[useExamResults] Fetch cancelled.'); return; }

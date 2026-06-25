@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, User, Phone, Mail, MapPin, Calendar, Heart, IndianRupee, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon } from 'lucide-react';
+import { Search, User, Phone, Mail, MapPin, Calendar, Heart, IndianRupee, Users, Bus, AlertCircle, Activity, FileText, X, Check, Download, Send, TrendingUp, Grid3x3, List, Edit, Trash2, Plus, ChevronLeft, ChevronRight, MapPin as MapPinIcon, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { createTemplatedDoc, addTemplatePage, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import { studentService, academicYearService, attendanceService, feeInvoiceService, type Student, type AttendanceRecord, type FeeInvoice } from '../utils/firestoreService';
@@ -324,7 +324,18 @@ export function StudentInformation({
   };
 
   const saveAttendance = async () => {
-    if (attendance.length === 0) return;
+    if (!selectedClass) {
+      alert('Please select a class first.');
+      return;
+    }
+    if (!selectedSection) {
+      alert('Please select a section first.');
+      return;
+    }
+    if (attendance.length === 0) {
+      alert('No student records found to save attendance.');
+      return;
+    }
     
     setAttendanceLoading(true);
     try {
@@ -339,9 +350,20 @@ export function StudentInformation({
 
       await attendanceService.markAttendance(recordsToSave);
       alert('Attendance saved successfully!');
+
+      // Reload daily attendance records from Firestore to sync document IDs
+      const freshRecords = await attendanceService.getByClass(selectedClass, selectedSection, selectedDate);
+      setAttendance(prev => prev.map(p => {
+        const saved = freshRecords.find(f => f.studentId === p.studentId);
+        return saved ? { ...p, id: saved.id, status: saved.status, markedBy: saved.markedBy, time: saved.time } : p;
+      }));
+
+      // Invalidate query caches and reload overall student metrics
+      clearFirestoreCache('attendance');
+      loadDynamicStudents();
     } catch (err) {
       console.error('Failed to save attendance:', err);
-      alert('Failed to save attendance.');
+      alert(`Failed to save attendance: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setAttendanceLoading(false);
     }
@@ -1097,7 +1119,18 @@ export function StudentInformation({
                 </div>
               </div>
 
-              {/* Statistics */}
+              {/* Show prompt if no class or section is selected */}
+              {(!selectedClass || !selectedSection) && (
+                <div className="text-center py-12 bg-white rounded-xl shadow-md border border-gray-200">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg font-semibold">Select Class &amp; Section</p>
+                  <p className="text-gray-400 text-sm mt-2">Please select a class and section above to view and mark attendance.</p>
+                </div>
+              )}
+
+              {/* Statistics - only when class and section are selected */}
+              {selectedClass && selectedSection && (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div
                   onClick={() => handleAttendanceCardClick('all')}
@@ -1162,7 +1195,10 @@ export function StudentInformation({
                       </span>
                     )}
                     <span className="text-gray-700">
-                      Showing students {currentPage * studentsPerPage + 1} - {Math.min((currentPage + 1) * studentsPerPage, filteredAttendance.length)} of {filteredAttendance.length}
+                      {filteredAttendance.length === 0
+                        ? 'No students loaded'
+                        : `Showing students ${currentPage * studentsPerPage + 1} - ${Math.min((currentPage + 1) * studentsPerPage, filteredAttendance.length)} of ${filteredAttendance.length}`
+                      }
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1237,10 +1273,17 @@ export function StudentInformation({
               <div className="flex items-center gap-4">
                 <button
                   onClick={saveAttendance}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  disabled={attendanceLoading}
+                  className={`px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 ${
+                    attendanceLoading ? 'opacity-70 cursor-not-allowed' : ''
+                  }`}
                 >
-                  <Check className="w-5 h-5" />
-                  Save Attendance
+                  {attendanceLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Check className="w-5 h-5" />
+                  )}
+                  {attendanceLoading ? 'Saving...' : 'Save Attendance'}
                 </button>
 
                 {stats.absent > 0 && (
@@ -1269,6 +1312,7 @@ export function StudentInformation({
                   Download Daily PDF
                 </button>
               </div>
+              </> )} {/* end selectedClass && selectedSection */}
             </>
           )}
 

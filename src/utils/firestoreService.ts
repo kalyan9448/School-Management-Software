@@ -2342,7 +2342,7 @@ export const statisticsService = {
     },
 
     getStudentPerformance: async (studentId: string) => {
-        const results = await examResultService.getByStudent(studentId);
+        const results = await examScoreService.getByStudent(studentId);
         const submissions = await assignmentSubmissionService.getByStudent(studentId);
         const gradedSubmissions = submissions.filter(s => s.status === 'graded');
 

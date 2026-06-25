@@ -44,7 +44,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
-import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExams, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
+import { useStudents, useAttendance, useLessons, useNotifications, useFeePayments, useFeeInvoices, useStudentPerformance, useAssignments, useExamResults, useAssignmentSubmissions } from '../hooks/useDataService';
 import { useAggregatedNotifications } from '../hooks/useAggregatedNotifications';
 import { useAIFeatureEnabled } from '../hooks/useAIFeatureEnabled';
 import dataService from '../utils/firestoreService';
@@ -383,8 +383,6 @@ export function ParentDashboardNew() {
   
   const { submissions: assignmentSubmissions, loading: submissionsLoading } = useAssignmentSubmissions(feeParams); // uses same studentId filter
   
-  const { exams, loading: examsLoading } = useExams(assignmentsParams); // uses same class/section filter
-  
   const { results: examResults, loading: resultsLoading } = useExamResults(feeParams); // uses same studentId filter
   
   const { invoices: feeInvoices, loading: invoicesLoading } = useFeeInvoices(feeParams); // uses same studentId filter
@@ -637,18 +635,16 @@ export function ParentDashboardNew() {
     });
 
     examResults.forEach(result => {
-      const exam = exams.find(e => e.id === result.examId);
-      if (exam?.subject) {
-        const subj = normalizeSubject(exam.subject);
-        if (!subjectGroups[subj]) subjectGroups[subj] = { scores: [] };
-        // Compute percentage from marks if the stored percentage is missing/invalid
-        let pct = result.percentage;
-        if (typeof pct !== 'number' || isNaN(pct)) {
-          pct = result.totalMarks > 0 ? Math.round((result.marksObtained / result.totalMarks) * 100) : 0;
-        }
-        const date = result.gradedAt || result.created_at || '';
-        subjectGroups[subj].scores.push({ score: pct, date });
+      const subjName = result.subjectId || 'General';
+      const subj = normalizeSubject(subjName);
+      if (!subjectGroups[subj]) subjectGroups[subj] = { scores: [] };
+      // Compute percentage from marks if the stored percentage is missing/invalid
+      let pct = result.percentage;
+      if (typeof pct !== 'number' || isNaN(pct)) {
+        pct = result.totalMarks > 0 ? Math.round((result.marksObtained / result.totalMarks) * 100) : 0;
       }
+      const date = result.createdAt || '';
+      subjectGroups[subj].scores.push({ score: pct, date });
     });
 
     return Object.entries(subjectGroups).map(([subject, data]) => {
@@ -682,7 +678,7 @@ export function ParentDashboardNew() {
         lastScore: Math.round(lastScore),
       };
     }).sort((a, b) => b.averageScore - a.averageScore);
-  }, [examResults, exams, quizResults]);
+  }, [examResults, quizResults]);
 
   // Consolidate recent marks (exams + quizzes) for the report list
   const recentMarks = useMemo(() => {
@@ -693,20 +689,19 @@ export function ParentDashboardNew() {
 
     // Filter and normalize exams
     const normalizedExams = examResults
-      .filter(r => (r.gradedAt || r.created_at || '') >= cutoffStr)
+      .filter(r => (r.createdAt || '') >= cutoffStr)
       .map(r => {
-        const exam = exams.find(e => e.id === r.examId);
         return {
           id: r.id,
           type: 'exam' as const,
-          subject: exam?.subject || 'General',
-          title: exam?.name || 'Exam',
+          subject: r.subjectId || 'General',
+          title: r.examType || 'Exam',
           score: typeof r.percentage === 'number' && !isNaN(r.percentage) 
             ? r.percentage 
             : (r.totalMarks > 0 ? Math.round((r.marksObtained / r.totalMarks) * 100) : 0),
           marks: `${r.marksObtained}/${r.totalMarks}`,
-          grade: r.grade,
-          date: r.gradedAt || r.created_at || '',
+          grade: r.grade || '',
+          date: r.createdAt || '',
         };
       });
 
@@ -727,7 +722,7 @@ export function ParentDashboardNew() {
     return [...normalizedExams, ...normalizedQuizzes].sort((a, b) => 
       b.date.localeCompare(a.date)
     );
-  }, [examResults, exams, quizResults, selectedReportPeriod, examResults]);
+  }, [examResults, quizResults, selectedReportPeriod]);
 
 
 

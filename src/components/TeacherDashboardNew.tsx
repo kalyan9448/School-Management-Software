@@ -3270,22 +3270,31 @@ export function TeacherDashboardNew() {
               <select
                 value={objectiveClassFilter}
                 onChange={(e) => {
-                  setObjectiveClassFilter(e.target.value);
-                  const filtered = allStudents.filter(s => {
-                    const [cls, sec] = e.target.value.split('-');
-                    return s.class === cls && s.section === sec;
-                  });
-                  if (filtered.length > 0) {
-                    setSelectedAchievementStudentId(filtered[0].id);
+                  const val = e.target.value;
+                  setObjectiveClassFilter(val);
+                  if (!val) {
+                    if (allStudents.length > 0) {
+                      setSelectedAchievementStudentId(allStudents[0].id);
+                    } else {
+                      setSelectedAchievementStudentId('');
+                    }
                   } else {
-                    setSelectedAchievementStudentId('');
+                    const [cls, sec] = val.split('-');
+                    const filtered = allStudents.filter(s => s.class === cls && s.section === sec);
+                    if (filtered.length > 0) {
+                      setSelectedAchievementStudentId(filtered[0].id);
+                    } else {
+                      setSelectedAchievementStudentId('');
+                    }
                   }
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500"
               >
                 <option value="">All Classes</option>
-                {getAvailableClasses().map(cls => (
-                  <option key={cls} value={cls}>{cls}</option>
+                {myClasses.map(c => (
+                  <option key={c.id} value={`${c.class}-${c.section}`}>
+                    {c.class} - Section {c.section}
+                  </option>
                 ))}
               </select>
             </div>
