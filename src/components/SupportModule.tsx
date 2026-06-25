@@ -23,7 +23,7 @@ export function SupportModule() {
   const [schoolName, setSchoolName] = useState('');
 
   // Queue Segmentation State
-  const [activeTab, setActiveTab] = useState<'student' | 'platform'>('student');
+  const [activeTab, setActiveTab] = useState<'student' | 'parent' | 'teacher' | 'platform'>('student');
   const [allTickets, setAllTickets] = useState<{ school: SupportTicket[]; platform: SupportTicket[] }>({
     school: [],
     platform: []
@@ -121,7 +121,7 @@ export function SupportModule() {
         timestamp: new Date().toISOString(),
         // If it's a student ticket, the School Admin replies as the authority resolver.
         // If it's a platform ticket, the School Admin is the client requester.
-        isAdminResponse: activeTab === 'student'
+        isAdminResponse: activeTab !== 'platform'
       };
 
       await ticketService.addResponse(selectedTicket.id, response);
@@ -171,7 +171,14 @@ export function SupportModule() {
   };
 
   // Select tickets list based on active tab and search query
-  const rawTickets = activeTab === 'student' ? allTickets.school : allTickets.platform;
+  const getRawTickets = () => {
+    if (activeTab === 'platform') return allTickets.platform;
+    if (activeTab === 'parent') return allTickets.school.filter(t => t.userRole === 'parent');
+    if (activeTab === 'teacher') return allTickets.school.filter(t => t.userRole === 'teacher');
+    // Default to student
+    return allTickets.school.filter(t => t.userRole === 'student' || !t.userRole);
+  };
+  const rawTickets = getRawTickets();
   const filteredTickets = rawTickets.filter(ticket => 
     ticket.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
     ticket.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -193,9 +200,9 @@ export function SupportModule() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 font-display">Support & Help Desk</h1>
           <p className="text-gray-500 text-sm">
-            {activeTab === 'student'
-              ? 'View and resolve support requests submitted by students and parents of your school.'
-              : 'Submit technical inquiries or billing issues directly to platform developers.'}
+            {activeTab === 'platform'
+              ? 'Submit technical inquiries or billing issues directly to platform developers.'
+              : `View and resolve support requests submitted by ${activeTab}s of your school.`}
           </p>
         </div>
         {activeTab === 'platform' && !selectedTicket && (
@@ -210,7 +217,7 @@ export function SupportModule() {
       </div>
 
       {/* Tabs Selector */}
-      <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl mb-6 max-w-md shrink-0 border border-gray-200/50">
+      <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl mb-6 max-w-2xl shrink-0 border border-gray-200/50">
         <button
           onClick={() => {
             setActiveTab('student');
@@ -223,7 +230,35 @@ export function SupportModule() {
               : 'text-gray-500 hover:text-gray-900 hover:bg-white/40'
           }`}
         >
-          Student Support ({allTickets.school.length})
+          Student Support ({allTickets.school.filter(t => t.userRole === 'student' || !t.userRole).length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('parent');
+            setSelectedTicket(null);
+            setSearchQuery('');
+          }}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-200 ${
+            activeTab === 'parent'
+              ? 'bg-white text-purple-700 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900 hover:bg-white/40'
+          }`}
+        >
+          Parent Support ({allTickets.school.filter(t => t.userRole === 'parent').length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('teacher');
+            setSelectedTicket(null);
+            setSearchQuery('');
+          }}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-200 ${
+            activeTab === 'teacher'
+              ? 'bg-white text-purple-700 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900 hover:bg-white/40'
+          }`}
+        >
+          Teacher Support ({allTickets.school.filter(t => t.userRole === 'teacher').length})
         </button>
         <button
           onClick={() => {
@@ -450,7 +485,7 @@ export function SupportModule() {
             </div>
             <h2 className="text-xl font-bold text-gray-400">Select a ticket to view conversation</h2>
             <p className="text-sm text-gray-400">
-              {activeTab === 'student'
+              {activeTab !== 'platform'
                 ? "Click a help request from the list to reply or update its status."
                 : "Our support team typically responds to platform issues within 24 hours."}
             </p>

@@ -180,6 +180,7 @@ const DashboardLayout: React.FC = () => {
                 status: 'Open',
                 responses: [],
                 ticketType: 'school',
+                userRole: 'student',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             });

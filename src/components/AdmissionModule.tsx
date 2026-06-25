@@ -309,7 +309,7 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
             // Also ensure organization context is available for the API headers
             if (!sessionStorage.getItem('active_organization_id')) {
               // First try to get org ID from the authenticated user profile (always available from login)
-              const orgIdFromUser = user?.organization_id;
+              const orgIdFromUser = user?.organization_id || (user as any)?.org_id;
               if (orgIdFromUser) {
                 sessionStorage.setItem('active_organization_id', orgIdFromUser);
               } else {
@@ -318,8 +318,9 @@ export function AdmissionModule({ initialView = 'list', initialData }: Admission
                   const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
                   if (cached) {
                     const parsedUser = JSON.parse(cached);
-                    if (parsedUser?.organization_id) {
-                      sessionStorage.setItem('active_organization_id', parsedUser.organization_id);
+                    const orgId = parsedUser?.organization_id || parsedUser?.org_id;
+                    if (orgId) {
+                      sessionStorage.setItem('active_organization_id', orgId);
                     }
                   }
                 } catch { /* ignore parse errors */ }
