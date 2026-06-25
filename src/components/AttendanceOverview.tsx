@@ -58,7 +58,23 @@ export function AttendanceOverview({ classInfo, onMarkAttendance, onBack }: Atte
       }
 
       // 1. Load students for this class/section/year
-      const classStudents = await studentService.getByClass(classInfo.class, classInfo.section, currentYear);
+      let classStudents = await studentService.getByClass(classInfo.class, classInfo.section, currentYear);
+      
+      // Fallback 1: if no students found with active academic year, try fetching without academic year filter
+      if (classStudents.length === 0) {
+        classStudents = await studentService.getByClass(classInfo.class, classInfo.section);
+      }
+      
+      // Fallback 2: if still empty, load all students and filter in-memory by class and section (ignoring academic year)
+      if (classStudents.length === 0) {
+        const allStudents = await studentService.getAll();
+        classStudents = allStudents.filter(
+          (s: any) =>
+            s.class?.toString().trim() === classInfo.class?.toString().trim() &&
+            s.section?.toString().trim() === classInfo.section?.toString().trim()
+        );
+      }
+      
       setStudents(classStudents);
 
       // Load attendance records based on view type
