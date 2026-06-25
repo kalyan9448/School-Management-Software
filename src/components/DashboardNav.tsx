@@ -7,7 +7,8 @@ import {
   MessageSquare,
   Award,
   BarChart3,
-  CheckCircle
+  CheckCircle,
+  HelpCircle
 } from 'lucide-react';
 
 interface NavItem {
@@ -60,6 +61,7 @@ export const teacherNavItems: NavItem[] = [
   { id: 'student-notes', label: 'Student Notes', icon: <MessageSquare className="w-5 h-5" /> },
   { id: 'performance', label: 'Performance', icon: <Award className="w-5 h-5" /> },
   { id: 'chat', label: 'Parent Chat', icon: <MessageSquare className="w-5 h-5" /> },
+  { id: 'support', label: 'Support', icon: <HelpCircle className="w-5 h-5" /> },
 ];
 
 export const parentNavItems: NavItem[] = [
@@ -70,4 +72,5 @@ export const parentNavItems: NavItem[] = [
   { id: 'ai-suggestions', label: 'AI Discussion Tips', icon: <MessageSquare className="w-5 h-5" /> },
   { id: 'fees', label: 'Fees', icon: <Award className="w-5 h-5" /> },
   { id: 'chat', label: 'Chat Teachers', icon: <MessageSquare className="w-5 h-5" /> },
+  { id: 'support', label: 'Support', icon: <HelpCircle className="w-5 h-5" /> },
 ];
