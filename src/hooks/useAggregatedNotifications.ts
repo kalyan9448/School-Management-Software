@@ -3,7 +3,7 @@
  * Fetches and categorizes notifications dynamically from Firestore
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import dataService from '../utils/firestoreService';
 import { Notification } from '../utils/centralDataService';
@@ -34,34 +34,12 @@ export const useAggregatedNotifications = (
 ) => {
   const { user } = useAuth();
   const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
-  const [categories, setCategories] = useState<NotificationCategory[]>([]);
-  const [stats, setStats] = useState<CategoryStats>({
-    exam: 0,
-    announcement: 0,
-    fee: 0,
-    event: 0,
-    assignment: 0,
-    attendance: 0,
-    general: 0,
-  });
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAndCategorize = useCallback(async () => {
     if (!user?.id) {
       setAllNotifications([]);
-      setCategories([]);
-      setStats({
-        exam: 0,
-        announcement: 0,
-        fee: 0,
-        event: 0,
-        assignment: 0,
-        attendance: 0,
-        general: 0,
-      });
-      setUnreadCount(0);
       setLoading(false);
       return;
     }
@@ -84,119 +62,120 @@ export const useAggregatedNotifications = (
       );
 
       setAllNotifications(sorted);
-
-      // Categorize and calculate stats
-      const categorized: Record<string, Notification[]> = {
-        exam: [],
-        announcement: [],
-        fee: [],
-        event: [],
-        assignment: [],
-        attendance: [],
-        general: [],
-      };
-
-      sorted.forEach(notif => {
-        const category = notif.type as keyof typeof categorized;
-        if (categorized[category]) {
-          categorized[category].push(notif);
-        } else {
-          categorized.general.push(notif);
-        }
-      });
-
-      // Build category array with metadata
-      const categoryList: NotificationCategory[] = [
-        {
-          type: 'exam',
-          label: '📊 Exam Results',
-          iconColor: 'from-indigo-600 to-indigo-800',
-          notifications: categorized.exam,
-          unreadCount: categorized.exam.filter(n => !n.read).length,
-        },
-        {
-          type: 'announcement',
-          label: '📢 Announcements',
-          iconColor: 'from-teal-600 to-teal-800',
-          notifications: categorized.announcement,
-          unreadCount: categorized.announcement.filter(n => !n.read).length,
-        },
-        {
-          type: 'fee',
-          label: '💳 Fee Reminders',
-          iconColor: 'from-orange-600 to-orange-800',
-          notifications: categorized.fee,
-          unreadCount: categorized.fee.filter(n => !n.read).length,
-        },
-        {
-          type: 'event',
-          label: '📅 Events',
-          iconColor: 'from-purple-600 to-purple-800',
-          notifications: categorized.event,
-          unreadCount: categorized.event.filter(n => !n.read).length,
-        },
-        {
-          type: 'assignment',
-          label: '📝 Assignments',
-          iconColor: 'from-blue-600 to-blue-800',
-          notifications: categorized.assignment,
-          unreadCount: categorized.assignment.filter(n => !n.read).length,
-        },
-        {
-          type: 'attendance',
-          label: '✅ Attendance',
-          iconColor: 'from-green-600 to-green-800',
-          notifications: categorized.attendance,
-          unreadCount: categorized.attendance.filter(n => !n.read).length,
-        },
-        {
-          type: 'general',
-          label: '📌 General',
-          iconColor: 'from-gray-600 to-gray-800',
-          notifications: categorized.general,
-          unreadCount: categorized.general.filter(n => !n.read).length,
-        },
-      ].filter(cat => cat.notifications.length > 0); // Only show categories with notifications
-
-      setCategories(categoryList);
-
-      // Calculate stats
-      const newStats: CategoryStats = {
-        exam: categorized.exam.length,
-        announcement: categorized.announcement.length,
-        fee: categorized.fee.length,
-        event: categorized.event.length,
-        assignment: categorized.assignment.length,
-        attendance: categorized.attendance.length,
-        general: categorized.general.length,
-      };
-      setStats(newStats);
-
-      // Calculate total unread
-      const totalUnread = Object.values(categorized).reduce(
-        (sum, items) => sum + items.filter(n => !n.read).length,
-        0
-      );
-      setUnreadCount(totalUnread);
     } catch (err) {
       console.error('Error fetching aggregated notifications:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch notifications');
       setAllNotifications([]);
-      setCategories([]);
-      setStats({
-        exam: 0,
-        announcement: 0,
-        fee: 0,
-        event: 0,
-        assignment: 0,
-        attendance: 0,
-        general: 0,
-      });
-      setUnreadCount(0);
     } finally {
       setLoading(false);
     }
   }, [user?.id, role, userClass, userSection, allClasses]);
+
+  // Fetch on mount and when dependencies change
+  useEffect(() => {
+    fetchAndCategorize();
+  }, [fetchAndCategorize]);
+
+  // Derived reactive categories
+  const categories = useMemo(() => {
+    const categorized: Record<string, Notification[]> = {
+      exam: [],
+      announcement: [],
+      fee: [],
+      event: [],
+      assignment: [],
+      attendance: [],
+      general: [],
+    };
+
+    allNotifications.forEach(notif => {
+      const category = notif.type as keyof typeof categorized;
+      if (categorized[category]) {
+        categorized[category].push(notif);
+      } else {
+        categorized.general.push(notif);
+      }
+    });
+
+    return [
+      {
+        type: 'exam',
+        label: '📊 Exam Results',
+        iconColor: 'from-indigo-600 to-indigo-800',
+        notifications: categorized.exam,
+        unreadCount: categorized.exam.filter(n => !n.read).length,
+      },
+      {
+        type: 'announcement',
+        label: '📢 Announcements',
+        iconColor: 'from-teal-600 to-teal-800',
+        notifications: categorized.announcement,
+        unreadCount: categorized.announcement.filter(n => !n.read).length,
+      },
+      {
+        type: 'fee',
+        label: '💳 Fee Reminders',
+        iconColor: 'from-orange-600 to-orange-800',
+        notifications: categorized.fee,
+        unreadCount: categorized.fee.filter(n => !n.read).length,
+      },
+      {
+        type: 'event',
+        label: '📅 Events',
+        iconColor: 'from-purple-600 to-purple-800',
+        notifications: categorized.event,
+        unreadCount: categorized.event.filter(n => !n.read).length,
+      },
+      {
+        type: 'assignment',
+        label: '📝 Assignments',
+        iconColor: 'from-blue-600 to-blue-800',
+        notifications: categorized.assignment,
+        unreadCount: categorized.assignment.filter(n => !n.read).length,
+      },
+      {
+        type: 'attendance',
+        label: '✅ Attendance',
+        iconColor: 'from-green-600 to-green-800',
+        notifications: categorized.attendance,
+        unreadCount: categorized.attendance.filter(n => !n.read).length,
+      },
+      {
+        type: 'general',
+        label: '📌 General',
+        iconColor: 'from-gray-600 to-gray-800',
+        notifications: categorized.general,
+        unreadCount: categorized.general.filter(n => !n.read).length,
+      },
+    ].filter(cat => cat.notifications.length > 0);
+  }, [allNotifications]);
+
+  // Derived reactive stats
+  const stats = useMemo(() => {
+    const s: CategoryStats = {
+      exam: 0,
+      announcement: 0,
+      fee: 0,
+      event: 0,
+      assignment: 0,
+      attendance: 0,
+      general: 0,
+    };
+    allNotifications.forEach(notif => {
+      const category = notif.type as keyof typeof s;
+      if (s[category] !== undefined) {
+        s[category]++;
+      } else {
+        s.general++;
+      }
+    });
+    return s;
+  }, [allNotifications]);
+
+  // Derived reactive unread count
+  const unreadCount = useMemo(() => {
+    return allNotifications.filter(n => !n.read).length;
+  }, [allNotifications]);
 
   // Fetch on mount and when dependencies change
   useEffect(() => {
@@ -210,7 +189,6 @@ export const useAggregatedNotifications = (
         setAllNotifications(prev =>
           prev.map(n => (n.id === notificationId ? { ...n, read: true } : n))
         );
-        setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (err) {
         console.error('Error marking notification as read:', err);
       }
@@ -223,28 +201,26 @@ export const useAggregatedNotifications = (
     try {
       await dataService.notification.markAllAsRead(user.id);
       setAllNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
     }
   }, [user?.id]);
 
   const deleteNotification = useCallback(async (notificationId: string) => {
+    if (!user?.id) return;
     try {
-      // Assuming delete method exists in notificationService
-      // If not, this can be extended to firestore service
       setAllNotifications(prev => prev.filter(n => n.id !== notificationId));
+      await dataService.notification.delete(notificationId, user.id);
     } catch (err) {
       console.error('Error deleting notification:', err);
     }
-  }, []);
+  }, [user?.id]);
 
   const clearAllNotifications = useCallback(async () => {
     if (!user?.id) return;
     try {
       // Clear from UI immediately to give instant feedback
       setAllNotifications([]);
-      setUnreadCount(0);
       
       // Delete personal notifications from backend and mark global ones as deleted by this user
       await dataService.notification.deleteAll(user.id, role, userClass, userSection, allClasses);
@@ -255,7 +231,7 @@ export const useAggregatedNotifications = (
     } catch (err) {
       console.error('Error clearing all notifications:', err);
     }
-  }, [user?.id]);
+  }, [user?.id, role, userClass, userSection, allClasses]);
 
   const getCategoryStats = useCallback((categoryType: string): number => {
     return stats[categoryType as keyof CategoryStats] || 0;

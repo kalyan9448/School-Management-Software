@@ -147,7 +147,7 @@ service cloud.firestore {
 
     function getOrganizationIdFromDoc() {
       let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userPath) ? get(userPath).data.get("organization_id", "") : "";
+      return exists(userPath) ? get(userPath).data.get("organization_id", get(userPath).data.get("org_id", "")) : "";
     }
 
     function resolvedOrganizationId() {
@@ -672,7 +672,10 @@ service cloud.firestore {
       allow create: if isSuperAdmin() || (isStaff() && canCreateSchoolData());
       allow update: if isSuperAdmin() || (
         (isStaff() && canUpdateSchoolData()) ||
-        (isSignedIn() && resource.data.userId == request.auth.uid)
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        (isSignedIn() && 
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedBy']) &&
+          request.resource.data.deletedBy.hasAll([request.auth.uid]))
       );
       allow delete: if isSuperAdmin() || (isAdminOrAbove() && canDeleteSchoolData());
     }
@@ -867,6 +870,19 @@ service cloud.firestore {
           isSignedIn() && 
           userSchoolId() == schoolId
         );
+      }
+
+      // Specific override for notifications to allow students/parents to hide/delete them
+      match /notifications/{id} {
+        allow read: if isPathAuthorized();
+        allow create: if isPathAuthorized() && (isStaff() || isSuperAdmin());
+        allow update: if isSuperAdmin() || (
+          (isStaff() && isPathAuthorized()) ||
+          (isSignedIn() && 
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedBy']) &&
+            request.resource.data.deletedBy.hasAll([request.auth.uid]))
+        );
+        allow delete: if isPathAuthorized() && (isAdminOrAbove() || isSuperAdmin());
       }
 
       // Default rule for all nested collections within a school

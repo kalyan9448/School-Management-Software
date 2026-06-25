@@ -15,10 +15,12 @@ import {
   examScoreService,
   attendanceService,
   assignmentSubmissionService,
+  subjectService,
   ExamScore,
   AttendanceRecord,
   AssignmentSubmission,
-} from '../utils/centralDataService';
+  Subject,
+} from '../utils/firestoreService';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ChildProgress {
@@ -63,6 +65,7 @@ export function ParentDashboardChildProgress({
   const [loading, setLoading] = useState(true);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(targetChildId || null);
   const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>({});
+  const [subjectsMap, setSubjectsMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const loadChildrenProgress = async () => {
@@ -70,6 +73,18 @@ export function ParentDashboardChildProgress({
 
       try {
         setLoading(true);
+
+        // Load all subjects to map IDs to names
+        try {
+          const subjects = await subjectService.getAll();
+          const map: Record<string, string> = {};
+          subjects.forEach(s => {
+            map[s.id] = s.name;
+          });
+          setSubjectsMap(map);
+        } catch (err) {
+          console.error('Error loading subjects:', err);
+        }
 
         // Get parent's children
         const children = await studentService.getByParentId(user.id);
@@ -423,26 +438,32 @@ export function ParentDashboardChildProgress({
           <div id="subject-wise-performance-section" className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Subject-wise Performance</h3>
             <div className="space-y-3">
-              {Object.entries(selectedChild.examScores.subjectWiseAverage).map(
-                ([subjectId, data]) => (
-                  <div key={subjectId}>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm font-medium text-gray-700">{subjectId}</span>
-                      <span className="text-sm font-bold text-gray-800">{data.average}%</span>
+              {Object.entries(selectedChild.examScores.subjectWiseAverage).length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  No subject-wise performance data available yet.
+                </div>
+              ) : (
+                Object.entries(selectedChild.examScores.subjectWiseAverage).map(
+                  ([subjectId, data]) => (
+                    <div key={subjectId}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium text-gray-700">{subjectsMap[subjectId] || subjectId}</span>
+                        <span className="text-sm font-bold text-gray-800">{data.average}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            data.average >= 80
+                              ? 'bg-green-600'
+                              : data.average >= 60
+                                ? 'bg-yellow-500'
+                                : 'bg-red-600'
+                          }`}
+                          style={{ width: `${data.average}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          data.average >= 80
-                            ? 'bg-green-600'
-                            : data.average >= 60
-                              ? 'bg-yellow-500'
-                              : 'bg-red-600'
-                        }`}
-                        style={{ width: `${data.average}%` }}
-                      />
-                    </div>
-                  </div>
+                  )
                 )
               )}
             </div>
@@ -474,7 +495,7 @@ export function ParentDashboardChildProgress({
                     {selectedChild.examScores.recentScores.map((score, idx) => (
                       <tr key={idx} className="border-b hover:bg-gray-50">
                         <td className="py-3 text-sm text-gray-900">{score.examType}</td>
-                        <td className="py-3 text-sm text-gray-900">{score.subjectId}</td>
+                        <td className="py-3 text-sm text-gray-900">{subjectsMap[score.subjectId] || score.subjectId}</td>
                         <td className="py-3 text-sm font-medium text-gray-900">
                           {score.marksObtained}/{score.totalMarks} ({score.percentage}%)
                         </td>

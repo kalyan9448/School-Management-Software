@@ -50,7 +50,7 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
   allClasses,
   onNavigate,
 }) => {
-  const { categories, unreadCount, loading, error, markAsRead, markAllAsRead, clearAllNotifications, getRecentNotifications, refresh } =
+  const { categories, unreadCount, loading, error, markAsRead, markAllAsRead, clearAllNotifications, deleteNotification, getRecentNotifications, refresh } =
     useAggregatedNotifications('parent', userClass, userSection, allClasses);
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
@@ -193,12 +193,34 @@ export const ParentNotificationPanel: React.FC<ParentNotificationPanelProps> = (
               <Clock className="w-3.5 h-3.5" />
               {formatTimeAgo(notification.date)}
             </div>
-            <div className="flex-shrink-0 flex gap-1 opacity-0 hover:opacity-100 transition-opacity">
-              {notification.read ? (
-                <EyeOff className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-              ) : (
-                <Eye className="w-4 h-4 text-blue-500 hover:text-blue-700" />
-              )}
+            <div className="flex-shrink-0 flex gap-2 opacity-0 hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!notification.read) {
+                    markAsRead(notification.id);
+                  }
+                }}
+                className={`p-1 hover:bg-gray-100 rounded transition-colors ${notification.read ? 'text-gray-400' : 'text-blue-500 hover:text-blue-700'}`}
+                title={notification.read ? 'Read' : 'Mark as read'}
+                disabled={notification.read}
+              >
+                {notification.read ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteNotification(notification.id);
+                }}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600 transition-colors"
+                title="Delete notification"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>

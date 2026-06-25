@@ -8,6 +8,7 @@ import { ParentDashboardChildProgress } from './ParentDashboardChildProgress';
 import { ParentNotificationPanel } from './ParentNotificationPanel';
 import { CalendarModule } from './CalendarModule';
 import { ParentTeacherChat } from './ParentTeacherChat';
+import { SupportTicketsPanel } from './SupportTicketsPanel';
 import { jsPDF } from 'jspdf';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import {
@@ -49,7 +50,7 @@ import { useAIFeatureEnabled } from '../hooks/useAIFeatureEnabled';
 import dataService from '../utils/firestoreService';
 import { generateAndDownloadReport } from '../utils/reportPdfGenerator';
 
-type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar' | 'chat';
+type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar' | 'chat' | 'support';
 type ReportPeriod = 'weekly' | 'monthly';
 
 interface Child {
@@ -123,6 +124,36 @@ export function ParentDashboardNew() {
   const { user, logout, refreshUser } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) return;
+    if (!editName.trim()) {
+      alert("Name cannot be empty");
+      return;
+    }
+    
+    setIsSavingProfile(true);
+    try {
+      await dataService.user.update(user.id, {
+        name: editName.trim(),
+        phone: editPhone.trim()
+      });
+      await refreshUser();
+      setIsEditProfileOpen(false);
+      alert("Profile updated successfully!");
+    } catch (err) {
+      console.error("Failed to update profile:", err);
+      alert("Failed to update profile. Please try again.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -271,6 +302,16 @@ export function ParentDashboardNew() {
     console.log(`[ParentDashboard] selectedChild falling back to children[0]: ${children[0].id}`);
     return children[0];
   }, [children, selectedChildId]);
+
+  useEffect(() => {
+    if (selectedChild) {
+      const childSchoolId = selectedChild.school_id || selectedChild.schoolId;
+      if (childSchoolId) {
+        console.log(`[ParentDashboard] Syncing active_school_id to child's school: ${childSchoolId}`);
+        sessionStorage.setItem('active_school_id', childSchoolId);
+      }
+    }
+  }, [selectedChild]);
 
   // Visual feedback when switching child
   const [isSwitchingChild, setIsSwitchingChild] = useState(false);
@@ -1840,9 +1881,9 @@ export function ParentDashboardNew() {
                   View Calendar
                 </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {upcomingEvents.length > 0 ? (
-                    upcomingEvents.map(event => (
+            {upcomingEvents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {upcomingEvents.map(event => (
                         <div key={event.id} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
                             <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0 ${
                                 event.type === 'holiday' ? 'bg-red-500' : 
@@ -1857,14 +1898,14 @@ export function ParentDashboardNew() {
                                 <p className="text-xs text-gray-500 truncate">{event.description || 'School event'}</p>
                             </div>
                         </div>
-                    ))
-                ) : (
-                    <div className="col-span-full py-8 text-center text-gray-400">
-                        <Calendar className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                        <p>No upcoming events scheduled</p>
-                    </div>
-                )}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+                    <Calendar className="w-12 h-12 mb-2 opacity-20" />
+                    <p className="font-semibold text-gray-500">No upcoming events scheduled</p>
+                </div>
+            )}
         </div>
 
         {/* Quick Actions */}
@@ -2497,6 +2538,13 @@ export function ParentDashboardNew() {
             parentId={user?.id || ''}
           />
         );
+      case 'support':
+        return (
+          <SupportTicketsPanel
+            userId={user?.id || ''}
+            userRole="parent"
+          />
+        );
       default:
         return renderDashboard();
     }
@@ -2532,12 +2580,19 @@ export function ParentDashboardNew() {
             )}
           <div className="flex items-center gap-4">
             {/* Profile Section (Photo Upload + Name) */}
-            <div className="flex items-center gap-3 bg-white/5 py-1.5 px-3 rounded-xl border border-white/10 backdrop-blur-sm">
+            <div 
+              onClick={() => {
+                setEditName(user?.name || '');
+                setEditPhone(user?.phone || '');
+                setIsEditProfileOpen(true);
+              }}
+              className="flex items-center gap-3 bg-white/5 hover:bg-white/10 py-1.5 px-3 rounded-xl border border-white/10 hover:border-white/20 backdrop-blur-sm transition-all cursor-pointer group"
+            >
               <div className="text-right">
-                <h1 className="text-white text-lg sm:text-xl font-black leading-tight">Parent Portal</h1>
+                <h1 className="text-white text-lg sm:text-xl font-black leading-tight group-hover:text-yellow-400 transition-colors">Parent Portal</h1>
                 <p className="text-purple-200 text-xs sm:text-sm font-medium leading-tight">{user?.name}</p>
               </div>
-              <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+              <div className="relative group cursor-pointer shrink-0" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-purple-400 group-hover:border-yellow-400 transition-all flex items-center justify-center bg-purple-800 text-white font-bold text-base shadow-inner animate-fade-in">
                   {isUploading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2604,6 +2659,111 @@ export function ParentDashboardNew() {
         
         {renderContent()}
       </main>
+
+      {/* Edit Profile Modal */}
+      {isEditProfileOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div 
+            className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-100 transform scale-100 transition-all duration-300"
+            style={{ maxWidth: '448px', width: '100%', borderRadius: '16px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-900 to-purple-800 text-white px-6 py-4 flex items-center justify-between" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="flex items-center gap-2" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <UserCircle className="w-6 h-6 text-yellow-400" />
+                <h2 className="text-lg font-black tracking-tight" style={{ fontSize: '1.125rem', fontWeight: 900 }}>Edit Profile</h2>
+              </div>
+              <button 
+                onClick={() => setIsEditProfileOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                style={{ cursor: 'pointer' }}
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveProfile} className="p-6 space-y-4" style={{ padding: '24px', overflowY: 'auto' }}>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5" style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                  Email Address
+                </label>
+                <div className="relative" style={{ position: 'relative' }}>
+                  <input
+                    type="email"
+                    value={user?.email || ''}
+                    disabled
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 font-medium cursor-not-allowed focus:outline-none"
+                    style={{ width: '100%', padding: '10px 16px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', color: '#6b7280' }}
+                  />
+                  <div className="absolute right-3.5 top-3.5 text-gray-400" style={{ position: 'absolute', right: '14px', top: '14px', color: '#9ca3af', display: 'flex', alignItems: 'center', height: '16px' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" style={{ width: '16px', height: '16px' }}>
+                      <path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1 font-medium" style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>Used for secure login and account matching</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5" style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 transition-all placeholder:text-gray-400"
+                  style={{ width: '100%', padding: '10px 16px', backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', color: '#111827', fontWeight: 600 }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5" style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="Enter your phone number"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 transition-all placeholder:text-gray-400"
+                  style={{ width: '100%', padding: '10px 16px', backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', color: '#111827', fontWeight: 600 }}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 justify-end pt-4 border-t border-gray-100" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid #f3f4f6' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditProfileOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors"
+                  style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid #e5e7eb', color: '#4b5563', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', backgroundColor: '#ffffff' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="px-5 py-2.5 rounded-xl bg-purple-900 hover:bg-purple-800 text-white font-bold text-sm transition-colors flex items-center gap-2 disabled:bg-purple-900/50"
+                  style={{ padding: '10px 20px', borderRadius: '12px', backgroundColor: '#581c87', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: 'none' }}
+                >
+                  {isSavingProfile ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" style={{ width: '16px', height: '16px', border: '2px solid #ffffff', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

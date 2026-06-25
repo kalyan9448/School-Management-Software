@@ -201,8 +201,9 @@ function getOrganizationId(): string {
             const cached = sessionStorage.getItem('schoolUser') || localStorage.getItem('schoolUser');
             if (cached) {
                 const user = JSON.parse(cached);
-                if (user?.organization_id) {
-                    oid = user.organization_id;
+                const userOrgId = user?.organization_id || user?.org_id;
+                if (userOrgId) {
+                    oid = userOrgId;
                     // Persist back to session storage for performance
                     sessionStorage.setItem('active_organization_id', oid!);
                 }
@@ -2191,6 +2192,18 @@ export const notificationService = {
             if (!deletedBy.includes(userId)) {
                 deletedBy.push(userId);
                 await updateDocById('notifications', n.id, { deletedBy });
+            }
+        }
+    },
+
+    delete: async (id: string, userId: string): Promise<void> => {
+        const snap = await getDoc(getDocRef('notifications', id));
+        if (snap.exists()) {
+            const n = snap.data();
+            const deletedBy = n.deletedBy || [];
+            if (!deletedBy.includes(userId)) {
+                deletedBy.push(userId);
+                await updateDocById('notifications', id, { deletedBy });
             }
         }
     },

@@ -268,8 +268,8 @@ export function TeacherDashboard() {
                   </div>
                 </div>
               )) : (
-                <div className="py-8 text-center text-gray-400">
-                  <p className="text-sm">No upcoming events</p>
+                <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400">
+                  <p className="text-sm font-semibold text-gray-500">No upcoming events scheduled</p>
                 </div>
               )}
               <button className="w-full mt-4 py-3 border-2 border-gray-100 rounded-2xl text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">

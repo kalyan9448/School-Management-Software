@@ -17,6 +17,7 @@ import {
   Filter,
   BookMarked,
   GraduationCap,
+  ArrowLeft,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -306,6 +307,15 @@ export function SchedulePage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
             <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate(-1)}
+                className="text-white hover:bg-white/20 -ml-2 mb-3"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
               <h1 className="text-2xl md:text-3xl font-extraBold tracking-tight">Schedule</h1>
               <p className="text-white/70 text-sm mt-1">
                 {today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}

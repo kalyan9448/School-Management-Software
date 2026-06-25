@@ -12,14 +12,16 @@ import {
   Calendar,
   BookOpen,
   Book,
-  Clock,
   CheckCircle,
+  ArrowLeft,
+  Clock,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import { Card } from "@/components/student/ui/card";
 import { Badge } from "@/components/student/ui/badge";
 import { Progress } from "@/components/student/ui/progress";
+import { Button } from "@/components/student/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/student/ui/tabs";
 import {
   LineChart,
@@ -204,7 +206,16 @@ export function ProgressPage() {
       >
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
         <div className="max-w-screen-xl mx-auto relative z-10">
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex flex-col items-start justify-between mb-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(-1)}
+              className="text-white hover:bg-white/20 -ml-2 mb-3"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Analytics Insights</h1>
           </div>
           

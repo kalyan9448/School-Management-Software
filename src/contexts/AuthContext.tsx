@@ -213,8 +213,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (parsed?.school_id && !sessionStorage.getItem('active_school_id')) {
                 sessionStorage.setItem('active_school_id', parsed.school_id);
             }
-            if (parsed?.organization_id && !sessionStorage.getItem('active_organization_id')) {
-                sessionStorage.setItem('active_organization_id', parsed.organization_id);
+            const orgId = parsed?.organization_id || parsed?.org_id;
+            if (orgId && !sessionStorage.getItem('active_organization_id')) {
+                sessionStorage.setItem('active_organization_id', orgId);
             }
             return parsed;
         } catch {
@@ -401,7 +402,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             console.warn('[AuthContext] organization_id resolution failed:', err);
                         }
                     } else {
-                        sessionStorage.setItem('active_organization_id', appUser!.organization_id);
+                        const orgId = appUser!.organization_id || (appUser as any).org_id;
+                        if (orgId) {
+                            sessionStorage.setItem('active_organization_id', orgId);
+                        }
                     }
                 }
 

@@ -478,6 +478,7 @@ export interface SupportTicket {
   assignedTo?: string;
   assignedToName?: string;
   ticketType?: 'school' | 'platform';
+  userRole?: string;
 }
 
 // ==================== FIRESTORE-BACKED SERVICES ====================

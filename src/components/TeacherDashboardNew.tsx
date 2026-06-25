@@ -71,6 +71,7 @@ import { TeacherPerformanceAnalytics } from './TeacherPerformanceAnalytics';
 import { aiService } from '../services/aiService';
 import { AILessonPlan } from '../types';
 import { TeacherChatView } from './TeacherChatView';
+import { SupportTicketsPanel } from './SupportTicketsPanel';
 
 type ViewType =
   | 'dashboard'
@@ -86,7 +87,8 @@ type ViewType =
   | 'calendar'
   | 'chat'
   | 'learning-objectives'
-  | 'student-achievements';
+  | 'student-achievements'
+  | 'support';
 
 
 interface ClassInfo {
@@ -1470,9 +1472,9 @@ export function TeacherDashboardNew() {
                               </div>
                           ))
                       ) : (
-                          <div className="text-center py-8 text-gray-400">
-                              <Calendar className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                              <p className="text-xs">No upcoming events</p>
+                          <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400">
+                              <Calendar className="w-10 h-10 mb-2 opacity-20" />
+                              <p className="text-sm font-semibold text-gray-500">No upcoming events scheduled</p>
                           </div>
                       )}
                       <button 
@@ -3670,6 +3672,13 @@ export function TeacherDashboardNew() {
             teacherId={user?.id || ''}
             teacherName={user?.name || 'Teacher'}
             onBack={handleBack}
+          />
+        );
+      case 'support':
+        return (
+          <SupportTicketsPanel
+            userId={user?.id || ''}
+            userRole="teacher"
           />
         );
       case 'learning-objectives':

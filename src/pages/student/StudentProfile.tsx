@@ -20,6 +20,7 @@ import {
   Lightbulb,
   GraduationCap,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -441,13 +442,31 @@ export function ProfilePage() {
                     <div className="flex-1">
                       <p className="text-xs" style={{ color: '#7A869A' }}>{info.label}</p>
                       {isEditing && info.editable ? (
-                        <input
-                          type="text"
-                          value={info.value}
-                          onChange={(e) => setStudentData({ ...studentData, [info.id]: e.target.value })}
-                          className="w-full mt-1 p-2 text-sm border rounded outline-none focus:border-blue-500"
-                          style={{ borderColor: '#E6ECF5' }}
-                        />
+                        info.id === "email" ? (
+                          <div className="relative mt-1">
+                            <input
+                              type="email"
+                              value={info.value}
+                              disabled
+                              className="w-full p-2 pr-8 text-sm border rounded bg-gray-50 text-gray-500 cursor-not-allowed outline-none"
+                              style={{ borderColor: '#E6ECF5' }}
+                            />
+                            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+                              <Lock className="w-4 h-4" />
+                            </div>
+                            <p className="text-[10px] text-amber-600 mt-1 font-semibold">
+                              Permission needed. Used for secure login and account matching.
+                            </p>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={info.value}
+                            onChange={(e) => setStudentData({ ...studentData, [info.id]: e.target.value })}
+                            className="w-full mt-1 p-2 text-sm border rounded outline-none focus:border-blue-500"
+                            style={{ borderColor: '#E6ECF5' }}
+                          />
+                        )
                       ) : (
                         <p className="font-medium" style={{ color: '#1A1A1A' }}>{info.value || "Not Provided"}</p>
                       )}
