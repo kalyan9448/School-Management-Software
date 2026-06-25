@@ -48,6 +48,7 @@ import { useAggregatedNotifications } from '../hooks/useAggregatedNotifications'
 import { useAIFeatureEnabled } from '../hooks/useAIFeatureEnabled';
 import dataService from '../utils/firestoreService';
 import { generateAndDownloadReport } from '../utils/reportPdfGenerator';
+import { EditProfileModal } from './shared/EditProfileModal';
 
 type ViewType = 'dashboard' | 'timeline' | 'progress' | 'fees' | 'notifications' | 'reports' | 'ai-suggestions' | 'calendar' | 'chat';
 type ReportPeriod = 'weekly' | 'monthly';
@@ -121,6 +122,7 @@ interface Notification {
 
 export function ParentDashboardNew() {
   const { user, logout, refreshUser } = useAuth();
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2504,6 +2506,7 @@ export function ParentDashboardNew() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <EditProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
       {/* Header */}
       <header className="bg-gradient-to-r from-purple-900 to-purple-800 text-white py-4 shadow-lg sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6">
@@ -2537,7 +2540,7 @@ export function ParentDashboardNew() {
                 <h1 className="text-white text-lg sm:text-xl font-black leading-tight">Parent Portal</h1>
                 <p className="text-purple-200 text-xs sm:text-sm font-medium leading-tight">{user?.name}</p>
               </div>
-              <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+              <div className="relative group cursor-pointer shrink-0" onClick={() => setIsProfileModalOpen(true)}>
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-purple-400 group-hover:border-yellow-400 transition-all flex items-center justify-center bg-purple-800 text-white font-bold text-base shadow-inner animate-fade-in">
                   {isUploading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -20,6 +20,7 @@ import {
   Lightbulb,
   GraduationCap,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/student/ui/card";
 import { Button } from "@/components/student/ui/button";
@@ -35,6 +36,7 @@ export function ProfilePage() {
   const { user } = useAuth();
   const [studentData, setStudentData] = useState<any>({ name: "", grade: "", email: "" });
   const [isEditing, setIsEditing] = useState(false);
+  const [showEmailMsg, setShowEmailMsg] = useState(false);
   const [showAddSkill, setShowAddSkill] = useState(false);
   const [newSkill, setNewSkill] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -433,6 +435,7 @@ export function ProfilePage() {
             <div className="space-y-4">
               {personalInfo.map((info) => {
                 const Icon = info.icon;
+                const isEmailField = info.id === 'email';
                 return (
                   <div key={info.label} className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="p-2 rounded-lg" style={{ background: '#CFE8FF' }}>
@@ -441,13 +444,44 @@ export function ProfilePage() {
                     <div className="flex-1">
                       <p className="text-xs" style={{ color: '#7A869A' }}>{info.label}</p>
                       {isEditing && info.editable ? (
-                        <input
-                          type="text"
-                          value={info.value}
-                          onChange={(e) => setStudentData({ ...studentData, [info.id]: e.target.value })}
-                          className="w-full mt-1 p-2 text-sm border rounded outline-none focus:border-blue-500"
-                          style={{ borderColor: '#E6ECF5' }}
-                        />
+                        isEmailField ? (
+                          <div>
+                            <div className="relative mt-1">
+                              <input
+                                type="text"
+                                value={info.value}
+                                readOnly
+                                onClick={() => setShowEmailMsg(true)}
+                                className="w-full p-2 pr-8 text-sm border rounded outline-none bg-gray-100 text-gray-500 cursor-not-allowed"
+                                style={{ borderColor: '#E6ECF5' }}
+                              />
+                              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                                <Lock className="w-4 h-4 text-gray-400" />
+                              </div>
+                            </div>
+                            {showEmailMsg && (
+                              <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+                                <p className="text-xs text-amber-700 font-medium">
+                                  Admin Permission Needed — Email can only be changed by an administrator.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowEmailMsg(false)}
+                                  className="ml-auto text-amber-500 hover:text-amber-700 transition-colors text-xs font-bold"
+                                >✕</button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={info.value}
+                            onChange={(e) => setStudentData({ ...studentData, [info.id]: e.target.value })}
+                            className="w-full mt-1 p-2 text-sm border rounded outline-none focus:border-blue-500"
+                            style={{ borderColor: '#E6ECF5' }}
+                          />
+                        )
                       ) : (
                         <p className="font-medium" style={{ color: '#1A1A1A' }}>{info.value || "Not Provided"}</p>
                       )}

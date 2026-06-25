@@ -21,6 +21,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import logoImage from '../assets/logo.png';
+import { EditProfileModal } from './shared/EditProfileModal';
 
 interface SidebarProps {
   activeView: ViewType;
@@ -31,6 +32,7 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
   const { user, logout, refreshUser } = useAuth();
   const [schoolCode, setSchoolCode] = useState<string>('');
   const [schoolName, setSchoolName] = useState<string>('');
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -141,6 +143,7 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
 
   return (
     <div className="w-64 bg-gradient-to-b from-purple-900 to-purple-800 text-white flex flex-col fixed h-screen z-50">
+      <EditProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
       {/* Logo */}
       <div className="p-6 border-b border-purple-700">
         <div className="flex flex-col items-center gap-3">
@@ -182,7 +185,7 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
       {/* User Info */}
       <div className="p-4 pb-8 border-t border-purple-700">
         <div className="flex items-center gap-3 mb-3">
-          <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+          <div className="relative group cursor-pointer shrink-0" onClick={() => setIsProfileModalOpen(true)}>
             <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-400 group-hover:border-yellow-400 transition-all flex items-center justify-center bg-purple-800 text-white font-bold text-lg">
               {isUploading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

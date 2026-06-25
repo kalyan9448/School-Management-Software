@@ -64,6 +64,7 @@ import logoImage from '../assets/logo.png';
 import { jsPDF } from 'jspdf';
 import { createTemplatedDoc, TEMPLATE_MARGINS } from '../utils/pdfTemplateService';
 import autoTable from 'jspdf-autotable';
+import { EditProfileModal } from './shared/EditProfileModal';
 
 type ViewType =
   | 'dashboard'
@@ -197,6 +198,7 @@ export function SuperAdminDashboard() {
 
   const { user, logout, refreshUser, requestPasswordReset } = useAuth();
   const [currentView, setCurrentView] = useState<ViewType>(initialView);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -7036,6 +7038,7 @@ export function SuperAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex" >
+      <EditProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
       {/* Sidebar */}
       < div className="w-64 bg-gradient-to-b from-purple-900 to-purple-800 text-white flex flex-col fixed h-screen z-50" >
         {/* Logo */}
@@ -7075,7 +7078,7 @@ export function SuperAdminDashboard() {
         {/* User Info */}
         <div className="p-4 pb-8 border-t border-purple-700">
           <div className="flex items-center gap-3 mb-3">
-            <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+            <div className="relative group cursor-pointer shrink-0" onClick={() => setIsProfileModalOpen(true)}>
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-purple-400 group-hover:border-yellow-400 transition-all flex items-center justify-center bg-purple-800 text-white font-bold text-lg">
                 {isUploading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
