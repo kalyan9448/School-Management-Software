@@ -188,7 +188,7 @@ export function TopicDetailPage() {
         <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-b-[2rem] md:rounded-b-[2.5rem]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
         </div>
-        <div className="max-w-4xl mx-auto relative z-10">
+        <div className="max-w-screen-xl mx-auto relative z-10">
           <Button
             variant="ghost"
             size="sm"
@@ -223,7 +223,7 @@ export function TopicDetailPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 space-y-8">
+      <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 space-y-8 pb-12">
         {/* Curriculum Overview / AI Guide */}
         {/* AI Overview Section */}
         {isGenerating ? (

@@ -479,14 +479,18 @@ export const PendingTasks = {
         if (!hw.questionsCompleted) parts.push("Quiz");
         if (parts.length === 0) continue;
 
+        const isToday = !hw.date || hw.date === todayStr;
+        const isPast = hw.date && hw.date < todayStr;
+        const dueLabel = isToday ? "Today" : `Assigned: ${hw.date}`;
+
         tasks.push({
           id: nextId++,
           title: `${hw.subject}: ${parts.join(" & ")} — ${hw.topic}`,
           icon: getIcon(hw.subject),
           color: getColor(hw.subject),
           estimatedTime: parts.length === 2 ? "20 min" : "10 min",
-          dueDate: "Today",
-          priority: hw.flashcardProgress === 0 && hw.questionsProgress === 0 ? "high" : "medium",
+          dueDate: dueLabel,
+          priority: isPast ? "high" : (hw.flashcardProgress === 0 && hw.questionsProgress === 0 ? "high" : "medium"),
           type: "homework",
           topicId: hw.id,
         });
@@ -936,19 +940,21 @@ export const HomeworkService = {
     const savedProgress = await getData<Record<string, Partial<HomeworkTopic>>>("homework_progress", {});
 
     // Fetch quiz results so we can mark already-completed topics
-    // Only consider quizzes completed TODAY — if teacher re-assigns same topic
-    // next day, the student gets fresh homework.
+    // Map each unique subject/topic to its latest quiz attempt.
     let completedTopics = new Map<string, { accuracy: number; correct: number; total: number; completed_at: string }>();
     try {
       const quizResults = await quizResultService.getByStudent(uid);
       for (const r of quizResults) {
         if (r.subject && r.topic) {
-          const completedDate = r.completed_at ? r.completed_at.split('T')[0] : '';
-          if (completedDate === todayStr) {
-            completedTopics.set(
-              `${r.subject.toLowerCase()}::${r.topic.toLowerCase()}`,
-              { accuracy: r.accuracy ?? 0, correct: r.correct, total: r.total, completed_at: r.completed_at || '' }
-            );
+          const key = `${r.subject.toLowerCase()}::${r.topic.toLowerCase()}`;
+          const existing = completedTopics.get(key);
+          if (!existing || (r.completed_at && (!existing.completed_at || r.completed_at > existing.completed_at))) {
+            completedTopics.set(key, {
+              accuracy: r.accuracy ?? 0,
+              correct: r.correct,
+              total: r.total,
+              completed_at: r.completed_at || ''
+            });
           }
         }
       }
@@ -957,15 +963,15 @@ export const HomeworkService = {
     const getCompletedResult = (subject: string, topic: string) =>
       completedTopics.get(`${subject.toLowerCase()}::${topic.toLowerCase()}`);
 
-    const mergeProgress = (topic: HomeworkTopic): HomeworkTopic => {
+    const mergeProgress = (topic: HomeworkTopic, lessonDate: string): HomeworkTopic => {
       // Only match progress saved for the exact same subject + topic combination
       const key = `${topic.subject}::${topic.topic}`;
       const saved = savedProgress[key];
       if (!saved) return topic;
 
-      // Only merge progress that was saved TODAY to avoid stale data from old topics
+      // Only merge progress that was saved on or after the lesson date to avoid stale data from old topics
       const savedDate = saved.lastAttemptDate ? saved.lastAttemptDate.split('T')[0] : null;
-      if (savedDate && savedDate !== todayStr) return topic;
+      if (savedDate && savedDate < lessonDate) return topic;
 
       return {
         ...topic,
@@ -987,23 +993,39 @@ export const HomeworkService = {
       subj.toLowerCase().includes("math") ? "bg-blue-500" :
       subj.toLowerCase().includes("sci") ? "bg-emerald-500" : "bg-indigo-500";
 
-    // ── 1. Primary source: today's lesson logs from teachers ──
+    // ── 1. Primary source: lesson logs from teachers ──
     try {
       const allLessons = await lessonService.getByClass(profile.grade, profile.section);
-      const todaysLessons = allLessons.filter(l => l.date === todayStr);
+      
+      if (allLessons.length > 0) {
+        // Sort lessons by date descending so newer topics appear first
+        allLessons.sort((a: any, b: any) => b.date.localeCompare(a.date));
 
-      if (todaysLessons.length > 0) {
         const topics: HomeworkTopic[] = [];
-        for (let i = 0; i < todaysLessons.length; i++) {
-          const lesson = todaysLessons[i];
-          
+        let nextId = 1;
+
+        for (const lesson of allLessons) {
           // Skip irrelevant content
           if (!(await isContentRelevant(lesson.subject, lesson.curriculumTag))) continue;
 
+          const isToday = lesson.date === todayStr;
+          const isPast = lesson.date < todayStr;
+
+          // Ignore future lessons
+          if (!isToday && !isPast) continue;
+
+          // Check if there is a completed quiz result for this topic
           const completedResult = getCompletedResult(lesson.subject, lesson.topic);
-          if (completedResult) {
-            topics.push({
-              id: i + 1,
+          const hasCompletedQuiz = !!(
+            completedResult &&
+            completedResult.completed_at &&
+            completedResult.completed_at.split('T')[0] >= lesson.date
+          );
+
+          let topicObj: HomeworkTopic;
+          if (hasCompletedQuiz) {
+            topicObj = {
+              id: nextId,
               subject: lesson.subject,
               topic: lesson.topic,
               teacher: lesson.teacherName,
@@ -1020,10 +1042,11 @@ export const HomeworkService = {
               lastAttemptDate: completedResult.completed_at,
               curriculumTag: lesson.curriculumTag,
               mistakePatterns: [],
-            } as HomeworkTopic);
+              date: lesson.date,
+            } as HomeworkTopic;
           } else {
-            topics.push(mergeProgress({
-              id: i + 1,
+            topicObj = mergeProgress({
+              id: nextId,
               subject: lesson.subject,
               topic: lesson.topic,
               teacher: lesson.teacherName,
@@ -1040,11 +1063,21 @@ export const HomeworkService = {
               lastAttemptDate: null,
               curriculumTag: lesson.curriculumTag,
               mistakePatterns: [],
-            } as HomeworkTopic));
+              date: lesson.date,
+            } as HomeworkTopic, lesson.date);
+          }
+
+          // Always include today's lessons. Include past lessons only if they are not completed.
+          const isCompleted = topicObj.status === "completed";
+          if (isToday || !isCompleted) {
+            topicObj.id = nextId++;
+            topics.push(topicObj);
           }
         }
 
-        return topics;
+        if (topics.length > 0) {
+          return topics;
+        }
       }
     } catch (e) {
       console.warn("Failed to fetch lessons for homework:", e);

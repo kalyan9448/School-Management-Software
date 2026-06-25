@@ -811,6 +811,7 @@ export interface HomeworkTopic {
   totalQuestions: number;
   lastAttemptDate: string | null;
   mistakePatterns: string[];
+  date?: string;
 }
 
 export const homeworkTopics: HomeworkTopic[] = [
